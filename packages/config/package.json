@@ -1,0 +1,25 @@
+{
+  "name": "@repo/config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "import": "./dist/index.mjs",
+    "require": "./dist/index.js",
+    "default": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "biome lint --write ./src",
+    "format": "biome format --write ./src"
+  },
+  "dependencies": {
+    "@repo/env": "*",
+    "seyfert": "^5.0.0"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*"
+  }
+}

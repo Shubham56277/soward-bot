@@ -1,0 +1,16 @@
+{
+    "extends": "@repo/typescript-config/base.json",
+    "compilerOptions": {
+        "rootDir": "./src",
+        "outDir": "./dist",
+        "module": "NodeNext",
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": [
+        "src/**/*",
+    ],
+    "exclude": [
+        "dist",
+        "node_modules"
+    ]
+}

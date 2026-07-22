@@ -1,0 +1,190 @@
+lavalink:
+  plugins:
+    - dependency: com.github.topi314.lavasearch:lavasearch-plugin:1.0.0
+      snapshot: false
+    - dependency: com.github.topi314.lavasrc:lavasrc-plugin:4.8.3
+      snapshot: false
+    - dependency: com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1
+      snapshot: false
+    - dependency: dev.lavalink.youtube:youtube-plugin:1.18.1
+      snapshot: false
+  pluginsDir: ./plugins
+  server:
+    bufferDurationMs: 225
+    filters:
+      channelMix: true
+      distortion: true
+      equalizer: true
+      karaoke: true
+      lowPass: true
+      rotation: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      volume: true
+    frameBufferDurationMs: 5000
+    gc-warnings: true
+    nonAllocatingFrameBuffer: false
+    opusEncodingQuality: 10
+    password: "3f10f1d469138eea6ddc1cb731c2a8783bd0faacfc44e168cfda75aacf458789"
+    playerUpdateInterval: 1
+    resamplingQuality: HIGH
+    soundcloudSearchEnabled: true
+    sources:
+      bandcamp: false
+      http: true
+      local: false
+      mixer: false
+      nico: false
+      soundcloud: true
+      twitch: false
+      vimeo: false
+      youtube: false
+    trackStuckThresholdMs: 5000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 2
+    youtubeSearchEnabled: true
+logging:
+  file:
+    max-history: 2
+    max-size: 5MB
+    path: ./logs/
+  level:
+    com.github.topi314.lavasrc.LavaSrcTools: "OFF"
+    com.sedmelluq.discord.lavaplayer.source.youtube.YoutubePersistentHttpStream: "OFF"
+    com.sedmelluq.discord.lavaplayer.tools.ExceptionTools: "OFF"
+    com.sedmelluq.discord.lavaplayer.tools.io.PersistentHttpStream: "OFF"
+    dev.lavalink.youtube.YoutubeAudioSourceManager: INFO
+    dev.lavalink.youtube.http.YoutubeOauth2Handler: INFO
+    lavalink: INFO
+    lavalink.server.io.SocketContext: "OFF"
+    root: INFO
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 5
+  request:
+    enabled: false
+    includeClientInfo: true
+    includeHeaders: false
+    includePayload: false
+    includeQueryString: true
+    maxPayloadLength: 10000
+metrics:
+  prometheus:
+    enabled: false
+    endpoint: /metrics
+plugins:
+  lavasrc:
+    applemusic:
+      albumLoadLimit: 3
+      countryCode: IN
+      playlistLoadLimit: 3
+    flowerytts:
+      audioFormat: flac
+      silence: 500
+      speed: 1
+      translate: false
+      voice: Anushri
+    lyrics-sources:
+      deezer: false
+      spotify: true
+      vkmusic: false
+      yandexmusic: false
+      youtube: true
+    providers:
+      - ytsearch:"%ISRC%"
+      - ytsearch:%QUERY%
+      - scsearch:%QUERY%
+    sources:
+      applemusic: true
+      deezer: false
+      flowerytts: true
+      qobuz: false
+      spotify: true
+      tidal: false
+      vkmusic: false
+      yandexmusic: false
+      youtube: true
+    spotify:
+      albumLoadLimit: 4
+      countryCode: IN
+      localFiles: false
+      playlistLoadLimit: 2
+      resolveArtistsInSearch: true
+    youtube:
+      countryCode: IN
+      language: en
+  youtube:
+    allowDirectPlaylistIds: true
+    allowDirectVideoIds: true
+    allowSearch: true
+    clientOptions:
+      ANDROID_MUSIC:
+        playback: true
+        playlistLoading: true
+        searching: false
+        videoLoading: true
+      ANDROID_VR:
+        playback: true
+        playlistLoading: true
+        searching: false
+        videoLoading: true
+      IOS:
+        playback: true
+        playlistLoading: true
+        searching: false
+        videoLoading: true
+      MUSIC:
+        playback: false
+        playlistLoading: true
+        searching: true
+        videoLoading: false
+      MWEB:
+        playback: true
+        playlistLoading: true
+        searching: true
+        videoLoading: true
+      TV:
+        playback: true
+        playlistLoading: true
+        searching: true
+        videoLoading: true
+      TVHTML5EMBEDDED:
+        playback: true
+        playlistLoading: true
+        searching: true
+        videoLoading: true
+      WEB:
+        playback: true
+        playlistLoading: true
+        searching: true
+        videoLoading: true
+      WEBEMBEDDED:
+        playback: true
+        playlistLoading: true
+        searching: false
+        videoLoading: true
+    clients:
+      - TV
+      - TVHTML5EMBEDDED
+      - WEB
+      - MWEB
+      - WEBEMBEDDED
+      - ANDROID_VR
+      - MUSIC
+      - IOS
+      - ANDROID_MUSIC
+    enabled: true
+    oauth:
+      enabled: false
+      refreshToken: "1//0g4yzCBP_4RtCCgYIARAAGBASNwF-L9IrZvjCiU5UuiVjp-21B6cKImhpMv2UZpX44bZjdMJcBt7lm2Pxv1d3vBLkrOneMBa3BOE"
+      skipInitialization: true
+sentry:
+  dsn: ""
+  environment: ""
+server:
+  address: 0.0.0.0
+  http2:
+    enabled: false
+  port: 2333

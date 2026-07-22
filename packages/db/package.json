@@ -1,0 +1,33 @@
+{
+  "name": "@repo/db",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "exports": {
+    "types": "./dist/index.d.ts",
+    "import": "./dist/index.mjs",
+    "require": "./dist/index.js",
+    "default": "./dist/index.js"
+  },
+  "scripts": {
+		"push": "drizzle-kit migrate",
+		"drop": "drizzle-kit drop",
+		"generate": "drizzle-kit generate",
+		"studio": "drizzle-kit studio",
+    "build": "tsup",
+    "lint": "biome lint --write ./src",
+    "format": "biome format --write ./src"
+  },
+  "dependencies": {
+    "@repo/env": "*",
+    "drizzle-orm": "^0.45.2",
+    "nanoid": "^6.0.0",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10"
+  }
+}

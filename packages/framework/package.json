@@ -1,0 +1,34 @@
+{
+  "name": "@repo/framework",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "biome lint --write ./src",
+    "format": "biome format --write ./src"
+  },
+  "dependencies": {
+    "@discordjs/core": "^2.6.0",
+    "@discordjs/rest": "^2.6.3",
+    "@repo/db": "*",
+    "@repo/env": "*",
+    "discord-api-types": "^0.38.50",
+    "discord.js": "^14.27.0",
+    "ioredis": "^5.11.1",
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*"
+  }
+}
