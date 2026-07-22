@@ -24,7 +24,7 @@ yarn workspace bot build
 
 if command -v pm2 >/dev/null 2>&1; then
   echo "Starting bot with pm2..."
-  pm2 startOrReload "$BOT_DIR/ecosystem.config.js" --env production
+  pm2 startOrReload "$BOT_DIR/ecosystem.config.js"
   pm2 save
 else
   echo "pm2 not found, starting directly..."

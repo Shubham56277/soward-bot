@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import Logger from "./lib/Logger";
 import fs from "node:fs";
+import path from "node:path";
 import { ThemeSelector } from "./utils/ThemeSelector";
 import { shardStart } from "./cluster";
 const logger = new Logger();
@@ -12,13 +13,14 @@ function setConsoleTitle(title: string): void {
 
 (async () => {
 	try {
-		if (!fs.existsSync("./src/utils/logo.txt")) {
+		const logoPath = path.join(__dirname, "..", "src", "utils", "logo.txt");
+		if (!fs.existsSync(logoPath)) {
 			logger.error("logo.txt file is missing");
 			process.exit(1);
 		}
 		console.clear();
 		setConsoleTitle("Soward");
-		const logFile = fs.readFileSync("./src/utils/logo.txt", "utf-8");
+		const logFile = fs.readFileSync(logoPath, "utf-8");
 		console.log(theme.fire(logFile));
 		
 		await shardStart(logger);
