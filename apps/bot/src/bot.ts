@@ -11,9 +11,15 @@ export const rest = createREST({
 });
 
 (async () => {
+    const logStep = (message: string) => console.log(`[bot-entry] ${message}`);
+    logStep("module loaded");
     const client = new BaseClient();
+    logStep("BaseClient constructed");
     client.rest = rest;
+    logStep("REST client attached");
+    logStep(`login starting with env token present=${Boolean(env.DISCORD_APP_TOKEN)}`);
     await client.start(env.DISCORD_APP_TOKEN);
+    logStep("client.start resolved");
 })();
 // ─────────────────────────────────────────────────────────
 // 💥 Anti-crash / Error Boundary

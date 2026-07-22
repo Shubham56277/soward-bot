@@ -46,6 +46,7 @@ export default class BaseClient extends FrameWorkClient {
 	public commandDeprecations!: CommandDeprecationService;
 	private body: ApplicationCommandDataResolvable[] = [];
 	constructor() {
+		console.log("[startup][BaseClient] constructor begin");
 		installUiPolicy();
 		super({
 			intents: 53608447,
@@ -64,22 +65,45 @@ export default class BaseClient extends FrameWorkClient {
 				],
 			},
 		});
+		console.log("[startup][BaseClient] discord.js client constructed");
 		this.cluster = new ClusterClient(this);
+		console.log("[startup][BaseClient] ClusterClient attached");
 	}
 	public async start(token: string): Promise<void> {
+		this.logger.start("[startup] BaseClient.start begin");
+		this.logger.debug(`[startup] token present=${Boolean(token)}`);
+		this.logger.start("[startup] createRedis begin");
 		this.redis = await createRedis();
+		this.logger.success("[startup] createRedis complete");
+		this.logger.start("[startup] AiService init begin");
 		this.ai = new AiService(this.redis);
+		this.logger.success("[startup] AiService init complete");
+		this.logger.start("[startup] CommandCooldownService init begin");
 		this.commandCooldowns = new CommandCooldownService(this.redis);
+		this.logger.success("[startup] CommandCooldownService init complete");
+		this.logger.start("[startup] CommandDeprecationService init begin");
 		this.commandDeprecations = new CommandDeprecationService(this.redis);
+		this.logger.success("[startup] CommandDeprecationService init complete");
+		this.logger.start("[startup] LavalinkClient init begin");
 		this.manager = new LavalinkClient(this);
+		this.logger.success("[startup] LavalinkClient init complete");
+		this.logger.start("[startup] loadCommands begin");
 		await this.loadCommands();
-		this.logger.info("Successfully loaded commands!");
+		this.logger.success("[startup] loadCommands complete");
+		this.logger.start("[startup] loadEvents begin");
 		await this.loadEvents();
-		this.logger.info("Successfully loaded events!");
+		this.logger.success("[startup] loadEvents complete");
+		this.logger.start("[startup] loadComponents begin");
 		this.loadComponents();
+		this.logger.success("[startup] loadComponents complete");
+		this.logger.start("[startup] client.login begin");
 		await this.login(token);
+		this.logger.success("[startup] client.login complete");
+		this.logger.start("[startup] Services init begin");
 		this.services = new Services(this);
+		this.logger.success("[startup] Services init complete");
 		
+		this.logger.start("[startup] rateLimit listener registration begin");
 		this.rest.on('rateLimited', async (info) => {
 			const { method, route, global, retryAfter: timeout } = info;
 
@@ -97,9 +121,11 @@ export default class BaseClient extends FrameWorkClient {
 
 			setTimeout(() => backoffDelays.delete(key), 60_000);
 		});
+		this.logger.success("[startup] rateLimit listener registration complete");
 	}
 
 	private async loadCommands(): Promise<void> {
+		this.logger.start("[startup] loadCommands: registry validation begin");
 		// Print registry summary for diagnostics
 		printRegistrySummary();
 
@@ -114,12 +140,16 @@ export default class BaseClient extends FrameWorkClient {
 			throw new Error(`Root application-command count (${rootCount}) exceeds 90. Refusing to start.`);
 		}
 		this.logger.info(`Registry: ${rootCount} root commands will be registered.`);
+		this.logger.debug("[startup] loadCommands: reading dist/commands");
 		const commandsPath = fs.readdirSync(path.join(process.cwd(), "dist", "commands"));
+		this.logger.debug(`[startup] loadCommands: found ${commandsPath.length} command groups`);
 
 		for (const dir of commandsPath) {
+			this.logger.debug(`[startup] loadCommands: scanning group ${dir}`);
 			const commandFiles = fs.readdirSync(path.join(process.cwd(), "dist", "commands", dir)).filter((file) => file.endsWith(".js"));
 
 			for (const file of commandFiles) {
+				this.logger.debug(`[startup] loadCommands: loading ${dir}/${file}`);
 				const cmdModule = require(path.join(process.cwd(), "dist", "commands", dir, file));
 				const command: CommandOptions = new cmdModule.default(this, file);
 				command.category = dir;
@@ -160,12 +190,15 @@ export default class BaseClient extends FrameWorkClient {
 		if (this.body.length > 100) {
 			throw new Error(`Discord application-command limit exceeded: ${this.body.length}/100`);
 		}
+		this.logger.success("[startup] loadCommands: complete");
 	}
 	private loadComponents() {
+		this.logger.start("[startup] loadComponents: reading dist/components");
 		const componentFolders = fs.readdirSync(path.join(process.cwd(), "dist", "components"));
 		for (const component of componentFolders) {
 			const componentPath = path.join(process.cwd(), "dist", "components", component);
 			if (!fs.statSync(componentPath).isDirectory()) continue;
+			this.logger.debug(`[startup] loadComponents: scanning ${component}`);
 			const componentFiles = fs.readdirSync(componentPath).filter((file) => file.endsWith(".js"));
 			switch (component) {
 				case "buttons":
@@ -178,36 +211,46 @@ export default class BaseClient extends FrameWorkClient {
 					break;
 			}
 		}
+		this.logger.success("[startup] loadComponents: complete");
 	}
 	private loadButtons(componentFiles: string[]): void {
+		this.logger.start(`[startup] loadButtons begin (${componentFiles.length} files)`);
 		for (const file of componentFiles) {
+			this.logger.debug(`[startup] loadButtons: loading ${file}`);
 			const componentModule = require(path.join(process.cwd(), "dist", "components", "buttons", file));
 			const component: ButtonOptions = new componentModule.default(this);
 			this.buttons.set(component.id, component);
 		}
-		this.logger.info("Successfully loaded buttons!");
+		this.logger.success("[startup] loadButtons complete");
 	}
     private loadMenus(componentFiles: string[]): void {
+        this.logger.start(`[startup] loadMenus begin (${componentFiles.length} files)`);
         for (const file of componentFiles) {
+            this.logger.debug(`[startup] loadMenus: loading ${file}`);
             const componentModule = require(path.join(process.cwd(), "dist", "components", "menus", file));
             const component: MenuOptions = new componentModule.default(this);
             this.menus.set(component.id, component);
         }
-        this.logger.info("Successfully loaded menus!");
+        this.logger.success("[startup] loadMenus complete");
     }
 	private async loadEvents(): Promise<void> {
+		this.logger.start("[startup] loadEvents: reading dist/events");
 		const eventsPath = fs.readdirSync(path.join(process.cwd(), "dist", "events"));
+		this.logger.debug(`[startup] loadEvents: found ${eventsPath.length} event groups`);
 
 		for (const dir of eventsPath) {
+			this.logger.debug(`[startup] loadEvents: scanning group ${dir}`);
 			const eventFiles = fs.readdirSync(path.join(process.cwd(), "dist", "events", dir)).filter((file) => file.endsWith(".js"));
 
 			for (const file of eventFiles) {
+				this.logger.debug(`[startup] loadEvents: loading ${dir}/${file}`);
 				const eventModule = require(path.join(process.cwd(), "dist", "events", dir, file));
 				const event = new eventModule.default(this);
 
 				void event.execute();
 			}
 		}
+		this.logger.success("[startup] loadEvents: complete");
 	}
 
 	public async deployCommands(guildId?: string): Promise<void> {
@@ -222,11 +265,14 @@ export default class BaseClient extends FrameWorkClient {
 				this.logger.info("Slash commands are unchanged; deployment skipped.");
 				return;
 			}
+			this.logger.start(`[startup] deployCommands begin target=${guildId ? `guild ${guildId}` : "global"}`);
 			await rest.put(route, { body: this.body });
 			await this.redis.set(cacheKey, bodyHash, "EX", 7 * 24 * 60 * 60).catch(() => undefined);
-			this.logger.info("Successfully deployed slash commands!");
+			this.logger.success("[startup] deployCommands complete");
 		} catch (error) {
+			this.logger.error("[startup] deployCommands failed");
 			this.logger.error(error);
+			throw error;
 		}
 	}
 }

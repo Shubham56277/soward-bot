@@ -16,6 +16,7 @@ export default class ShardEvent extends Event {
     }
 
     public async execute(): Promise<void> {
+        this.client.logger.start("[startup] registering shard diagnostics");
         // Shard Ready
         this.client.on(Events.ShardReady, (shardId: number) => {
             this.logShardEvent(
@@ -75,6 +76,7 @@ export default class ShardEvent extends Event {
                 error.stack,
             );
         });
+        this.client.logger.success("[startup] shard diagnostics registered");
     }
 
     private async logShardEvent(

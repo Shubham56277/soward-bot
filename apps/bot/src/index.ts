@@ -11,20 +11,75 @@ function setConsoleTitle(title: string): void {
 	process.stdout.write(`\x1b]0;${title}`);
 }
 
+function formatError(error: unknown): string {
+	if (error instanceof Error) {
+		return error.stack || `${error.name}: ${error.message}`;
+	}
+	try {
+		return JSON.stringify(error, null, 2);
+	} catch {
+		return String(error);
+	}
+}
+
+function installProcessDiagnostics(): void {
+	process.on("unhandledRejection", (reason, promise) => {
+		logger.error("[process] unhandledRejection at promise:", promise);
+		logger.error(formatError(reason));
+	});
+
+	process.on("rejectionHandled", (promise) => {
+		logger.warn("[process] rejectionHandled:", promise);
+	});
+
+	process.on("uncaughtException", (err) => {
+		logger.error("[process] uncaughtException:");
+		logger.error(formatError(err));
+	});
+
+	process.on("uncaughtExceptionMonitor", (err) => {
+		logger.error("[process] uncaughtExceptionMonitor:");
+		logger.error(formatError(err));
+	});
+
+	process.on("warning", (warning) => {
+		logger.warn("[process] warning:");
+		logger.warn(formatError(warning));
+	});
+
+	process.on("beforeExit", (code) => {
+		logger.warn(`[process] beforeExit code=${code}`);
+	});
+
+	process.on("exit", (code) => {
+		logger.warn(`[process] exit code=${code}`);
+	});
+}
+
+installProcessDiagnostics();
+
 (async () => {
 	try {
+		logger.start("[startup] entrypoint begin");
 		const logoPath = path.join(__dirname, "..", "src", "utils", "logo.txt");
+		logger.debug(`[startup] checking logo path: ${logoPath}`);
 		if (!fs.existsSync(logoPath)) {
-			logger.error("logo.txt file is missing");
+			logger.error("[startup] logo.txt file is missing");
 			process.exit(1);
 		}
+		logger.success("[startup] logo path confirmed");
 		console.clear();
 		setConsoleTitle("Soward");
+		logger.start("[startup] reading logo file");
 		const logFile = fs.readFileSync(logoPath, "utf-8");
+		logger.success("[startup] logo file read");
 		console.log(theme.fire(logFile));
-		
+		logger.start("[startup] invoking shardStart");
 		await shardStart(logger);
+		logger.success("[startup] shardStart completed");
 	} catch (err) {
-		logger.error("[CLIENT] An error has occurred:", err);
+		logger.error("[startup] entrypoint failed:");
+		logger.error(formatError(err));
+		throw err;
 	}
 })();
