@@ -58,16 +58,38 @@ function installProcessDiagnostics(): void {
 
 installProcessDiagnostics();
 
+function resolveLogoPath(): string | null {
+	const candidates = [
+		path.join(process.cwd(), "apps", "bot", "src", "utils", "logo.txt"),
+		path.join(process.cwd(), "apps", "bot", "dist", "utils", "logo.txt"),
+		path.join(process.cwd(), "src", "utils", "logo.txt"),
+		path.join(__dirname, "..", "src", "utils", "logo.txt"),
+		path.join(__dirname, "utils", "logo.txt"),
+	];
+
+	for (const candidate of candidates) {
+		if (fs.existsSync(candidate)) return candidate;
+	}
+
+	return null;
+}
+
 (async () => {
 	try {
 		logger.start("[startup] entrypoint begin");
-		const logoPath = path.join(__dirname, "..", "src", "utils", "logo.txt");
-		logger.debug(`[startup] checking logo path: ${logoPath}`);
-		if (!fs.existsSync(logoPath)) {
-			logger.error("[startup] logo.txt file is missing");
+		const logoPath = resolveLogoPath();
+		logger.debug(`[startup] logo path candidates checked: ${JSON.stringify([
+			path.join(process.cwd(), "apps", "bot", "src", "utils", "logo.txt"),
+			path.join(process.cwd(), "apps", "bot", "dist", "utils", "logo.txt"),
+			path.join(process.cwd(), "src", "utils", "logo.txt"),
+			path.join(__dirname, "..", "src", "utils", "logo.txt"),
+			path.join(__dirname, "utils", "logo.txt"),
+		], null, 2)}`);
+		if (!logoPath) {
+			logger.error("[startup] logo.txt file is missing from every known location");
 			process.exit(1);
 		}
-		logger.success("[startup] logo path confirmed");
+		logger.success(`[startup] logo path confirmed: ${logoPath}`);
 		console.clear();
 		setConsoleTitle("Soward");
 		logger.start("[startup] reading logo file");
