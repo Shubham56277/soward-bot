@@ -10,7 +10,7 @@ export default class MediaOnly extends Command {
 		super({
 			name: "media-only",
 			description: { content: "Manage media-only channels", examples: ["media-only add channel:#media"], usage: "media-only <add|remove|list>" },
-			category: "utility",
+			category: "utils",
 			cooldown: 10,
 			slashCommand: true,
 			permissions: { dev: false, client: ["ManageChannels", "ManageMessages", "ManageWebhooks"], user: ["ManageChannels"] },
