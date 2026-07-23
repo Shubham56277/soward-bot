@@ -5,7 +5,6 @@ services:
     restart: unless-stopped
     cpus: 1.5
     mem_limit: 896m
-    user: "322:322"
     environment:
       - _JAVA_OPTIONS=-Xms128M -Xmx768M
       - SERVER_PORT=2333
