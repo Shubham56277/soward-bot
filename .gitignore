@@ -11,6 +11,9 @@ node_modules
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env copy
+.env.bak
 
 # Testing
 coverage
@@ -38,12 +41,12 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+nul
 
 #sqlite database
 *.db
 
 #lavalink
-
 plugins/
 Lavalink.jar
 logs/
@@ -52,12 +55,19 @@ logs/
 yarn-lock.yaml
 package-lock.json
 
-
 ##
 .pnp.cjs
 .pnp.loader.mjs
 # Sentry Config File
 .sentryclirc
 
-
 plugins
+
+# Deployment secrets (never commit these)
+deploy/env/.env.production
+*.key
+id_rsa*
+id_ed25519*
+
+# Deploy lock files
+/tmp/soward-*

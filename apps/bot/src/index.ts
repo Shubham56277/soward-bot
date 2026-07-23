@@ -4,9 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { ThemeSelector } from "./utils/ThemeSelector";
 import { shardStart } from "./cluster";
-const logger = new Logger();
 
+const logger = new Logger();
 const theme = new ThemeSelector();
+
 function setConsoleTitle(title: string): void {
 	process.stdout.write(`\x1b]0;${title}`);
 }
@@ -35,6 +36,8 @@ function installProcessDiagnostics(): void {
 	process.on("uncaughtException", (err) => {
 		logger.error("[process] uncaughtException:");
 		logger.error(formatError(err));
+		// Exit so systemd can restart us on unrecoverable errors
+		process.exit(1);
 	});
 
 	process.on("uncaughtExceptionMonitor", (err) => {
@@ -53,6 +56,17 @@ function installProcessDiagnostics(): void {
 
 	process.on("exit", (code) => {
 		logger.warn(`[process] exit code=${code}`);
+	});
+
+	// Graceful shutdown in the cluster manager process
+	process.on("SIGTERM", () => {
+		logger.warn("[process] Received SIGTERM, shutting down cluster manager...");
+		process.exit(0);
+	});
+
+	process.on("SIGINT", () => {
+		logger.warn("[process] Received SIGINT, shutting down cluster manager...");
+		process.exit(0);
 	});
 }
 
@@ -77,31 +91,25 @@ function resolveLogoPath(): string | null {
 (async () => {
 	try {
 		logger.start("[startup] entrypoint begin");
+		logger.info(`[startup] Node.js ${process.version} | PID ${process.pid} | CWD ${process.cwd()}`);
+		logger.info(`[startup] NODE_ENV=${process.env.NODE_ENV || "not set"}`);
+
 		const logoPath = resolveLogoPath();
-		logger.debug(`[startup] logo path candidates checked: ${JSON.stringify([
-			path.join(process.cwd(), "apps", "bot", "src", "utils", "logo.txt"),
-			path.join(process.cwd(), "apps", "bot", "dist", "utils", "logo.txt"),
-			path.join(process.cwd(), "src", "utils", "logo.txt"),
-			path.join(__dirname, "..", "src", "utils", "logo.txt"),
-			path.join(__dirname, "utils", "logo.txt"),
-		], null, 2)}`);
 		if (!logoPath) {
-			logger.error("[startup] logo.txt file is missing from every known location");
-			process.exit(1);
+			logger.warn("[startup] logo.txt not found, skipping banner display");
+		} else {
+			logger.success(`[startup] logo path confirmed: ${logoPath}`);
+			setConsoleTitle("Soward");
+			const logFile = fs.readFileSync(logoPath, "utf-8");
+			console.log(theme.fire(logFile));
 		}
-		logger.success(`[startup] logo path confirmed: ${logoPath}`);
-		console.clear();
-		setConsoleTitle("Soward");
-		logger.start("[startup] reading logo file");
-		const logFile = fs.readFileSync(logoPath, "utf-8");
-		logger.success("[startup] logo file read");
-		console.log(theme.fire(logFile));
+
 		logger.start("[startup] invoking shardStart");
 		await shardStart(logger);
-		logger.success("[startup] shardStart completed");
+		logger.success("[startup] shardStart completed - bot is now running");
 	} catch (err) {
 		logger.error("[startup] entrypoint failed:");
 		logger.error(formatError(err));
-		throw err;
+		process.exit(1);
 	}
 })();

@@ -1,0 +1,81 @@
+name: Deploy Bot to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force deploy even if no changes"
+        required: false
+        default: "false"
+        type: boolean
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Build (optional pre-check)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Verify build artifacts
+        run: |
+          if [ ! -f "apps/bot/dist/index.js" ]; then
+            echo "::error::Build artifact apps/bot/dist/index.js not found"
+            exit 1
+          fi
+          echo "Build verified successfully."
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        timeout-minutes: 5
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          command_timeout: 5m
+          script: |
+            export DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/soward-bot' }}"
+            export HEALTH_PORT="${{ secrets.HEALTH_PORT || '9090' }}"
+            cd "$DEPLOY_PATH"
+            bash deploy/scripts/deploy.sh main
+
+      - name: Post-deploy health check
+        uses: appleboy/ssh-action@v1.2.0
+        timeout-minutes: 2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          script: |
+            sleep 10
+            HEALTH_PORT="${{ secrets.HEALTH_PORT || '9090' }}"
+            RESPONSE=$(curl -sf "http://127.0.0.1:${HEALTH_PORT}/health" 2>/dev/null || echo '{"status":"unavailable"}')
+            echo "Health response: $RESPONSE"
+            STATUS=$(echo "$RESPONSE" | jq -r '.status' 2>/dev/null || echo 'unknown')
+            if [ "$STATUS" = "healthy" ] || [ "$STATUS" = "starting" ]; then
+              echo "✅ Bot is healthy/starting"
+            else
+              echo "⚠️ Bot health status: $STATUS (may still be initializing)"
+            fi

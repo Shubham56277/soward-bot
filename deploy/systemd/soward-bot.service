@@ -1,0 +1,45 @@
+[Unit]
+Description=Soward Discord Bot
+Documentation=https://github.com/your-repo/Soward-main
+After=network-online.target redis.service postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=soward
+Group=soward
+WorkingDirectory=/opt/soward-bot
+EnvironmentFile=/opt/soward-bot/.env
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--max-old-space-size=7168
+
+ExecStart=/usr/bin/node apps/bot/dist/index.js
+
+# Graceful shutdown
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/soward-bot/logs
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=soward-bot
+
+[Install]
+WantedBy=multi-user.target

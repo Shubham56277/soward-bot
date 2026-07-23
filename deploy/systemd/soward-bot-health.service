@@ -1,0 +1,10 @@
+[Unit]
+Description=Soward Bot Health Check
+After=soward-bot.service
+Requires=soward-bot.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/soward-bot/deploy/scripts/health-check.sh
+User=soward
+Group=soward

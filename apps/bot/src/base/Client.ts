@@ -99,6 +99,9 @@ export default class BaseClient extends FrameWorkClient {
 		this.logger.start("[startup] client.login begin");
 		await this.login(token);
 		this.logger.success("[startup] client.login complete");
+		this.on('ready', () => {
+			this.logger.success('[startup] client ready');
+		});
 		this.logger.start("[startup] Services init begin");
 		this.services = new Services(this);
 		this.logger.success("[startup] Services init complete");
