@@ -86,9 +86,9 @@ plugins:
       yandexmusic: false
       youtube: true
     providers:
+      - "scsearch:%QUERY%"
       - "ytsearch:\"%ISRC%\""
       - "ytsearch:%QUERY%"
-      - "scsearch:%QUERY%"
     sources:
       applemusic: true
       deezer: false
@@ -108,13 +108,6 @@ plugins:
     youtube:
       countryCode: IN
       language: en
-    yt-dlp:
-      enabled: true
-      playbackArgs:
-        - "--no-check-certificates"
-        - "--geo-bypass"
-        - "--extractor-args"
-        - "youtube:player_client=android_music"
   youtube:
     allowDirectPlaylistIds: true
     allowDirectVideoIds: true
@@ -122,6 +115,18 @@ plugins:
     clients:
       - ANDROID_MUSIC
       - MUSIC
+    clientOptions:
+      ANDROID_MUSIC:
+        playback: true
+        playlistLoading: true
+        searching: true
+        videoLoading: true
+        useOAuth: true
+      MUSIC:
+        playback: false
+        playlistLoading: true
+        searching: true
+        videoLoading: false
     enabled: true
     oauth:
       enabled: true

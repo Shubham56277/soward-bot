@@ -18,7 +18,7 @@ export default class LavalinkClient extends LavalinkManager {
                 maxPreviousTracks: 25,
             },
             playerOptions: {
-                defaultSearchPlatform: "youtubemusic",
+                defaultSearchPlatform: "scsearch",
                 onDisconnect: {
                     autoReconnect: true,
                     destroyPlayer: false,
