@@ -6,7 +6,7 @@ services:
     cpus: 1.5
     mem_limit: 1024m
     environment:
-      - _JAVA_OPTIONS=-Xms128M -Xmx768M
+      - _JAVA_OPTIONS=-Xms128M -Xmx768M -Dhttp.proxyHost=p.webshare.io -Dhttp.proxyPort=80 -Dhttp.proxyUser=mcvyluus -Dhttp.proxyPassword=i28vm5zdidf3 -Dhttps.proxyHost=p.webshare.io -Dhttps.proxyPort=80 -Dhttps.proxyUser=mcvyluus -Dhttps.proxyPassword=i28vm5zdidf3
       - SERVER_PORT=2333
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
