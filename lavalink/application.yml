@@ -113,25 +113,14 @@ plugins:
     allowDirectVideoIds: true
     allowSearch: true
     clients:
-      - ANDROID_MUSIC
       - MUSIC
-    clientOptions:
-      ANDROID_MUSIC:
-        playback: true
-        playlistLoading: true
-        searching: true
-        videoLoading: true
-        useOAuth: true
-      MUSIC:
-        playback: false
-        playlistLoading: true
-        searching: true
-        videoLoading: false
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
     enabled: true
     oauth:
-      enabled: true
-      refreshToken: "1//056wDXCYMjXEbCgYIARAAGAUSNwF-L9IrAM8KRBWLyj1aFRI7LcdIyTkJ6ikLy0bjf4JhOJIR_2QuJTSmvlKT5gUcvPZzunbZ39U"
-      skipInitialization: false
+      enabled: false
+      skipInitialization: true
 sentry:
   dsn: ""
   environment: ""

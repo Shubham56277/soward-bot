@@ -4,10 +4,10 @@ import { env } from "@repo/env";
 export const constants = {
 	prefix: env.PREFIX,
 	colors: {
-		main: 0x7c5cff,
-		gray: 0x2d2d2d,
-		orange: 0xef9651,
-		red: 0xec5228,
+		main: 0x000000,
+		gray: 0x000000,
+		orange: 0x000000,
+		red: 0x000000,
 	},
 	emojis: {
 		on: "<:Tick:1375519268292264012>",

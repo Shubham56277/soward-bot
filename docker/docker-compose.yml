@@ -1,0 +1,11 @@
+services:
+  lavalink:
+    build: .
+    container_name: lavalink
+    restart: unless-stopped
+    mem_limit: 1024m
+    environment:
+      - _JAVA_OPTIONS=-Xms128M -Xmx768M
+      - SERVER_PORT=2333
+    ports:
+      - "2333:2333"

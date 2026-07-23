@@ -83,7 +83,7 @@ export async function startRecordingFromButton(interaction: ButtonInteraction) {
 		return interaction.editReply({
 			embeds: [
 				new EmbedBuilder()
-					.setColor(0xff3b30)
+					.setColor(0x000000)
 					.setTitle("Voice Recording Started")
 					.setDescription(
 						`Recording is active in <#${started.channelId}>. It stops after five minutes or with \`/record stop\`. The MP3 will be sent only to <@${started.starterId}>, then all temporary files are deleted.`,

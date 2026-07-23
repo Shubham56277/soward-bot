@@ -86,9 +86,9 @@ plugins:
       yandexmusic: false
       youtube: true
     providers:
+      - "scsearch:%QUERY%"
       - "ytsearch:\"%ISRC%\""
       - "ytsearch:%QUERY%"
-      - "scsearch:%QUERY%"
     sources:
       applemusic: true
       deezer: false

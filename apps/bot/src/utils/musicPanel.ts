@@ -93,7 +93,6 @@ export function createMusicPanel(player: Player, track: Track, accentColor: numb
 	);
 
 	return new ContainerBuilder()
-		.setAccentColor(accentColor)
 		.addSectionComponents(details)
 		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 		.addTextDisplayComponents(status)
@@ -101,12 +100,21 @@ export function createMusicPanel(player: Player, track: Track, accentColor: numb
 		.addActionRowComponents(recommendationMenu);
 }
 
-export function createQueueAddedPanel(track: Track, accentColor: number): ContainerBuilder {
+export function createQueueAddedPanel(track: Track): ContainerBuilder {
 	const title = escapeMarkdown(track.info.title).slice(0, 220);
 	const author = escapeMarkdown(track.info.author || "Unknown artist").slice(0, 180);
+	const duration = track.info.isStream ? "`LIVE`" : `\`${TimeFormat.toDotted(track.info.duration)}\``;
+	const artwork = track.info.artworkUrl || FALLBACK_ARTWORK;
+	const name = requesterName(track);
+
+	const details = new SectionBuilder()
+		.addTextDisplayComponents(
+			new TextDisplayBuilder().setContent(
+				`### Added to Queue\n\n**${title}** – ${author}\nDuration: ${duration}\nRequested by ${name}`
+			),
+		)
+		.setThumbnailAccessory(new ThumbnailBuilder().setURL(artwork).setDescription(title));
+
 	return new ContainerBuilder()
-		.setAccentColor(accentColor)
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent("### Added to Queue"))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}** by ${author}`));
+		.addSectionComponents(details);
 }

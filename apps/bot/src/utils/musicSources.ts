@@ -2,8 +2,6 @@ const TRUSTED_HOSTS = new Set([
 	"youtube.com",
 	"youtu.be",
 	"spotify.com",
-	"soundcloud.com",
-	"sndcdn.com",
 	"music.apple.com",
 	"cdn.discordapp.com",
 	"media.discordapp.net",

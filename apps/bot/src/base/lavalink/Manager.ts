@@ -18,7 +18,7 @@ export default class LavalinkClient extends LavalinkManager {
                 maxPreviousTracks: 25,
             },
             playerOptions: {
-                defaultSearchPlatform: "scsearch",
+                defaultSearchPlatform: "ytsearch",
                 onDisconnect: {
                     autoReconnect: true,
                     destroyPlayer: false,

@@ -36,8 +36,7 @@ function installProcessDiagnostics(): void {
 	process.on("uncaughtException", (err) => {
 		logger.error("[process] uncaughtException:");
 		logger.error(formatError(err));
-		// Exit so systemd can restart us on unrecoverable errors
-		process.exit(1);
+		// Log but don't exit — keep the bot running for non-fatal exceptions
 	});
 
 	process.on("uncaughtExceptionMonitor", (err) => {
