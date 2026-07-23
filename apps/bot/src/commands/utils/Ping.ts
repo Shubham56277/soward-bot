@@ -30,7 +30,7 @@ export default class Ping extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const msg = await ctx.sendDeferMessage("Measuring...");
+        const msg = await ctx.sendDeferMessage("** **");
 
         const wsLatency = ctx.client.ws.ping;
 
@@ -38,8 +38,8 @@ export default class Ping extends Command {
         let dbLatency: number;
         try {
             const dbStart = performance.now();
-            const { db } = require("@repo/db");
-            await db.execute({ sql: "SELECT 1", params: [] }).catch(() => null);
+            const { db, sql } = require("@repo/db");
+            await db.execute(sql`SELECT 1`);
             dbLatency = Math.round(performance.now() - dbStart);
         } catch {
             dbLatency = -1;
