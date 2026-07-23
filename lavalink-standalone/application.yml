@@ -1,0 +1,129 @@
+lavalink:
+  plugins:
+    - dependency: com.github.topi314.lavasearch:lavasearch-plugin:1.0.0
+      snapshot: false
+    - dependency: com.github.topi314.lavasrc:lavasrc-plugin:4.8.3
+      snapshot: false
+    - dependency: com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1
+      snapshot: false
+    - dependency: dev.lavalink.youtube:youtube-plugin:1.18.1
+      snapshot: false
+  pluginsDir: ./plugins
+  server:
+    bufferDurationMs: 225
+    filters:
+      channelMix: true
+      distortion: true
+      equalizer: true
+      karaoke: true
+      lowPass: true
+      rotation: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      volume: true
+    frameBufferDurationMs: 5000
+    gc-warnings: true
+    nonAllocatingFrameBuffer: false
+    opusEncodingQuality: 10
+    password: "SowardLavalink2025"
+    playerUpdateInterval: 1
+    resamplingQuality: HIGH
+    soundcloudSearchEnabled: true
+    sources:
+      bandcamp: false
+      http: true
+      local: false
+      mixer: false
+      nico: false
+      soundcloud: true
+      twitch: false
+      vimeo: false
+      youtube: false
+    trackStuckThresholdMs: 5000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 2
+    youtubeSearchEnabled: true
+logging:
+  file:
+    max-history: 2
+    max-size: 5MB
+    path: ./logs/
+  level:
+    lavalink: INFO
+    root: INFO
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 5
+  request:
+    enabled: false
+    includeClientInfo: true
+    includeHeaders: false
+    includePayload: false
+    includeQueryString: true
+    maxPayloadLength: 10000
+metrics:
+  prometheus:
+    enabled: false
+    endpoint: /metrics
+plugins:
+  lavasrc:
+    applemusic:
+      albumLoadLimit: 3
+      countryCode: IN
+      playlistLoadLimit: 3
+    flowerytts:
+      audioFormat: flac
+      silence: 500
+      speed: 1
+      translate: false
+      voice: Anushri
+    lyrics-sources:
+      deezer: false
+      spotify: true
+      vkmusic: false
+      yandexmusic: false
+      youtube: true
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "ytsearch:%QUERY%"
+      - "scsearch:%QUERY%"
+    sources:
+      applemusic: true
+      deezer: false
+      flowerytts: true
+      qobuz: false
+      spotify: true
+      tidal: false
+      vkmusic: false
+      yandexmusic: false
+      youtube: true
+    spotify:
+      albumLoadLimit: 4
+      countryCode: IN
+      localFiles: false
+      playlistLoadLimit: 2
+      resolveArtistsInSearch: true
+    youtube:
+      countryCode: IN
+      language: en
+  youtube:
+    allowDirectPlaylistIds: true
+    allowDirectVideoIds: true
+    allowSearch: true
+    clients:
+      - ANDROID_MUSIC
+      - MUSIC
+    enabled: true
+    oauth:
+      enabled: true
+      skipInitialization: false
+sentry:
+  dsn: ""
+  environment: ""
+server:
+  address: 0.0.0.0
+  http2:
+    enabled: false
+  port: 2333
