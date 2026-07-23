@@ -108,38 +108,19 @@ plugins:
     youtube:
       countryCode: IN
       language: en
+    yt-dlp:
+      enabled: true
+      playbackArgs:
+        - "--no-check-certificates"
+        - "--geo-bypass"
+        - "--extractor-args"
+        - "youtube:player_client=android_music"
   youtube:
     allowDirectPlaylistIds: true
     allowDirectVideoIds: true
     allowSearch: true
-    clientOptions:
-      ANDROID_MUSIC:
-        playback: true
-        playlistLoading: true
-        searching: true
-        videoLoading: true
-        useOAuth: true
-      TVHTML5_SIMPLY:
-        playback: true
-        playlistLoading: true
-        searching: true
-        videoLoading: true
-        useOAuth: true
-      IOS:
-        playback: true
-        playlistLoading: true
-        searching: false
-        videoLoading: true
-        useOAuth: true
-      MUSIC:
-        playback: false
-        playlistLoading: true
-        searching: true
-        videoLoading: false
     clients:
       - ANDROID_MUSIC
-      - TVHTML5_SIMPLY
-      - IOS
       - MUSIC
     enabled: true
     oauth:
