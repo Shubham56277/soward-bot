@@ -1,6 +1,6 @@
 services:
   lavalink:
-    image: ghcr.io/topi314/lavalink-yt-dlp:v4.0.8
+    build: .
     container_name: lavalink
     restart: unless-stopped
     cpus: 1.5
