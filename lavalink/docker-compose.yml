@@ -10,8 +10,8 @@ services:
       - SERVER_PORT=2333
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
-      - lavalink-plugins:/opt/Lavalink/plugins
-      - lavalink-logs:/opt/Lavalink/logs
+      - ./plugins:/opt/Lavalink/plugins
+      - ./logs:/opt/Lavalink/logs
     networks:
       - lavalink
     expose:
@@ -28,7 +28,3 @@ services:
 networks:
   lavalink:
     name: lavalink
-
-volumes:
-  lavalink-plugins:
-  lavalink-logs:
