@@ -166,20 +166,14 @@ plugins:
         searching: false
         videoLoading: true
     clients:
-      - TV
-      - TVHTML5EMBEDDED
+      - MUSIC
       - WEB
       - MWEB
-      - WEBEMBEDDED
-      - ANDROID_VR
-      - MUSIC
-      - IOS
-      - ANDROID_MUSIC
+      - TV
     enabled: true
     oauth:
-      enabled: false
-      refreshToken: "1//0g4yzCBP_4RtCCgYIARAAGBASNwF-L9IrZvjCiU5UuiVjp-21B6cKImhpMv2UZpX44bZjdMJcBt7lm2Pxv1d3vBLkrOneMBa3BOE"
-      skipInitialization: true
+      enabled: true
+      skipInitialization: false
 sentry:
   dsn: ""
   environment: ""
