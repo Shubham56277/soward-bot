@@ -1,6 +1,6 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 
 export default class BoostCount extends Command {
     constructor() {
@@ -30,14 +30,15 @@ export default class BoostCount extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle(`${ctx.guild.name}'s Boost Status`)
-            .addFields([
-                { name: 'Boost Count', value: `${ctx.guild.premiumSubscriptionCount}` },
-                { name: 'Boost Level', value: `Level ${ctx.guild.premiumTier}` }
-            ]);
+        const panel = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                [
+                    `## ${ctx.guild.name}'s Boost Status`,
+                    `**Boost Count:** ${ctx.guild.premiumSubscriptionCount}`,
+                    `**Boost Level:** Level ${ctx.guild.premiumTier}`,
+                ].join("\n")
+            ));
 
-        return ctx.sendMessage({ embeds: [embed] });
+        return ctx.sendMessage({ components: [panel], flags: MessageFlags.IsComponentsV2 });
     }
 }

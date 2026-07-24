@@ -1,13 +1,22 @@
 import {
-	EmbedBuilder,
+	ContainerBuilder,
+	TextDisplayBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
 	ApplicationCommandOptionType,
-	Colors,
 	MessageFlags,
 	User,
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { purgeMessages, PurgeType } from "../../utils/functions/purgeMessages";
+
+function cv2(text: string): any {
+	return {
+		components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+		flags: MessageFlags.IsComponentsV2,
+	};
+}
 
 export default class Purge extends Command {
 
@@ -83,8 +92,8 @@ export default class Purge extends Command {
 	public async run(ctx: Context): Promise<any> {
 		if (!ctx.channel?.isTextBased() || ctx.channel.isDMBased()) {
 			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("This command can only be used in text channels.")],
-				flags: MessageFlags.Ephemeral,
+				...cv2("<:Cross:1375519752746958858> This command can only be used in text channels."),
+				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 			});
 		}
 
@@ -140,8 +149,8 @@ export default class Purge extends Command {
 							i++; // Skip next arg since we used it as user ID
 						} catch {
 							return ctx.sendMessage({
-								embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("Could not find the specified user")],
-								flags: MessageFlags.Ephemeral,
+								...cv2("<:Cross:1375519752746958858> Could not find the specified user"),
+								flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 							});
 						}
 					}
@@ -164,8 +173,8 @@ export default class Purge extends Command {
 						filterType = "USER"; // Set filter type to USER when a mention is provided
 					} catch {
 						return ctx.sendMessage({
-							embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("Could not find the specified user")],
-							flags: MessageFlags.Ephemeral,
+							...cv2("<:Cross:1375519752746958858> Could not find the specified user"),
+							flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 						});
 					}
 				} else if (!filterType || filterType === "ALL") {
@@ -199,15 +208,15 @@ export default class Purge extends Command {
 		// Validate filters
 		if (filterType === "USER" && !targetUser) {
 			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("Please specify a user when using the 'user' filter")],
-				flags: MessageFlags.Ephemeral,
+				...cv2("<:Cross:1375519752746958858> Please specify a user when using the 'user' filter"),
+				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 			});
 		}
 
 		if (filterType === "TOKEN" && !contentFilter) {
 			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("Please specify content to search for when using the 'content' filter")],
-				flags: MessageFlags.Ephemeral,
+				...cv2("<:Cross:1375519752746958858> Please specify content to search for when using the 'content' filter"),
+				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 			});
 		}
 
@@ -223,26 +232,26 @@ export default class Purge extends Command {
 			amount,
 			filterType === "USER" ? targetUser?.id : contentFilter
 		).then(async (result) => {
-			// Helper function to create result embed
-			const createResultEmbed = (): EmbedBuilder => {
+			// Helper function to create result container
+			const createResultContainer = (): ContainerBuilder => {
 				if (typeof result === "number") {
-					return new EmbedBuilder()
-						.setColor(Colors.Green)
-						.setDescription(
+					return new ContainerBuilder().addTextDisplayComponents(
+						new TextDisplayBuilder().setContent(
 							`<:Tick:1375519268292264012> Successfully deleted ${result} messages${filterType !== "ALL" ? ` (filter: ${filterType}${filterType === "USER" && targetUser ? ` - ${targetUser.tag || targetUser.username}` : ""})` : ""
 							}${filterType === "TOKEN" && contentFilter ? ` containing "${contentFilter}"` : ""}`,
-						);
+						)
+					);
 				} else {
 					// Handle error codes
 					switch (result) {
 						case "MEMBER_PERM":
-							return new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> You don't have permission to delete messages in this channel.");
+							return new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> You don't have permission to delete messages in this channel."));
 						case "BOT_PERM":
-							return new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> I don't have permission to delete messages in this channel.");
+							return new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> I don't have permission to delete messages in this channel."));
 						case "NO_MESSAGES":
-							return new EmbedBuilder().setColor(Colors.Orange).setDescription("<:Cross:1375519752746958858> No messages found matching your criteria.");
+							return new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> No messages found matching your criteria."));
 						default:
-							return new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Failed to delete messages. Messages might be too old (>14 days).");
+							return new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> Failed to delete messages. Messages might be too old (>14 days)."));
 					}
 				}
 			};
@@ -251,13 +260,15 @@ export default class Purge extends Command {
 			if (ctx.isInteraction) {
 				// For slash commands, always respond (ephemeral if silent)
 				await ctx.sendMessage({
-					embeds: [createResultEmbed()],
-					flags: silent ? MessageFlags.Ephemeral : undefined,
+					components: [createResultContainer()],
+					flags: silent ? MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral : MessageFlags.IsComponentsV2,
 				});
 			} else {
-				const resultEmbed = createResultEmbed();
 				try {
-					const resultMessage = await ctx.sendMessage({ embeds: [resultEmbed] });
+					const resultMessage = await ctx.sendMessage({
+						components: [createResultContainer()],
+						flags: MessageFlags.IsComponentsV2,
+					});
 					setTimeout(() => resultMessage.delete().catch(() => { }), 5000);
 				} catch (error) {
 					console.error("Failed to send result message:", error);

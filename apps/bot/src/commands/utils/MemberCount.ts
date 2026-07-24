@@ -1,6 +1,6 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 
 export default class MemberCount extends Command {
     constructor() {
@@ -30,15 +30,16 @@ export default class MemberCount extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle(`${ctx.guild.name}'s Member Count`)
-            .addFields([
-                { name: 'Total Members', value: `${ctx.guild.memberCount}` },
-                { name: 'Humans', value: `${ctx.guild.members.cache.filter(m => !m.user.bot).size}` },
-                { name: 'Bots', value: `${ctx.guild.members.cache.filter(m => m.user.bot).size}` }
-            ]);
+        const panel = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                [
+                    `## ${ctx.guild.name}'s Member Count`,
+                    `**Total Members:** ${ctx.guild.memberCount}`,
+                    `**Humans:** ${ctx.guild.members.cache.filter(m => !m.user.bot).size}`,
+                    `**Bots:** ${ctx.guild.members.cache.filter(m => m.user.bot).size}`,
+                ].join("\n")
+            ));
 
-        return ctx.sendMessage({ embeds: [embed] });
+        return ctx.sendMessage({ components: [panel], flags: MessageFlags.IsComponentsV2 });
     }
 }

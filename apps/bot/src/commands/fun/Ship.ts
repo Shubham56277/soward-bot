@@ -1,10 +1,19 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { ApplicationCommandOptionType, EmbedBuilder, User } from "discord.js";
 import path from "node:path";
 
 const BACKGROUND_IMAGE_URL = "https://images.unsplash.com/photo-1474552226712-ac0f0961a954?q=80&w=2071&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+
+// Lazy-load canvas so a blocked native binary doesn't crash the whole bot
+function tryGetCanvas(): typeof import("@napi-rs/canvas") | null {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        return require("@napi-rs/canvas") as typeof import("@napi-rs/canvas");
+    } catch {
+        return null;
+    }
+}
 
 
 export default class Ship extends Command {
@@ -47,7 +56,11 @@ export default class Ship extends Command {
             Number.parseInt(user2.id.slice(-4), 10);
         return Math.abs(Math.sin(seed) * 100);
     }
-    private async generateShipImage(user1: User, user2: User): Promise<Buffer> {
+    private async generateShipImage(user1: User, user2: User): Promise<Buffer | null> {
+        const cv = tryGetCanvas();
+        if (!cv) return null;
+
+        const { createCanvas, loadImage } = cv;
         const canvas = createCanvas(800, 400);
         const ctx = canvas.getContext("2d");
     
@@ -150,16 +163,15 @@ export default class Ship extends Command {
             else message = "Soulmates! 💘";
 
             const embed = new EmbedBuilder()
-                .setColor("#FF69B4")
-                .setTitle(
-                    `💝 ${user1?.username} + ${user2?.username} = ${shipName}`,
-                )
-                .setDescription(
-                    `**Compatibility:** ${compatibility}%\n${message}`,
-                )
-                .setImage("attachment://ship.jpg")
-                
-            return ctx.editMessage({ content: null, embeds: [embed], files: [{ attachment: shipImage, name: "ship.jpg" }] });
+                .setColor(0x000000)
+                .setTitle(`💝 ${user1?.username} + ${user2?.username} = ${shipName}`)
+                .setDescription(`**Compatibility:** ${compatibility}%\n${message}`);
+
+            if (shipImage) {
+                embed.setImage("attachment://ship.jpg");
+                return ctx.editMessage({ content: null, embeds: [embed], files: [{ attachment: shipImage, name: "ship.jpg" }] });
+            }
+            return ctx.editMessage({ content: null, embeds: [embed] });
         } catch (error) {
             console.error(error);
             return ctx.editMessage(

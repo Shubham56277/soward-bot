@@ -1,7 +1,14 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { EmbedBuilder, Colors, GuildEmoji, User } from "discord.js";
-import { Pagination } from "../../utils/Pagination";
+import { ContainerBuilder, GuildEmoji, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, User } from "discord.js";
+import { ContainerPagination } from "../../utils/Pagination";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class EmojiInfo extends Command {
     constructor() {
@@ -94,44 +101,25 @@ export default class EmojiInfo extends Command {
             console.error('Failed to fetch emoji creator:', error);
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(Colors.Blue)
-            .setTitle(`Emoji Info: ${emoji.name}`)
-            .setThumbnail(emoji.url)
-            .addFields([
-                { name: 'ID', value: emoji.id, inline: true },
-                { name: 'Animated', value: emoji.animated ? '<:Tick:1375519268292264012> Yes' : '<:Cross:1375519752746958858> No', inline: true },
-                { name: 'Created', value: `<t:${Math.floor(emoji.createdTimestamp / 1000)}:R>`, inline: true },
-                { name: 'Identifier', value: `\`${emoji.identifier}\``, inline: true },
-                { name: 'Available', value: emoji.available ? '<:Tick:1375519268292264012> Yes' : '<:Cross:1375519752746958858> No', inline: true }
-            ]);
+        const fields = [
+            `**ID:** ${emoji.id}`,
+            `**Animated:** ${emoji.animated ? '<:Tick:1375519268292264012> Yes' : '<:Cross:1375519752746958858> No'}`,
+            `**Created:** <t:${Math.floor(emoji.createdTimestamp / 1000)}:R>`,
+            `**Identifier:** \`${emoji.identifier}\``,
+            `**Available:** ${emoji.available ? '<:Tick:1375519268292264012> Yes' : '<:Cross:1375519752746958858> No'}`,
+            `**URL:** [Download](${emoji.url})`,
+        ];
 
         if (creator) {
-            embed.addFields([
-                { name: 'Created By', value: `${creator} (${creator.tag})`, inline: true }
-            ]);
+            fields.push(`**Created By:** ${creator} (${creator.tag})`);
         }
 
         if (emoji.roles.cache.size > 0) {
-            embed.addFields([{
-                name: 'Restricted to Roles',
-                value: emoji.roles.cache.map(r => r.toString()).join(', '),
-                inline: false
-            }]);
+            fields.push(`**Restricted to Roles:** ${emoji.roles.cache.map(r => r.toString()).join(', ')}`);
         }
 
-        embed.addFields([
-            { name: 'URL', value: `[Download](${emoji.url})`, inline: true }
-        ]);
-
-        if (creator) {
-            embed.setFooter({
-                text: `Created by ${creator.tag}`,
-                iconURL: creator.displayAvatarURL()
-            });
-        }
-
-        return ctx.sendMessage({ embeds: [embed] });
+        const panel = buildPanel(`Emoji Info: ${emoji.name}`, fields.join("\n") + (creator ? `\n\n-# Created by ${creator.tag}` : ""));
+        return ctx.sendMessage({ components: [panel], flags: MessageFlags.IsComponentsV2 });
     }
 
     private async listEmojis(ctx: Context): Promise<any> {
@@ -144,27 +132,20 @@ export default class EmojiInfo extends Command {
         const emojisWithCreators = await this.fetchEmojiCreators(ctx, [...emojis.values()]);
 
         const emojiChunks = this.chunkArray(emojisWithCreators, 10);
-        const embeds = emojiChunks.map((chunk, i) => {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Blue)
-                .setTitle(`Server Emojis (${emojis.size})`)
-                .setDescription(
-                    chunk.map(e => {
-                        let info = `${e.emoji} \`:${e.emoji.name}:\``;
-                        if (e.creator) info += ` - Added by ${e.creator.username}`;
-                        return info;
-                    }).join('\n')
-                )
-                .setFooter({ text: `Page ${i + 1}/${emojiChunks.length}` });
-
-            return embed;
+        const pages = emojiChunks.map((chunk, i) => {
+            const body = chunk.map(e => {
+                let info = `${e.emoji} \`:${e.emoji.name}:\``;
+                if (e.creator) info += ` - Added by ${e.creator.username}`;
+                return info;
+            }).join('\n') + `\n\n-# Page ${i + 1}/${emojiChunks.length}`;
+            return buildPanel(`Server Emojis (${emojis.size})`, body);
         });
 
-        if (embeds.length === 1) {
-            return ctx.sendMessage({ embeds: [embeds[0]!] });
+        if (pages.length === 1) {
+            return ctx.sendMessage({ components: [pages[0]!], flags: MessageFlags.IsComponentsV2 });
         }
 
-        const pagination = new Pagination(ctx, embeds);
+        const pagination = new ContainerPagination(ctx, pages);
         return pagination.start();
     }
 

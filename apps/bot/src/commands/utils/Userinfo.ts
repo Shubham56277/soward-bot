@@ -1,6 +1,13 @@
-import { EmbedBuilder, GuildMember, UserFlagsString } from "discord.js";
+import { ContainerBuilder, GuildMember, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, UserFlagsString } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 const badges: Record<UserFlagsString, string> = {
     Staff: "Staff",
@@ -83,7 +90,6 @@ export default class Userinfo extends Command {
             }]
         });
         const user = await member?.user.fetch(true);
-        const color = member?.displayHexColor === "#000000" ? "#2f3136" : member?.displayHexColor;
 
         // Process basic information
         const basicInfo = [
@@ -108,80 +114,48 @@ export default class Userinfo extends Command {
             ? userFlags.map(flag => badges[flag]).join(", ")
             : "None";
 
-        // Build the embed
-        const embed = new EmbedBuilder()
-            .setAuthor({
-                name: `${member?.user.username} ${member?.user.bot ? "[BOT]" : ""}`,
-                iconURL: member?.user.displayAvatarURL(),
-            })
-            .setThumbnail(member?.user.displayAvatarURL({ size: 4096 })!)
-            .setColor(color!)
-            .setDescription(basicInfo.join("\n"))
-            .addFields(
-                {
-                    name: `Roles [${roles?.length}]`,
-                    value: rolesText.length > 1024 ? "Too many roles to display" : rolesText
-                }
-            );
+        const lines = [
+            ...basicInfo,
+            "",
+            `**Roles [${roles?.length}]:** ${rolesText.length > 1024 ? "Too many roles to display" : rolesText}`,
+        ];
 
-        // Add conditional fields
         if (badgesText !== "None") {
-            embed.addFields({ name: "Badges", value: badgesText, inline: true });
+            lines.push(`**Badges:** ${badgesText}`);
         }
 
         if (member.roles.highest.id !== ctx.guild?.id) {
-            embed.addFields({ name: "Highest Role", value: member.roles.highest.toString(), inline: true });
+            lines.push(`**Highest Role:** ${member.roles.highest.toString()}`);
         }
 
         const permissions = member.permissions.toArray();
         if (permissions.length > 0) {
-            embed.addFields({
-                name: "Key Permissions",
-                value: `\`${member.permissions.has("Administrator") ? "Administrator" : permissions.slice(0, 5).join("`, `")}${permissions.length > 5 ? ` (+${permissions.length - 5} more)` : ""}\``
-            });
+            lines.push(`**Key Permissions:** \`${member.permissions.has("Administrator") ? "Administrator" : permissions.slice(0, 5).join("`, `")}${permissions.length > 5 ? ` (+${permissions.length - 5} more)` : ""}\``);
         }
 
-        //Extra for voice chanel, or server boosting
         if (member.voice.channel) {
-            embed.addFields({
-                name: "Voice Channel",
-                value: member.voice.channel.toString(),
-                inline: true,
-            });
+            lines.push(`**Voice Channel:** ${member.voice.channel.toString()}`);
         }
         if (member.premiumSinceTimestamp) {
-            embed.addFields({
-                name: "Boosting Since",
-                value: `<t:${Math.floor(member.premiumSinceTimestamp! / 1000)}:R>`,
-                inline: true
-            });
+            lines.push(`**Boosting Since:** <t:${Math.floor(member.premiumSinceTimestamp! / 1000)}:R>`);
         }
-        // Add media fields
         if (user.banner) {
-            embed.setImage(user.bannerURL({ size: 4096 })!);
+            lines.push(`**Banner:** [View Banner](${user.bannerURL({ size: 4096 })})`);
         }
-
         if (user.accentColor) {
-            embed.addFields({
-                name: "Accent Color",
-                value: `\`#${user.accentColor.toString(16).padStart(6, '0')}\``,
-                inline: true
-            });
+            lines.push(`**Accent Color:** \`#${user.accentColor.toString(16).padStart(6, '0')}\``);
         }
-
         if (user.avatarDecorationData) {
-            embed.addFields({
-                name: "Avatar Decoration",
-                value: `[View Decoration](${user.avatarDecorationURL({ size: 4096 })})`,
-                inline: true
-            });
+            lines.push(`**Avatar Decoration:** [View Decoration](${user.avatarDecorationURL({ size: 4096 })})`);
         }
 
-        embed.setFooter({
-            text: `Requested by ${ctx.author?.username}`,
-            iconURL: ctx.author?.displayAvatarURL()
-        }).setTimestamp();
+        lines.push("", `-# Requested by ${ctx.author?.username}`);
 
-        return ctx.editOrReply({ embeds: [embed] });
+        const panel = buildPanel(
+            `${member?.user.username}${member?.user.bot ? " [BOT]" : ""}'s Info`,
+            lines.join("\n"),
+        );
+
+        return ctx.editOrReply({ components: [panel], flags: MessageFlags.IsComponentsV2 });
     }
 }

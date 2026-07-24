@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import * as reply from "../../utils/reply";
 
 export default class Pause extends Command {
     constructor() {
@@ -33,33 +34,14 @@ export default class Pause extends Command {
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return reply.error(ctx, "Player is not connected");
         }
 
         if (player.paused) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "The player is already paused",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return reply.error(ctx, "The player is already paused");
         }
 
         player.pause();
-
-        const embed = new EmbedBuilder()
-            .setDescription("Paused the current track")
-            .setColor(ctx.client.config.colors.main);
-
-        await ctx.sendMessage({ embeds: [embed] });
+        return reply.success(ctx, "Paused the current track");
     }
 }

@@ -1,4 +1,4 @@
-import { EmbedBuilder, Role, Colors, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, PermissionResolvable } from "discord.js";
+import { EmbedBuilder, Role, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, PermissionResolvable } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -80,28 +80,28 @@ export default class RoleAll extends Command {
         // Safety checks
         if (this.hasDangerousPermissions(role)) {
             const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
+                .setColor(0x000000)
                 .setDescription("This role has dangerous permissions and cannot be mass assigned");
             return await ctx.sendMessage({ embeds: [embed] });
         }
 
         if (role.position >= (ctx.guild.members.me?.roles.highest.position || Number.POSITIVE_INFINITY)) {
             const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
+                .setColor(0x000000)
                 .setDescription("I cannot assign roles higher than my highest role");
             return await ctx.sendMessage({ embeds: [embed] });
         }
 
         if (role.managed) {
             const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
+                .setColor(0x000000)
                 .setDescription("This role is managed by an integration and cannot be assigned");
             return await ctx.sendMessage({ embeds: [embed] });
         }
 
         // Confirmation
         const confirmEmbed = new EmbedBuilder()
-            .setColor(Colors.Yellow)
+            .setColor(0x000000)
             .setTitle("Confirm Role Assignment")
             .setDescription(`This will add ${role} to all ${filterType === "all" ? "members" : filterType} in the server.`)
             .addFields(
@@ -149,7 +149,7 @@ export default class RoleAll extends Command {
 
                     // Update with initial count
                     const progressEmbed = new EmbedBuilder()
-                        .setColor(Colors.Blue)
+                        .setColor(0x000000)
                         .setTitle("Role Assignment In Progress")
                         .setDescription(
                             `Adding ${role} to ${memberArray.length} members...\n\n` +
@@ -215,7 +215,7 @@ export default class RoleAll extends Command {
                 } catch (error) {
                     console.error("Role assignment error:", error);
                     const errorEmbed = new EmbedBuilder()
-                        .setColor(Colors.Red)
+                        .setColor(0x000000)
                         .setTitle("Error During Role Assignment")
                         .setDescription("An unexpected error occurred during the process");
                     await confirmMsg.edit({ embeds: [errorEmbed] });
@@ -224,7 +224,7 @@ export default class RoleAll extends Command {
             } else if (interaction.customId === "cancel") {
                 await interaction.deferUpdate();
                 confirmEmbed
-                    .setColor(Colors.Red)
+                    .setColor(0x000000)
                     .setTitle("Operation Cancelled");
                 await confirmMsg.edit({
                     embeds: [confirmEmbed],

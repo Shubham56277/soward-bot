@@ -28,7 +28,7 @@ export default class GuildDelete extends Event {
 
                 const embed = {
                     title: `Left guild: ${guild.name}`,
-                    color: 0xff0000,
+                    color: 0x000000,
                     thumbnail: {
                         url: guild.iconURL({ extension: "png", size: 1024 }) ||
                             "",

@@ -4,15 +4,25 @@ import {
     ButtonInteraction,
     ButtonStyle,
     ChannelSelectMenuBuilder,
-    EmbedBuilder,
-    RoleSelectMenuBuilder,
-    StringSelectMenuBuilder,
-    UserSelectMenuBuilder,
+    ContainerBuilder,
     MessageFlags,
+    RoleSelectMenuBuilder,
+    SeparatorBuilder,
+    SeparatorSpacingSize,
+    StringSelectMenuBuilder,
+    TextDisplayBuilder,
+    UserSelectMenuBuilder,
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { db, eq, IgnoredChannel, schema } from "@repo/db";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class IgnoredChannels extends Command {
     constructor() {
@@ -46,13 +56,8 @@ export default class IgnoredChannels extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        // Main menu embed
-        const embed = new EmbedBuilder()
-            .setTitle("Ignored Channels Management")
-            .setDescription(
-                "Select an action to manage ignored channels. These are channels where bot commands are disabled.",
-            )
-            .setColor(ctx.client.config.colors.main);
+        const mainPanel = buildPanel("Ignored Channels Management",
+            "Select an action to manage ignored channels. These are channels where bot commands are disabled.");
 
         // Create action row with buttons
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -80,8 +85,8 @@ export default class IgnoredChannels extends Command {
 
         // Send the initial message
         const message = await ctx.sendMessage({
-            embeds: [embed],
-            components: [row],
+            components: [mainPanel, row],
+            flags: MessageFlags.IsComponentsV2,
         });
 
         // Collect button interactions
@@ -134,12 +139,7 @@ export default class IgnoredChannels extends Command {
         ctx: Context,
         interaction: ButtonInteraction,
     ) {
-        const embed = new EmbedBuilder()
-            .setTitle("Add/Remove Ignored Channel")
-            .setDescription(
-                "Select a channel to add or remove from the ignored list.",
-            )
-            .setColor("#2b2d31");
+        const addRemovePanel = buildPanel("Add/Remove Ignored Channel", "Select a channel to add or remove from the ignored list.");
 
         const selectMenu = new ChannelSelectMenuBuilder()
             .setCustomId("ic_channel_select")
@@ -150,9 +150,8 @@ export default class IgnoredChannels extends Command {
             .addComponents(selectMenu);
 
         await interaction.reply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral,
+            components: [addRemovePanel, row],
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
         });
         const message = await interaction.fetchReply();
         const collector = message.createMessageComponentCollector({
@@ -199,12 +198,8 @@ export default class IgnoredChannels extends Command {
     }
 
     private async handleAddRole(ctx: Context, interaction: ButtonInteraction) {
-        const embed = new EmbedBuilder()
-            .setTitle("Add Role Exception")
-            .setDescription(
-                "Select a channel to add role exceptions to, or select a role to add as exception.",
-            )
-            .setColor("#2b2d31");
+        const addRolePanel = buildPanel("Add Role Exception",
+            "Select a channel to add role exceptions to, or select a role to add as exception.");
 
         // First get all ignored channels in this guild
         const ignoredChannels = await db
@@ -235,9 +230,8 @@ export default class IgnoredChannels extends Command {
             .addComponents(channelSelect);
 
         await interaction.reply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral,
+            components: [addRolePanel, row],
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
         });
         const message = await interaction.fetchReply();
         const collector = message.createMessageComponentCollector({
@@ -263,12 +257,8 @@ export default class IgnoredChannels extends Command {
             );
 
             // Now show role select menu
-            const roleEmbed = new EmbedBuilder()
-                .setTitle("Add Role Exception")
-                .setDescription(
-                    `Select roles that can bypass the command block in <#${channelId}>`,
-                )
-                .setColor("#2b2d31");
+            const rolePanel = buildPanel("Add Role Exception",
+                `Select roles that can bypass the command block in <#${channelId}>`);
 
             const roleSelect = new RoleSelectMenuBuilder()
                 .setCustomId("ic_role_select")
@@ -279,8 +269,7 @@ export default class IgnoredChannels extends Command {
                 .addComponents(roleSelect);
 
             await selectInteraction.update({
-                embeds: [roleEmbed],
-                components: [roleRow],
+                components: [rolePanel, roleRow],
             });
             const roleMessage = await selectInteraction.fetchReply();
             const roleCollector = roleMessage.createMessageComponentCollector({
@@ -314,12 +303,8 @@ export default class IgnoredChannels extends Command {
     }
 
     private async handleAddUser(ctx: Context, interaction: ButtonInteraction) {
-        const embed = new EmbedBuilder()
-            .setTitle("Add User Exception")
-            .setDescription(
-                "Select a channel to add user exceptions to, or select users to add as exceptions.",
-            )
-            .setColor("#2b2d31");
+        const addUserPanel = buildPanel("Add User Exception",
+            "Select a channel to add user exceptions to, or select users to add as exceptions.");
 
         // First get all ignored channels in this guild
         const ignoredChannels = await db
@@ -350,9 +335,8 @@ export default class IgnoredChannels extends Command {
             .addComponents(channelSelect);
 
         await interaction.reply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral,
+            components: [addUserPanel, row],
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
         });
         const message = await interaction.fetchReply();
         const collector = message.createMessageComponentCollector({
@@ -378,12 +362,8 @@ export default class IgnoredChannels extends Command {
             );
 
             // Now show user select menu
-            const userEmbed = new EmbedBuilder()
-                .setTitle("Add User Exception")
-                .setDescription(
-                    `Select users that can bypass the command block in <#${channelId}>`,
-                )
-                .setColor("#2b2d31");
+            const userPanel = buildPanel("Add User Exception",
+                `Select users that can bypass the command block in <#${channelId}>`);
 
             const userSelect = new UserSelectMenuBuilder()
                 .setCustomId("ic_user_select")
@@ -394,8 +374,7 @@ export default class IgnoredChannels extends Command {
                 .addComponents(userSelect);
 
             await selectInteraction.update({
-                embeds: [userEmbed],
-                components: [userRow],
+                components: [userPanel, userRow],
             });
             const userMessage = await selectInteraction.fetchReply();
             const userCollector = userMessage.createMessageComponentCollector({
@@ -429,12 +408,8 @@ export default class IgnoredChannels extends Command {
     }
 
     private async handleClear(ctx: Context, interaction: ButtonInteraction) {
-        const embed = new EmbedBuilder()
-            .setTitle("Clear All Ignored Channels")
-            .setDescription(
-                "Are you sure you want to clear all ignored channels and their exceptions?",
-            )
-            .setColor("#ff0000");
+        const clearPanel = buildPanel("Clear All Ignored Channels",
+            "Are you sure you want to clear all ignored channels and their exceptions?");
 
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
             new ButtonBuilder()
@@ -448,9 +423,8 @@ export default class IgnoredChannels extends Command {
         );
 
         await interaction.reply({
-            embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral,
+            components: [clearPanel, row],
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
         });
         const message = await interaction.fetchReply();
         const collector = message.createMessageComponentCollector({
@@ -500,12 +474,7 @@ export default class IgnoredChannels extends Command {
             });
         }
 
-        const embed = new EmbedBuilder()
-            .setTitle("Ignored Channels List")
-            .setDescription(
-                "Here are all channels where commands are disabled:",
-            )
-            .setColor("#2b2d31");
+        const listLines: string[] = ["Here are all channels where commands are disabled:", ""];
 
         for (const channel of ignoredChannels) {
             const channelName =
@@ -524,16 +493,12 @@ export default class IgnoredChannels extends Command {
                 }`;
             }
 
-            embed.addFields({
-                name: channelName,
-                value: exceptions || "No exceptions",
-                inline: false,
-            });
+            listLines.push(`**${channelName}:** ${exceptions || "No exceptions"}`);
         }
 
         await interaction.reply({
-            embeds: [embed],
-            flags: MessageFlags.Ephemeral,
+            components: [buildPanel("Ignored Channels List", listLines.join("\n"))],
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
         });
     }
 }

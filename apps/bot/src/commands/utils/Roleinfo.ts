@@ -1,7 +1,14 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, MessageFlags, Role } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, MessageFlags, Role, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import moment from "moment";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class Roleinfo extends Command {
 	constructor() {
@@ -91,16 +98,9 @@ export default class Roleinfo extends Command {
 
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(basicButton, permissionsButton, membersButton);
 
-		// Create initial embed
-		const embed = new EmbedBuilder()
-			.setColor(role.color || ctx.client.config.colors.main)
-			.setTitle(`${role.name} Info`)
-			.setDescription(basicInfo)
-			.setFooter({ text: `Role ID: ${role.id}` });
-
 		const message = await ctx.editOrReply({
-			embeds: [embed],
-			components: [row],
+			components: [buildPanel(`${role.name} Info`, basicInfo + `\n\n-# Role ID: ${role.id}`), row],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		const collector = message.createMessageComponentCollector({
@@ -120,38 +120,23 @@ export default class Roleinfo extends Command {
 
 		collector.on("collect", async (i) => {
 			if (i.customId === "basic") {
-				embed.setDescription(basicInfo);
-				embed.setTitle(`${role.name} Info`);
-
 				basicButton.setDisabled(true);
 				permissionsButton.setDisabled(false);
 				membersButton.setDisabled(false);
-
 				const row = new ActionRowBuilder<ButtonBuilder>().addComponents(basicButton, permissionsButton, membersButton);
-
-				await i.update({ embeds: [embed], components: [row] });
+				await i.update({ components: [buildPanel(`${role.name} Info`, basicInfo + `\n\n-# Role ID: ${role.id}`), row] });
 			} else if (i.customId === "permissions") {
-				embed.setDescription(`**Permissions:**\n${permissions}`);
-				embed.setTitle(`${role.name} Permissions`);
-
 				permissionsButton.setDisabled(true);
 				basicButton.setDisabled(false);
 				membersButton.setDisabled(false);
-
 				const row = new ActionRowBuilder<ButtonBuilder>().addComponents(basicButton, permissionsButton, membersButton);
-
-				await i.update({ embeds: [embed], components: [row] });
+				await i.update({ components: [buildPanel(`${role.name} Permissions`, `**Permissions:**\n${permissions}`), row] });
 			} else if (i.customId === "members") {
-				embed.setDescription(`**Members with this role (${memberCount}):**\n${memberList}`);
-				embed.setTitle(`${role.name} Members`);
-
 				membersButton.setDisabled(true);
 				basicButton.setDisabled(false);
 				permissionsButton.setDisabled(false);
-
 				const row = new ActionRowBuilder<ButtonBuilder>().addComponents(basicButton, permissionsButton, membersButton);
-
-				await i.update({ embeds: [embed], components: [row] });
+				await i.update({ components: [buildPanel(`${role.name} Members`, `**Members with this role (${memberCount}):**\n${memberList}`), row] });
 			}
 		});
 

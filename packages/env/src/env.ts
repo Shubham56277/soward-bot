@@ -16,6 +16,7 @@ const LavalinkNodeSchema = z.object({
 	regions: z.string().array().optional(),
 	retryAmount: z.number().optional(),
 	retryDelay: z.number().optional(),
+	retryTimespan: z.number().optional(),
 	requestSignalTimeoutMS: z.number().optional(),
 	closeOnError: z.boolean().optional(),
 	heartBeatInterval: z.number().optional(),
@@ -54,6 +55,8 @@ const envSchema = z.object({
 	NO_PREFIX_WEBHOOK_URL: z.url().optional(),
 	PREMIUM_WEBHOOK_URL: z.url().optional(),
 	SHARD_WEBHOOK_URL: z.url().optional(),
+	/** Channel ID in your developer server where song requests are forwarded */
+	SONG_REQUEST_CHANNEL_ID: z.string().optional(),
 
 	GUILD_ID: z.string().optional(),
 	

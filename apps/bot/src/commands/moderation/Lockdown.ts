@@ -1,4 +1,4 @@
-import { EmbedBuilder, TextChannel, Colors, ApplicationCommandOptionType } from "discord.js";
+import { EmbedBuilder, TextChannel, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -75,7 +75,7 @@ export default class Lockdown extends Command {
         } catch (error) {
             console.error("Lockdown Error:", error);
             const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
+                .setColor(0x000000)
                 .setDescription("Failed to initiate server lockdown");
             return await ctx.sendMessage({ embeds: [embed] });
         }

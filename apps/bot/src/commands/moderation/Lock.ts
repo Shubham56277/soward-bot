@@ -1,6 +1,7 @@
-import { EmbedBuilder, TextChannel, ApplicationCommandOptionType, Colors } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, TextChannel, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import * as reply from "../../utils/reply";
 
 export default class Lock extends Command {
     constructor() {
@@ -43,10 +44,7 @@ export default class Lock extends Command {
         const reason = ctx.options?.getString("reason") || ctx.args?.join(" ") || "No reason provided";
 
         if (!channel.isTextBased()) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("Only text channels can be locked");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return reply.error(ctx, "Only text channels can be locked");
         }
 
         try {
@@ -55,23 +53,20 @@ export default class Lock extends Command {
                 AddReactions: false
             });
 
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Orange)
-                .setTitle("🔒 Channel Locked")
-                .setDescription(
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔒 Channel Locked**`))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `${channel} has been locked\n\n` +
                     `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
                     `**Reason:** ${reason}`
-                )
-                .setTimestamp();
-            return await ctx.sendMessage({ embeds: [embed] });
+                ));
+
+            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 
         } catch (error) {
             console.error("Lock Error:", error);
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("Failed to lock this channel");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return reply.error(ctx, "Failed to lock this channel");
         }
     }
 }

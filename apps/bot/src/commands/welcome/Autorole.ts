@@ -1,7 +1,14 @@
-import { EmbedBuilder, Colors, ChatInputCommandInteraction, ApplicationCommandOptionType, PermissionFlagsBits, PermissionResolvable, Role } from "discord.js";
+import { ContainerBuilder, ChatInputCommandInteraction, ApplicationCommandOptionType, PermissionFlagsBits, PermissionResolvable, Role, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AutoRole } from "@repo/db";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 const dangerPermissions: PermissionResolvable[] = [
 	PermissionFlagsBits.Administrator,
@@ -198,12 +205,10 @@ export default class AutoroleCommand extends Command {
 				return this.sendError(ctx, "Failed to create auto role configuration");
 			}
 
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Green)
-				.setDescription(`<:Tick:1375519268292264012> Added ${role.toString()} as auto role for ${type === "bot" ? "bots" : "members"}`)
-				.setFooter({ text: `Configuration ID: ${autoRole.id}` });
+			const embed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Added ${role.toString()} as auto role for ${type === "bot" ? "bots" : "members"}\n-# Configuration ID: ${autoRole.id}`));
 
-			return ctx.sendMessage({ embeds: [embed] });
+			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("AutoRole Add Error:", error);
 			return this.sendError(ctx, "Failed to add auto role");
@@ -231,12 +236,10 @@ export default class AutoroleCommand extends Command {
 
 			await AutoRole.delete(config.id);
 
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Green)
-				.setDescription(`<:Tick:1375519268292264012> Removed auto role configuration for ${roleName}`)
-				.setFooter({ text: `Was for: ${config.isBot ? "bots" : "members"}` });
+			const embed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Removed auto role configuration for ${roleName}\n-# Was for: ${config.isBot ? "bots" : "members"}`));
 
-			return ctx.sendMessage({ embeds: [embed] });
+			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("AutoRole Remove Error:", error);
 			return this.sendError(ctx, "Failed to remove auto role");
@@ -278,9 +281,10 @@ export default class AutoroleCommand extends Command {
 				await Promise.all(configsToDelete.map((c) => AutoRole.delete(c.id)));
 			}
 
-			const embed = new EmbedBuilder().setColor(Colors.Green).setDescription(description);
+			const embed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
 
-			return ctx.sendMessage({ embeds: [embed] });
+			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("AutoRole Clear Error:", error);
 			return this.sendError(ctx, "Failed to clear auto roles");
@@ -301,7 +305,8 @@ export default class AutoroleCommand extends Command {
 
 			if (allConfigs.length === 0) {
 				return ctx.sendMessage({
-					embeds: [new EmbedBuilder().setColor(Colors.Blue).setDescription("No auto roles are currently configured")],
+					components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("No auto roles are currently configured"))],
+					flags: MessageFlags.IsComponentsV2,
 				});
 			}
 
@@ -315,7 +320,8 @@ export default class AutoroleCommand extends Command {
 
 				if (configsToShow.length === 0) {
 					return ctx.sendMessage({
-						embeds: [new EmbedBuilder().setColor(Colors.Blue).setDescription(`No auto roles configured for ${type === "bot" ? "bots" : "members"}`)],
+						components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`No auto roles configured for ${type === "bot" ? "bots" : "members"}`))],
+						flags: MessageFlags.IsComponentsV2,
 					});
 				}
 			}
@@ -328,13 +334,8 @@ export default class AutoroleCommand extends Command {
 				}),
 			);
 
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Blue)
-				.setTitle(title)
-				.setDescription(rolesList.join("\n\n"))
-				.setFooter({ text: `Total: ${configsToShow.length}` });
-
-			return ctx.sendMessage({ embeds: [embed] });
+			const embed = buildPanel(title, rolesList.join("\n\n") + `\n\n-# Total: ${configsToShow.length}`);
+			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("AutoRole List Error:", error);
 			return this.sendError(ctx, "Failed to list auto roles");
@@ -359,9 +360,10 @@ export default class AutoroleCommand extends Command {
 
 			await Promise.all(configsToUpdate.map((c) => AutoRole.update(c.id, { enabled: state })));
 
-			const embed = new EmbedBuilder().setColor(state ? Colors.Green : Colors.Red).setDescription(`<:Tick:1375519268292264012> Auto roles for ${type === "bot" ? "bots" : "members"} are now ${state ? "enabled" : "disabled"}`);
+			const embed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Auto roles for ${type === "bot" ? "bots" : "members"} are now ${state ? "enabled" : "disabled"}`));
 
-			return ctx.sendMessage({ embeds: [embed] });
+			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("AutoRole Toggle Error:", error);
 			return this.sendError(ctx, "Failed to toggle auto roles");
@@ -369,26 +371,24 @@ export default class AutoroleCommand extends Command {
 	}
 
 	private async showHelp(ctx: Context) {
-		const embed = new EmbedBuilder()
-			.setColor(Colors.Blue)
-			.setTitle("AutoRole Command Help")
-			.setDescription(
-				"**Configure automatic role assignment for new members and bots**\n\n" +
-				"**Subcommands:**\n" +
-				"`/autorole add <role> <type>` - Add a role to auto assign\n" +
-				"`/autorole remove <role_id>` - Remove an auto role configuration\n" +
-				"`/autorole clear [type]` - Clear auto roles (specify type or all)\n" +
-				"`/autorole list [type]` - List auto roles (specify type or all)\n" +
-				"`/autorole toggle <type> <state>` - Enable/disable auto roles for a type\n\n" +
-				"**Types:** `member` (regular users) or `bot`",
-			);
+		const embed = buildPanel("AutoRole Command Help",
+			"**Configure automatic role assignment for new members and bots**\n\n" +
+			"**Subcommands:**\n" +
+			"`/autorole add <role> <type>` - Add a role to auto assign\n" +
+			"`/autorole remove <role_id>` - Remove an auto role configuration\n" +
+			"`/autorole clear [type]` - Clear auto roles (specify type or all)\n" +
+			"`/autorole list [type]` - List auto roles (specify type or all)\n" +
+			"`/autorole toggle <type> <state>` - Enable/disable auto roles for a type\n\n" +
+			"**Types:** `member` (regular users) or `bot`",
+		);
 
-		return ctx.sendMessage({ embeds: [embed] });
+		return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 	}
 
 	private async sendError(ctx: Context, message: string) {
 		return ctx.sendMessage({
-			embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription(`<:Cross:1375519752746958858> ${message}`)],
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Cross:1375519752746958858> ${message}`))],
+			flags: MessageFlags.IsComponentsV2,
 		});
 	}
 }

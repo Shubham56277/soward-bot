@@ -300,13 +300,13 @@ export class Services {
 					const welcomeMessageText = replacePlaceholders(welcome.message, member, member.guild);
 
 					const buffer = await createWelcomeImage(member, member.guild);
-					const attachment = new AttachmentBuilder(buffer, {
-						name: "welcome.webp",
-					});
-					await channel.send({
-						content: welcomeMessageText,
-						files: [attachment],
-					});
+					if (buffer) {
+						const attachment = new AttachmentBuilder(buffer, { name: "welcome.webp" });
+						await channel.send({ content: welcomeMessageText, files: [attachment] });
+					} else {
+						// Canvas unavailable — fall back to plain text welcome
+						await channel.send(welcomeMessageText);
+					}
 				} else if (welcome.type === "text") {
 					const welcomeMessageText = replacePlaceholders(welcome.message, member, member.guild);
 					await channel.send(welcomeMessageText);

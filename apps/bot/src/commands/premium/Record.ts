@@ -103,7 +103,7 @@ export default class Record extends Command {
 			return ctx.sendMessage({
 				embeds: [
 					new EmbedBuilder()
-						.setColor(0xff3b30)
+						.setColor(0x000000)
 						.setTitle("Voice Recording Started")
 						.setDescription(
 							`Recording is active in <#${started.channelId}>. It stops after five minutes or with \`record stop\`. The MP3 will be sent only by DM, then all temporary bot files are deleted.`,

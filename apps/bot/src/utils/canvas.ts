@@ -1,42 +1,74 @@
-import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+/**
+ * canvas.ts — Welcome card and image utilities.
+ *
+ * @napi-rs/canvas requires a native Skia binary (.node file).
+ * On Windows with Application Control / AppLocker policies the binary may be
+ * blocked. We load it lazily and fall back gracefully so the rest of the bot
+ * continues working even when canvas is unavailable.
+ */
+
 import { Guild, GuildMember } from "discord.js";
 import { request } from "undici";
 import path from "node:path";
 
+// ── Lazy canvas loader ───────────────────────────────────────────────────────
 
-GlobalFonts.registerFromPath(path.resolve(__dirname, "..", "..", "..", "fonts", "Poppins-Bold.ttf"), "Poppins-Bold");
-GlobalFonts.registerFromPath(path.resolve(__dirname, "..", "..", "..", "fonts", "Poppins-Regular.ttf"), "Poppins-Regular");
+let canvasModule: typeof import("@napi-rs/canvas") | null = null;
+let canvasUnavailable = false;
 
+function getCanvas(): typeof import("@napi-rs/canvas") | null {
+	if (canvasUnavailable) return null;
+	if (canvasModule) return canvasModule;
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		canvasModule = require("@napi-rs/canvas") as typeof import("@napi-rs/canvas");
 
-export async function createWelcomeImage(member: GuildMember, guild: Guild) {
-	if (!member || !guild) {
-		throw new Error("Member and guild are required");
+		// Register fonts only once, right after a successful load
+		const { GlobalFonts } = canvasModule;
+		const base = path.resolve(__dirname, "..", "..", "..", "fonts");
+		try { GlobalFonts.registerFromPath(path.join(base, "Poppins-Bold.ttf"),    "Poppins-Bold");    } catch {}
+		try { GlobalFonts.registerFromPath(path.join(base, "Poppins-Regular.ttf"), "Poppins-Regular"); } catch {}
+
+		return canvasModule;
+	} catch (err: any) {
+		canvasUnavailable = true;
+		console.warn(
+			"[canvas] @napi-rs/canvas native binary unavailable — welcome cards and Ship command disabled.\n" +
+			`  Reason: ${err?.message ?? err}`,
+		);
+		return null;
 	}
+}
 
-	// Create a canvas with width and height
-	const canvas = createCanvas(900 * 2, 270 * 2);
-	const ctx = canvas.getContext("2d");
-	// Set scaling for increased resolution
+// ── Public API ───────────────────────────────────────────────────────────────
+
+export async function createWelcomeImage(member: GuildMember, guild: Guild): Promise<Buffer | null> {
+	const canvas = getCanvas();
+	if (!canvas) return null; // caller must handle null gracefully
+
+	if (!member || !guild) throw new Error("Member and guild are required");
+
+	const { createCanvas: mkCanvas, loadImage } = canvas;
+
+	const c   = mkCanvas(900 * 2, 270 * 2);
+	const ctx = c.getContext("2d");
 	ctx.scale(2, 2);
-	ctx.imageSmoothingEnabled = true;
-	ctx.imageSmoothingQuality = "high";
-	ctx.textRendering = "geometricPrecision";
+	ctx.imageSmoothingEnabled  = true;
+	ctx.imageSmoothingQuality  = "high";
+	(ctx as any).textRendering = "geometricPrecision";
 
-	// Draw background
 	ctx.fillStyle = "#23272a";
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	ctx.fillRect(0, 0, c.width, c.height);
 
-	// Left shape
 	ctx.beginPath();
 	ctx.moveTo(0, 0);
-	ctx.lineTo(200, 0); // top line
-	ctx.lineTo(340, 270); // right line
-	ctx.lineTo(0, 270); // bottom line
+	ctx.lineTo(200, 0);
+	ctx.lineTo(340, 270);
+	ctx.lineTo(0, 270);
 	ctx.closePath();
 	ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
 	ctx.fill();
 
-	// Draw profile picture
 	const profileSize = 200;
 	ctx.save();
 	ctx.beginPath();
@@ -48,65 +80,52 @@ export async function createWelcomeImage(member: GuildMember, guild: Guild) {
 	const { body, statusCode } = await request(url);
 	if (statusCode === 200) {
 		const buffer = await body.arrayBuffer();
-		const image = await loadImage(Buffer.from(buffer));
-		if (!image) {
-			throw new Error("Failed to load image");
-		}
+		const image  = await loadImage(Buffer.from(buffer));
 		ctx.drawImage(image, 40, 35, profileSize, profileSize);
 		ctx.strokeStyle = "white";
-		ctx.lineWidth = 3;
+		ctx.lineWidth   = 3;
 		ctx.beginPath();
 		ctx.arc(140, 135, profileSize / 2, 0, Math.PI * 2, true);
 		ctx.stroke();
 		ctx.restore();
 	} else {
-		throw new Error(`Failed to load image, status code: ${statusCode}`);
+		ctx.restore();
 	}
 
-	// Draw text
 	ctx.fillStyle = "white";
-	ctx.font = "bold 50px Poppins-Bold";
+	ctx.font      = "bold 50px Poppins-Bold";
 	ctx.textAlign = "center";
 	ctx.fillText("WELCOME", 600, 60);
-
 	ctx.font = "bold 30px Poppins-Bold";
-	ctx.fillText(member.user.globalName ? member.user.globalName : member.user.tag, 600, 110);
-
+	ctx.fillText(member.user.globalName ?? member.user.tag, 600, 110);
 	ctx.font = "bold 40px Poppins-Bold";
 	ctx.fillText("YOU ARE MEMBER", 600, 160);
-
 	ctx.font = "30px Poppins-Regular";
 	ctx.fillText(`#${guild.memberCount}`, 600, 210);
-
 	ctx.font = "18px Poppins-Regular";
 	ctx.fillText("THANK YOU FOR JOINING. HOPE YOU WILL ENJOY YOUR STAY", 600, 260);
 
-	// Return the canvas as a buffer
-	return canvas.toBuffer("image/webp");
+	return c.toBuffer("image/webp");
 }
 
-export async function mergeImages(img1: any, img2: any): Promise<any> {
-	if (!img1 || !img2) return null;
+export async function mergeImages(img1: string, img2: string): Promise<Buffer | null> {
+	const cv = getCanvas();
+	if (!cv) return null;
+
 	try {
-		const [image1Buffer, image2Buffer] = await Promise.all([
-			request(img1),
-			request(img2),
-		]).then(async ([image1Response, image2Response]) => {
-			const image1Buffer = await image1Response.body.arrayBuffer();
-			const image2Buffer = await image2Response.body.arrayBuffer();
-			return [image1Buffer, image2Buffer];
-		});
-
-		const [image1, image2] = await Promise.all([loadImage(Buffer.from(image1Buffer ?? new ArrayBuffer(0))), loadImage(Buffer.from(image2Buffer ?? new ArrayBuffer(0)))]);
-
-		const canvas = createCanvas(image1.width + image2.width, Math.max(image1.height, image2.height))
-		const ctx = canvas.getContext('2d');
-		ctx.drawImage(image1, 0, 0);
-		ctx.drawImage(image2, image1.width, 0, image2.width, image2.height);
-		const mergedImageBuffer = canvas.toBuffer('image/png');
-		return mergedImageBuffer;
-	} catch (error) {
-		console.log(error);
+		const [r1, r2] = await Promise.all([request(img1), request(img2)]);
+		const [b1, b2] = await Promise.all([r1.body.arrayBuffer(), r2.body.arrayBuffer()]);
+		const [i1, i2] = await Promise.all([
+			cv.loadImage(Buffer.from(b1)),
+			cv.loadImage(Buffer.from(b2)),
+		]);
+		const c   = cv.createCanvas(i1.width + i2.width, Math.max(i1.height, i2.height));
+		const ctx = c.getContext("2d");
+		ctx.drawImage(i1, 0, 0);
+		ctx.drawImage(i2, i1.width, 0, i2.width, i2.height);
+		return c.toBuffer("image/png");
+	} catch (err) {
+		console.error("[mergeImages] failed:", err);
 		return null;
 	}
 }

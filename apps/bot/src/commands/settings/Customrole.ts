@@ -2,8 +2,15 @@ import { CustomRole } from "@repo/db";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { dangerPermissions } from "../../utils/helper";
-import { EmbedBuilder, Role } from "discord.js";
-import { Pagination } from "../../utils/Pagination";
+import { ContainerBuilder, MessageFlags, Role, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
+import { ContainerPagination } from "../../utils/Pagination";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class CustomroleCommand extends Command {
 	constructor() {
@@ -289,17 +296,17 @@ export default class CustomroleCommand extends Command {
 					],
 				});
 			}
-			const embeds: EmbedBuilder[] = [];
+			const pages: ContainerBuilder[] = [];
 			for (let i = 0; i < customRole.roles!.length; i += 10) {
 				const pageRoles = customRole.roles!.slice(i, i + 10);
-				const em = new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setTitle("Custom Roles")
-					.setDescription(pageRoles.map((r) => `\`${r.aliase}\`: <@&${r.role}>`).join("\n"))
-					.setFooter({ text: `Total: ${customRole.roles!.length} roles` });
-				embeds.push(em);
+				const pg = Math.floor(i / 10) + 1;
+				const totalPages = Math.ceil(customRole.roles!.length / 10);
+				pages.push(buildPanel("Custom Roles",
+					pageRoles.map((r) => `\`${r.aliase}\`: <@&${r.role}>`).join("\n")
+					+ `\n\n-# Total: ${customRole.roles!.length} roles | Page ${pg}/${totalPages}`
+				));
 			}
-			const pagination = new Pagination(ctx, embeds);
+			const pagination = new ContainerPagination(ctx, pages);
 			await pagination.start();
 		}
 	}

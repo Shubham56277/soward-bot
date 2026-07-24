@@ -1,6 +1,7 @@
-import { EmbedBuilder, GuildMember, ApplicationCommandOptionType, Colors } from "discord.js";
+import { EmbedBuilder, GuildMember, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import * as reply from "../../utils/reply";
 
 export default class Nick extends Command {
 	constructor() {
@@ -54,20 +55,17 @@ export default class Nick extends Command {
 		}
 
 		if (!target) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("Member not found");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return reply.error(ctx, "Member not found");
 		}
 
 		if (ctx.author?.id !== ctx.guild.ownerId) {
 			if (target.roles.highest.position >= (ctx.member?.roles.highest.position ?? 0)) {
-				const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("You cannot modify someone with higher or equal role");
-				return await ctx.sendMessage({ embeds: [embed] });
+				return reply.error(ctx, "You cannot modify someone with higher or equal role");
 			}
 		}
 
 		if (ctx.guild.members.me && target.roles.highest.position >= ctx.guild.members.me.roles.highest.position) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("I cannot modify someone with higher or equal role");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return reply.error(ctx, "I cannot modify someone with higher or equal role");
 		}
 
 		try {
@@ -75,20 +73,14 @@ export default class Nick extends Command {
 
 			await target.setNickname(nickname || null, `Nickname changed by ${ctx.author?.tag}`);
 
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Green)
-				.setTitle("<:Tick:1375519268292264012> Nickname Changed")
-				.setDescription(
-					`**Member:** ${target.toString()}\n` +
-					`**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
-					`**Before:** ${oldNick}\n` +
-					`**After:** ${nickname || "Reset to default"}`
-				);
-			return await ctx.sendMessage({ embeds: [embed] });
+			return reply.success(ctx,
+				`**Member:** ${target.toString()}\n` +
+				`**Before:** ${oldNick}\n` +
+				`**After:** ${nickname || "Reset to default"}`
+			);
 		} catch (error) {
 			console.error("Nick Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Failed to change nickname");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return reply.error(ctx, "Failed to change nickname");
 		}
 	}
 }

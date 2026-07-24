@@ -17,9 +17,8 @@ import {
 	ChannelSelectMenuBuilder,
 	ChannelType,
 	ComponentType,
-	Colors,
 } from "discord.js";
-import { colors } from "../../utils/colors";
+import {} from "../../utils/colors";
 
 export default class EmbedBuilderCommand extends Command {
 	private embed: EmbedBuilder = new EmbedBuilder();
@@ -54,7 +53,7 @@ export default class EmbedBuilderCommand extends Command {
 
 	private createInstructionEmbed() {
 		return new EmbedBuilder()
-			.setColor(Colors.Blue)
+			.setColor(0x000000)
 			.setTitle("🛠️ Embed Builder - Guide")
 			.setDescription("Select options from the menu below to customize your embed. When you're satisfied with your creation, click **Send Embed** to choose where to send it.")
 			.addFields(
@@ -70,7 +69,7 @@ export default class EmbedBuilderCommand extends Command {
 
 	public async run(ctx: Context): Promise<any> {
 		// Initialize with an empty embed
-		this.embed = new EmbedBuilder().setColor(Colors.Blue).setDescription("Your embed will appear here. Use the menu below to customize it.");
+		this.embed = new EmbedBuilder().setColor(0x000000).setDescription("Your embed will appear here. Use the menu below to customize it.");
 
 		const guideEmbed = this.createInstructionEmbed();
 
@@ -229,23 +228,23 @@ export default class EmbedBuilderCommand extends Command {
 				break;
 			// Color preset buttons
 			case "color_red":
-				this.embed.setColor(Colors.Red);
+				this.embed.setColor(0x000000);
 				await this.updateMessage(i);
 				break;
 			case "color_blue":
-				this.embed.setColor(Colors.Blue);
+				this.embed.setColor(0x000000);
 				await this.updateMessage(i);
 				break;
 			case "color_green":
-				this.embed.setColor(Colors.Green);
+				this.embed.setColor(0x000000);
 				await this.updateMessage(i);
 				break;
 			case "color_yellow":
-				this.embed.setColor(Colors.Yellow);
+				this.embed.setColor(0x000000);
 				await this.updateMessage(i);
 				break;
 			case "color_purple":
-				this.embed.setColor(Colors.Purple);
+				this.embed.setColor(0x000000);
 				await this.updateMessage(i);
 				break;
 			case "color_custom":
@@ -274,7 +273,7 @@ export default class EmbedBuilderCommand extends Command {
 		);
 
 		const guideEmbed = new EmbedBuilder()
-			.setColor(Colors.Blue)
+			.setColor(0x000000)
 			.setTitle("Author Settings")
 			.setDescription("Customize the author section of your embed.")
 			.addFields(
@@ -630,10 +629,10 @@ export default class EmbedBuilderCommand extends Command {
 		);
 
 		const colorGuide = new EmbedBuilder()
-			.setColor(Colors.Blue)
+			.setColor(0x000000)
 			.setTitle("Color Selection")
 			.setDescription("Choose a preset color or enter a custom color.")
-			.addFields({ name: "🎨 Custom Colors", value: 'For custom colors, you can enter:\n• A color name (e.g., "gold", "navy")\n• A hex code (e.g., "#FF5500")' });
+			.addFields({ name: "🎨 Custom Colors", value: 'For custom you can enter:\n• A color name (e.g., "gold", "navy")\n• A hex code (e.g., "#FF5500")' });
 
 		await i.update({
 			embeds: [this.embed, colorGuide],
@@ -677,7 +676,7 @@ export default class EmbedBuilderCommand extends Command {
 			// Check if it's a color name in the colors object
 			else {
 				const lowerInput = colorInput.toLowerCase();
-				if (Object.hasOwn(colors, lowerInput)) {
+				if (Object.hasOwn(lowerInput)) {
 					validColor = colors[lowerInput as keyof typeof colors];
 				}
 			}
@@ -893,7 +892,7 @@ export default class EmbedBuilderCommand extends Command {
 		);
 
 		const guideEmbed = new EmbedBuilder()
-			.setColor(Colors.Blue)
+			.setColor(0x000000)
 			.setTitle("Footer Settings")
 			.setDescription("Customize the footer section of your embed.")
 			.addFields(
@@ -1077,7 +1076,7 @@ export default class EmbedBuilderCommand extends Command {
 	private async handleResetEmbed(i: any) {
 		// Reset the embed to default state
 		this.embed = new EmbedBuilder()
-			.setColor(Colors.Blue)
+			.setColor(0x000000)
 			.setDescription("Your embed will appear here. Use the menu below to customize it.");
 
 		await i.reply({

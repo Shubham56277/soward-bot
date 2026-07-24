@@ -1,7 +1,14 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, Colors, ComponentType, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ComponentType, ContainerBuilder, MessageFlags, ModalBuilder, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AutoNick } from "@repo/db";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class AutoNickCommand extends Command {
 	constructor() {
@@ -55,11 +62,11 @@ export default class AutoNickCommand extends Command {
 				.setDisabled(!config?.nickname),
 		);
 
-		const embed = await this.createMainEmbed(ctx, config);
+		const container = await this.createMainPanel(ctx, config);
 
 		const message = await ctx.editOrReply({
-			embeds: [embed],
-			components: [buttons],
+			components: [container, buttons],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		const collector = message.createMessageComponentCollector({
@@ -117,39 +124,20 @@ export default class AutoNickCommand extends Command {
 		});
 	}
 
-	private async createMainEmbed(ctx: Context, config: any): Promise<EmbedBuilder> {
-		const embed = new EmbedBuilder()
-			.setColor(config?.enabled ? Colors.Green : Colors.Blue)
-			.setTitle("🏷️ AutoNick Configuration")
-			.setThumbnail(ctx.guild?.iconURL() || null);
-
-		// Current Status Section
+	private async createMainPanel(ctx: Context, config: any): Promise<ContainerBuilder> {
 		const statusEmoji = config?.enabled ? "🟢" : config?.nickname ? "🟡" : "🔴";
 		const statusText = config?.enabled ? "Active" : config?.nickname ? "Configured but Disabled" : "Not Configured";
 
-		embed.addFields([
-			{
-				name: "📊 Current Status",
-				value: `${statusEmoji} **${statusText}**`,
-				inline: true
-			}
-		]);
+		const lines = [
+			`**📊 Status:** ${statusEmoji} **${statusText}**`,
+		];
 
 		if (config?.nickname) {
-			embed.addFields([
-				{
-					name: "🎯 Current Format",
-					value: `\`${config.nickname}\``,
-					inline: true
-				}
-			]);
+			lines.push(`**🎯 Current Format:** \`${config.nickname}\``);
 		}
 
-		// Add spacing
-		embed.addFields([{ name: "\u200b", value: "\u200b", inline: false }]);
-
-		// Instructions and Variables
-		const description = [
+		lines.push(
+			"",
 			"**📝 How to Use:**",
 			"• Click **Set Format** to create or update your nickname template",
 			"• Use **Preview** to see how nicknames will look",
@@ -169,27 +157,16 @@ export default class AutoNickCommand extends Command {
 			"`Welcome {user}!` → Welcome John!",
 			"`{user} | Member #{membercount}` → John | Member #152",
 			"`[{date}] {user}` → [12/25/2024] John",
-		];
-
-		embed.setDescription(description.join("\n"));
+		);
 
 		if (config?.nickname) {
 			const preview = this.generatePreview(config.nickname, ctx);
-			embed.addFields([
-				{
-					name: "👀 Live Preview",
-					value: `\`${preview}\``,
-					inline: false
-				}
-			]);
+			lines.push("", `**👀 Live Preview:** \`${preview}\``);
 		}
 
-		embed.setFooter({
-			text: "💡 Tip: New members will automatically get nicknames when they join!",
-			iconURL: ctx.client.user?.displayAvatarURL()
-		});
+		lines.push("", "-# 💡 Tip: New members will automatically get nicknames when they join!");
 
-		return embed;
+		return buildPanel("🏷️ AutoNick Configuration", lines.join("\n"));
 	}
 
 	private generatePreview(format: string, ctx: Context): string {
@@ -236,12 +213,8 @@ export default class AutoNickCommand extends Command {
 
 		if (!nickname) {
 			return submission.reply({
-				flags: MessageFlags.Ephemeral,
-				embeds: [
-					new EmbedBuilder()
-						.setColor(Colors.Red)
-						.setDescription("❌ Please provide a valid nickname format.")
-				],
+				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("❌ Please provide a valid nickname format."))],
 			});
 		}
 
@@ -249,13 +222,8 @@ export default class AutoNickCommand extends Command {
 		const preview = this.generatePreview(nickname, ctx);
 		if (preview.length > 32) {
 			return submission.reply({
-				flags: MessageFlags.Ephemeral,
-				embeds: [
-					new EmbedBuilder()
-						.setColor(Colors.Red)
-						.setTitle("❌ Format Too Long")
-						.setDescription(`The generated nickname would be too long (${preview.length}/32 characters).\n\n**Preview:** \`${preview}\`\n\n**Tip:** Try using shorter variables or text.`)
-				],
+				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				components: [buildPanel("❌ Format Too Long", `The generated nickname would be too long (${preview.length}/32 characters).\n\n**Preview:** \`${preview}\`\n\n**Tip:** Try using shorter variables or text.`)],
 			});
 		}
 
@@ -264,37 +232,19 @@ export default class AutoNickCommand extends Command {
 			enabled: true // Auto-enable when setting
 		});
 
-		const successEmbed = new EmbedBuilder()
-			.setColor(Colors.Green)
-			.setTitle("✅ Auto Nickname Updated!")
-			.addFields([
-				{
-					name: "📝 New Format",
-					value: `\`${nickname}\``,
-					inline: false
-				},
-				{
-					name: "👀 Preview",
-					value: `\`${preview}\``,
-					inline: false
-				}
-			])
-			.setFooter({ text: "The system has been automatically enabled!" });
-
 		await submission.reply({
-			embeds: [successEmbed],
-			flags: MessageFlags.Ephemeral
+			components: [buildPanel("✅ Auto Nickname Updated!", `**📝 New Format:** \`${nickname}\`\n**👀 Preview:** \`${preview}\`\n\n-# The system has been automatically enabled!`)],
+			flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 		});
 
 		// Update the main message
 		setTimeout(async () => {
 			const newConfig = await AutoNick.get(ctx.guild.id);
-			const newEmbed = await this.createMainEmbed(ctx, newConfig);
+			const newPanel = await this.createMainPanel(ctx, newConfig);
 			const newButtons = this.createButtons(newConfig);
 
 			await interaction.message?.edit({
-				embeds: [newEmbed],
-				components: [newButtons]
+				components: [newPanel, newButtons],
 			}).catch(() => { });
 		}, 2000);
 	}
@@ -303,33 +253,25 @@ export default class AutoNickCommand extends Command {
 		const existing = await AutoNick.get(ctx.guild.id);
 		if (!existing?.nickname) {
 			return interaction.reply({
-				flags: MessageFlags.Ephemeral,
-				embeds: [
-					new EmbedBuilder()
-						.setColor(Colors.Red)
-						.setDescription("❌ No auto nickname configuration found.")
-				],
+				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("❌ No auto nickname configuration found."))],
 			});
 		}
 
 		await AutoNick.delete(ctx.guild.id);
 
-		const embed = new EmbedBuilder()
-			.setColor(Colors.Orange)
-			.setTitle("🗑️ Configuration Cleared")
-			.setDescription("Auto nickname system has been completely removed.")
-			.setFooter({ text: "You can set up a new configuration anytime!" });
-
-		await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+		await interaction.reply({
+			components: [buildPanel("🗑️ Configuration Cleared", "Auto nickname system has been completely removed.\n\n-# You can set up a new configuration anytime!")],
+			flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+		});
 
 		// Update the main message
 		setTimeout(async () => {
-			const newEmbed = await this.createMainEmbed(ctx, null);
+			const newPanel = await this.createMainPanel(ctx, null);
 			const newButtons = this.createButtons(null);
 
 			await interaction.message?.edit({
-				embeds: [newEmbed],
-				components: [newButtons]
+				components: [newPanel, newButtons],
 			}).catch(() => { });
 		}, 2000);
 	}
@@ -338,45 +280,33 @@ export default class AutoNickCommand extends Command {
 		const config = await AutoNick.get(ctx.guild.id);
 		if (!config?.nickname) {
 			return interaction.reply({
-				flags: MessageFlags.Ephemeral,
-				embeds: [
-					new EmbedBuilder()
-						.setColor(Colors.Red)
-						.setDescription("❌ No auto nickname format is configured. Please set one first!")
-				],
+				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("❌ No auto nickname format is configured. Please set one first!"))],
 			});
 		}
 
 		const newState = !config.enabled;
 		await AutoNick.update(ctx.guild.id, { enabled: newState });
 
-		const embed = new EmbedBuilder()
-			.setColor(newState ? Colors.Green : Colors.Red)
-			.setTitle(`${newState ? "✅ System Enabled" : "❌ System Disabled"}`)
-			.setDescription(`Auto nickname system is now **${newState ? "active" : "inactive"}**.`)
-			.addFields([
-				{
-					name: "📝 Current Format",
-					value: `\`${config.nickname}\``,
-					inline: false
-				}
-			]);
+		const toggleBody = [
+			`Auto nickname system is now **${newState ? "active" : "inactive"}**.`,
+			`**📝 Current Format:** \`${config.nickname}\``,
+			newState ? "\n-# New members will now automatically receive nicknames!" : "",
+		].join("\n");
 
-		if (newState) {
-			embed.setFooter({ text: "New members will now automatically receive nicknames!" });
-		}
-
-		await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+		await interaction.reply({
+			components: [buildPanel(`${newState ? "✅ System Enabled" : "❌ System Disabled"}`, toggleBody)],
+			flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+		});
 
 		// Update the main message
 		setTimeout(async () => {
 			const newConfig = await AutoNick.get(ctx.guild.id);
-			const newEmbed = await this.createMainEmbed(ctx, newConfig);
+			const newPanel = await this.createMainPanel(ctx, newConfig);
 			const newButtons = this.createButtons(newConfig);
 
 			await interaction.message?.edit({
-				embeds: [newEmbed],
-				components: [newButtons]
+				components: [newPanel, newButtons],
 			}).catch(() => { });
 		}, 2000);
 	}
@@ -385,12 +315,8 @@ export default class AutoNickCommand extends Command {
 		const config = await AutoNick.get(ctx.guild.id);
 		if (!config?.nickname) {
 			return interaction.reply({
-				flags: MessageFlags.Ephemeral,
-				embeds: [
-					new EmbedBuilder()
-						.setColor(Colors.Red)
-						.setDescription("❌ No nickname format configured.")
-				],
+				flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("❌ No nickname format configured."))],
 			});
 		}
 
@@ -401,38 +327,31 @@ export default class AutoNickCommand extends Command {
 			{ user: "Charlie", tag: "Charlie#9999", username: "charlie123" },
 		];
 
-		const embed = new EmbedBuilder()
-			.setColor(Colors.Blue)
-			.setTitle("👁️ Nickname Preview")
-			.setDescription(`**Current Format:** \`${config.nickname}\``)
-			.addFields([
-				{
-					name: "🎯 Your Preview",
-					value: `\`${preview}\``,
-					inline: false
-				},
-				{
-					name: "📋 Example Outputs",
-					value: examples.map(ex => {
-						const result = config.nickname
-							.replace(/\{user\}/g, ex.user)
-							.replace(/\{tag\}/g, ex.tag)
-							.replace(/\{username\}/g, ex.username)
-							.replace(/\{server\}/g, ctx.guild?.name || "Server")
-							.replace(/\{membercount\}/g, ctx.guild?.memberCount?.toString() || "100")
-							.replace(/\{date\}/g, new Date().toLocaleDateString());
-						return `• \`${result}\``;
-					}).join("\n"),
-					inline: false
-				}
-			])
-			.setFooter({
-				text: `Status: ${config.enabled ? "Active" : "Disabled"} | Length: ${preview.length}/32 characters`
-			});
+		const exampleLines = examples.map(ex => {
+			const result = config.nickname
+				.replace(/\{user\}/g, ex.user)
+				.replace(/\{tag\}/g, ex.tag)
+				.replace(/\{username\}/g, ex.username)
+				.replace(/\{server\}/g, ctx.guild?.name || "Server")
+				.replace(/\{membercount\}/g, ctx.guild?.memberCount?.toString() || "100")
+				.replace(/\{date\}/g, new Date().toLocaleDateString());
+			return `• \`${result}\``;
+		}).join("\n");
+
+		const previewBody = [
+			`**Current Format:** \`${config.nickname}\``,
+			"",
+			`**🎯 Your Preview:** \`${preview}\``,
+			"",
+			`**📋 Example Outputs:**`,
+			exampleLines,
+			"",
+			`-# Status: ${config.enabled ? "Active" : "Disabled"} | Length: ${preview.length}/32 characters`,
+		].join("\n");
 
 		return interaction.reply({
-			flags: MessageFlags.Ephemeral,
-			embeds: [embed]
+			flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+			components: [buildPanel("👁️ Nickname Preview", previewBody)],
 		});
 	}
 

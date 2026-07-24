@@ -45,6 +45,12 @@ export default class Search extends Command {
 		if (!isAllowedDirectMusicUrl(query)) {
 			return ctx.sendMessage("That direct URL is not an approved music provider. Upload files with `/playfile`.");
 		}
+
+        const availableNodes = [...ctx.client.manager.nodeManager.nodes.values()].filter(n => n.connected);
+        if (availableNodes.length === 0) {
+            return ctx.sendMessage("-# Music is currently unavailable — the audio server is offline. Please try again later.");
+        }
+
         const memberVoiceChannel = ctx.member?.voice.channel;
 
         if (!memberVoiceChannel) {

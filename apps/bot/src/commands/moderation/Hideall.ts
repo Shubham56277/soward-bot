@@ -1,4 +1,4 @@
-import { EmbedBuilder, Colors, ChannelType, ApplicationCommandOptionType, Role } from "discord.js";
+import { EmbedBuilder, ChannelType, ApplicationCommandOptionType, Role } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -36,7 +36,7 @@ export default class HideAll extends Command {
 
 		// Confirmation
 		const confirmEmbed = new EmbedBuilder()
-			.setColor(Colors.Yellow)
+			.setColor(0x000000)
 			.setTitle("⚠️ Confirm Mass Hide")
 			.setDescription(`This will hide ALL channels from ${role.toString()}.`)
 			.addFields(
@@ -74,19 +74,19 @@ export default class HideAll extends Command {
 
 			if (confirmation.customId === "cancel_hideall") {
 				await confirmation.update({
-					embeds: [new EmbedBuilder().setColor(Colors.Green).setDescription("<:Tick:1375519268292264012> Operation cancelled")],
+					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> Operation cancelled")],
 					components: [],
 				});
 				return;
 			}
 
 			await confirmation.update({
-				embeds: [new EmbedBuilder().setColor(Colors.Blue).setDescription("⏳ Processing...")],
+				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("⏳ Processing...")],
 				components: [],
 			});
 		} catch (_error) {
 			await confirmMessage.edit({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
+				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
 				components: [],
 			});
 			return;
@@ -96,13 +96,13 @@ export default class HideAll extends Command {
 			const channels = ctx.guild.channels.cache.filter(c => c.type === ChannelType.GuildText || c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice || c.type === ChannelType.GuildAnnouncement);
 
 			if (channels.size === 0) {
-				const embed = new EmbedBuilder().setColor(Colors.Yellow).setDescription("No channels found to hide");
+				const embed = new EmbedBuilder().setColor(0x000000).setDescription("No channels found to hide");
 				return await ctx.sendMessage({ embeds: [embed] });
 			}
 
 			// Progress embed
 			const progressEmbed = new EmbedBuilder()
-				.setColor(Colors.Blue)
+				.setColor(0x000000)
 				.setTitle("👁️ Hiding All Channels")
 				.setDescription(`Processing ${channels.size} channels...`)
 				.addFields({ name: "Progress", value: `0/${channels.size} (0%)` }, { name: "Hidden From", value: role.toString() });
@@ -148,7 +148,7 @@ export default class HideAll extends Command {
 			// Final result
 			const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 			const resultEmbed = new EmbedBuilder()
-				.setColor(Colors.Green)
+				.setColor(0x000000)
 				.setTitle("<:Tick:1375519268292264012> Mass Hide Complete")
 				.setDescription(`Successfully hide ${processed} channels from ${role.toString()}`)
 				.addFields({ name: "Total Time", value: `${elapsed} seconds` }, { name: "Moderator", value: ctx.author?.toString() || "Unknown" });
@@ -156,7 +156,7 @@ export default class HideAll extends Command {
 			await progressMessage.edit({ embeds: [resultEmbed] });
 		} catch (error) {
 			console.error("HideAll Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> An error occurred during mass hide");
+			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> An error occurred during mass hide");
 			await ctx.sendMessage({ embeds: [embed] });
 		}
 	}

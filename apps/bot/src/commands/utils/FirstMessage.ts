@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -37,18 +37,19 @@ export default class FirstMessage extends Command {
 		const msg = fetchMessages.first();
 		if (!msg) return ctx.sendMessage("No message found.");
 
-		const msgEmbed = new EmbedBuilder()
-			.setTitle(`First Message in ${ctx.guild.name}`)
-			.setURL(msg.url)
-			.setDescription(`Content: ${msg.content}`)
-			.setColor(ctx.client.config.colors.main)
-			.setFields([
-				{ name: "Author", value: `${msg.author}` },
-				{ name: "Message ID", value: `${msg.id}` },
-				{ name: "Created At", value: `<t:${Math.floor(msg.createdTimestamp / 1000)}:R>` },
-			])
-			.setFooter({ text: `Requested by ${ctx.author?.tag}`, iconURL: ctx.author?.displayAvatarURL() })
-			.setTimestamp();
-		return ctx.editOrReply({ embeds: [msgEmbed] });
+		const panel = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## [First Message in ${ctx.guild.name}](${msg.url})`))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+				[
+					`**Content:** ${msg.content || "(no content)"}`,
+					`**Author:** ${msg.author}`,
+					`**Message ID:** ${msg.id}`,
+					`**Created At:** <t:${Math.floor(msg.createdTimestamp / 1000)}:R>`,
+					"",
+					`-# Requested by ${ctx.author?.tag}`,
+				].join("\n")
+			));
+		return ctx.editOrReply({ components: [panel], flags: MessageFlags.IsComponentsV2 });
 	}
 }

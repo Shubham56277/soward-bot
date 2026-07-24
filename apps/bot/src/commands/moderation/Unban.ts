@@ -1,4 +1,4 @@
-import { EmbedBuilder, User, ApplicationCommandOptionType, Colors } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, User, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -45,28 +45,31 @@ export default class Unban extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const userInput = ctx.options.getString("user", true);
         let reason = ctx.options.getString("reason") || "No reason provided";
 
-        // Handle text command arguments
         if (!ctx.isInteraction) {
             reason = ctx.args.slice(1).join(" ") || "No reason provided";
         }
 
         try {
-            // Try to fetch the banned user
             let user: User | undefined;
             const bans = await ctx.guild.bans.fetch();
 
-            // Check if input is a mention or ID
             const idMatch = userInput.match(/^(?:<@!?)?(\d+)>?$/);
             if (idMatch) {
                 const userId = idMatch[1];
                 user = bans.find(ban => ban.user.id === userId)?.user;
             } else {
-                // Search by username#discriminator or username
-                const [username, discriminator] = userInput.split('#');
+                const [username, discriminator] = userInput.split("#");
                 user = bans.find(ban =>
                     ban.user.username === username &&
                     (!discriminator || ban.user.discriminator === discriminator)
@@ -74,36 +77,27 @@ export default class Unban extends Command {
             }
 
             if (!user) {
-                const embed = new EmbedBuilder()
-                    .setColor(Colors.Red)
-                    .setDescription("This user is not currently banned or could not be found");
-                return await ctx.sendMessage({ embeds: [embed] });
+                return await ctx.sendMessage(this.msg("This user is not currently banned or could not be found."));
             }
 
-            // Execute the unban
             await ctx.guild.bans.remove(user, reason);
 
-            const unbanEmbed = new EmbedBuilder()
-                .setColor(Colors.Green)
-                .setTitle("<:Tick:1375519268292264012> Ban Removed")
-                .setThumbnail(user.displayAvatarURL())
-                .setDescription(
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**<:Tick:1375519268292264012> Ban Removed**`))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `**User:** ${user.tag}\n` +
                     `**Moderator:** ${ctx.author?.toString() ?? "Unknown"}\n` +
                     `**Reason:** ${reason}`
-                )
-                .setFooter({ text: `ID: ${user.id}` })
-                .setTimestamp();
+                ))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${user.id}`));
 
-            return await ctx.sendMessage({ embeds: [unbanEmbed] });
-
+            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 
         } catch (error) {
             console.error("Unban Error:", error);
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("An error occurred while trying to unban this user");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("An error occurred while trying to unban this user."));
         }
     }
 }

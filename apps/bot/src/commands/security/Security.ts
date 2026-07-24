@@ -1,7 +1,18 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AntiNukeService } from '../../services/security/antiNukeService';
-import { EmbedBuilder, ApplicationCommandOptionType } from 'discord.js';
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ApplicationCommandOptionType } from 'discord.js';
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
+
+function cv2(title: string, body: string) {
+	return { components: [buildPanel(title, body)], flags: MessageFlags.IsComponentsV2 };
+}
 
 export default class SecurityCommand extends Command {
 	constructor() {
@@ -139,53 +150,25 @@ export default class SecurityCommand extends Command {
 		switch (action) {
 			case 'enable': {
 				await AntiNukeService.setEnabled(ctx.guild!.id, true);
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('🛡️ AntiNuke Enabled')
-							.setColor('Green')
-							.setDescription('AntiNuke protection is now active for this server.'),
-					],
-				});
+				await ctx.sendMessage(cv2('🛡️ AntiNuke Enabled', 'AntiNuke protection is now active for this server.'));
 				break;
 			}
 			case 'disable': {
 				await AntiNukeService.setEnabled(ctx.guild!.id, false);
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('⚠️ AntiNuke Disabled')
-							.setColor('Red')
-							.setDescription('AntiNuke protection has been disabled.'),
-					],
-				});
+				await ctx.sendMessage(cv2('⚠️ AntiNuke Disabled', 'AntiNuke protection has been disabled.'));
 				break;
 			}
 			case 'status': {
 				const enabled = await AntiNukeService.isEnabled(ctx.guild!.id);
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('🛡️ AntiNuke Status')
-							.setColor(enabled ? 'Green' : 'Red')
-							.setDescription(`AntiNuke is currently **${enabled ? 'enabled' : 'disabled'}**.`),
-					],
-				});
+				await ctx.sendMessage(cv2('🛡️ AntiNuke Status', `AntiNuke is currently **${enabled ? 'enabled' : 'disabled'}**.`));
 				break;
 			}
 			case 'config': {
 				const config = await AntiNukeService.getConfig(ctx.guild!.id);
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('🛡️ AntiNuke Configuration')
-							.setColor('Blue')
-							.addFields(
-								{ name: 'Status', value: config?.enabled ? 'Enabled' : 'Disabled', inline: true },
-								{ name: 'Trusted Users', value: config?.trustedUsers?.length?.toString() || '0', inline: true },
-							),
-					],
-				});
+				await ctx.sendMessage(cv2(
+					'🛡️ AntiNuke Configuration',
+					`**Status:** ${config?.enabled ? 'Enabled' : 'Disabled'}\u2003\u2003**Trusted Users:** ${config?.trustedUsers?.length?.toString() || '0'}`
+				));
 				break;
 			}
 		}
@@ -201,14 +184,7 @@ export default class SecurityCommand extends Command {
 				}
 
 				await AntiNukeService.addTrustedUser(ctx.guild!.id, user.id);
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('✅ User Trusted')
-							.setColor('Green')
-							.setDescription(`${user.tag} has been added to the trusted users list.`),
-					],
-				});
+				await ctx.sendMessage(cv2('✅ User Trusted', `${user.tag} has been added to the trusted users list.`));
 				break;
 			}
 			case 'remove': {
@@ -219,14 +195,7 @@ export default class SecurityCommand extends Command {
 				}
 
 				await AntiNukeService.removeTrustedUser(ctx.guild!.id, user.id);
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('✅ User Removed')
-							.setColor('Orange')
-							.setDescription(`${user.tag} has been removed from the trusted users list.`),
-					],
-				});
+				await ctx.sendMessage(cv2('✅ User Removed', `${user.tag} has been removed from the trusted users list.`));
 				break;
 			}
 			case 'list': {
@@ -238,14 +207,7 @@ export default class SecurityCommand extends Command {
 					return;
 				}
 
-				await ctx.sendMessage({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('🛡️ Trusted Users')
-							.setColor('Blue')
-							.setDescription(trusted.map(id => `<@${id}>`).join('\n')),
-					],
-				});
+				await ctx.sendMessage(cv2('🛡️ Trusted Users', trusted.map((id: string) => `<@${id}>`).join('\n')));
 				break;
 			}
 		}

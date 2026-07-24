@@ -52,32 +52,54 @@ export default class PremiumCodeCommand extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
-		const action = ctx.options.getSubCommand(false, 0);
-		if (action !== "create") return ctx.sendMessage("Use `premiumcode create <duration> [valid-for]`.");
+		try {
+			const action = ctx.options.getSubCommand(false, 0);
+			if (action !== "create") return ctx.sendMessage("Use `?premiumcode create <duration> [valid-for]`.");
 
-		const durationText = ctx.isInteraction ? ctx.options.getString("duration", true) : ctx.args[1];
-		const validityText = (ctx.isInteraction ? ctx.options.getString("valid-for", false) : ctx.args[2]) ?? "7d";
-		const durationMs = durationText ? ms.parse(durationText) : 0;
-		const validityMs = ms.parse(validityText);
+			const durationText = ctx.isInteraction ? ctx.options.getString("duration", true) : ctx.args[1];
+			const validityText = (ctx.isInteraction ? ctx.options.getString("valid-for", false) : ctx.args[2]) ?? "7d";
 
-		if (!durationMs || durationMs <= 0 || durationMs > MAX_PREMIUM_DURATION_MS) {
-			return ctx.sendMessage("Premium duration must be between 1 second and 365 days.");
+			if (!durationText) {
+				return ctx.sendMessage("Provide a duration, e.g. `?premiumcode create 30d`");
+			}
+
+			const durationMs = ms.parse(durationText);
+			const validityMs = ms.parse(validityText);
+
+			if (!durationMs || durationMs <= 0 || durationMs > MAX_PREMIUM_DURATION_MS) {
+				return ctx.sendMessage("Premium duration must be between 1 second and 365 days. Examples: `30d`, `7d`, `12h`");
+			}
+			if (!validityMs || validityMs <= 0 || validityMs > MAX_CODE_LIFETIME_MS) {
+				return ctx.sendMessage("Code validity must be between 1 second and 30 days. Examples: `7d`, `3d`");
+			}
+
+			let created: { code: string; expiresAt: Date };
+			try {
+				created = await PremiumCode.create(durationMs, ctx.author!.id, validityMs);
+			} catch (e: any) {
+				return ctx.sendMessage(`Failed to create code: ${e?.message ?? "Unknown error"}`);
+			}
+
+			const content = [
+				"**Premium activation code** (shown only here):",
+				`\`${created.code}\``,
+				`Premium duration: **${TimeFormat.toHumanize(durationMs)}**`,
+				`Code expires: <t:${Math.floor(created.expiresAt.getTime() / 1_000)}:R>`,
+				"",
+				"User redeems with: `?premium redeem <code>`  or  `/premium redeem code:<code>`",
+			].join("\n");
+
+			if (ctx.isInteraction) return ctx.sendMessage({ content, flags: MessageFlags.Ephemeral });
+
+			try {
+				await ctx.author!.send(content);
+				return ctx.sendMessage("The activation code was sent to your DMs.");
+			} catch {
+				// DMs closed — send ephemerally in channel as fallback
+				return ctx.sendMessage({ content, flags: MessageFlags.SuppressNotifications });
+			}
+		} catch (e: any) {
+			return ctx.sendMessage(`Unexpected error: ${e?.message ?? "Please try again."}`);
 		}
-		if (!validityMs || validityMs <= 0 || validityMs > MAX_CODE_LIFETIME_MS) {
-			return ctx.sendMessage("Code validity must be between 1 second and 30 days.");
-		}
-
-		const created = await PremiumCode.create(durationMs, ctx.author!.id, validityMs);
-		const content = [
-			"Premium activation code (shown only here):",
-			`\`${created.code}\``,
-			`Premium duration: **${TimeFormat.toHumanize(durationMs)}**`,
-			`Code expires: <t:${Math.floor(created.expiresAt.getTime() / 1_000)}:R>`,
-		].join("\n");
-
-		if (ctx.isInteraction) return ctx.sendMessage({ content, flags: MessageFlags.Ephemeral });
-
-		await ctx.author!.send(content);
-		return ctx.sendMessage("The activation code was sent to your DMs.");
 	}
 }

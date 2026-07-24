@@ -53,48 +53,77 @@ export default class Premium extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
-		const action = (ctx.options.getSubCommand(false, 0) ?? "status").toLowerCase();
-		if (action === "status") {
-			const premium = await PremiumAccount.get(ctx.author!.id);
-			const active = Boolean(premium.isPremium && premium.premiumUntil && premium.premiumUntil.getTime() > Date.now());
+		try {
+			const action = (ctx.options.getSubCommand(false, 0) ?? "status").toLowerCase();
+
+			if (action === "status") {
+				let premium: any;
+				try {
+					premium = await PremiumAccount.get(ctx.author!.id);
+				} catch {
+					return ctx.sendMessage({
+						components: [this.noticeView(ctx, "Premium — Error", "Could not load premium status. Please try again.")],
+						flags: MessageFlags.IsComponentsV2,
+					});
+				}
+				const active = Boolean(
+					premium.isPremium &&
+					premium.premiumUntil &&
+					premium.premiumUntil.getTime() > Date.now()
+				);
+				return ctx.sendMessage({
+					components: [this.statusView(ctx, active, premium.premiumUntil || null)],
+					flags: MessageFlags.IsComponentsV2,
+				});
+			}
+
+			if (action !== "redeem") {
+				return ctx.sendMessage({
+					components: [this.noticeView(ctx, "Premium command", "Use `/premium status` or `/premium redeem code:<activation-code>`.")],
+					flags: MessageFlags.IsComponentsV2,
+				});
+			}
+
+			const code = ctx.isInteraction ? ctx.options.getString("code", true) : ctx.args[1];
+			if (!code?.trim()) {
+				return ctx.sendMessage({
+					components: [this.noticeView(ctx, "Activation code required", "Provide the activation code: `/premium redeem code:SWRD-...`")],
+					flags: this.privateV2Flags(ctx),
+				});
+			}
+
+			let result: any;
+			try {
+				result = await PremiumCode.redeem(code.trim(), ctx.author!.id);
+			} catch (e: any) {
+				return ctx.sendMessage({
+					components: [this.noticeView(ctx, "Activation failed", `An error occurred during redemption. Please try again.\n-# ${e?.message ?? "Unknown error"}`)],
+					flags: this.privateV2Flags(ctx),
+				});
+			}
+
+			if (result.status !== "redeemed") {
+				const messages: Record<string, string> = {
+					invalid: "This activation code is not valid. Check that you copied it correctly.",
+					used: "This activation code has already been redeemed by someone.",
+					expired: "This activation code has expired and can no longer be used.",
+				};
+				return ctx.sendMessage({
+					components: [this.noticeView(ctx, "Activation unsuccessful", messages[result.status] ?? "Code could not be redeemed.")],
+					flags: this.privateV2Flags(ctx),
+				});
+			}
+
 			return ctx.sendMessage({
-				components: [this.statusView(ctx, active, premium.premiumUntil || null)],
+				components: [this.activatedView(ctx, result.premiumUntil)],
+				flags: this.privateV2Flags(ctx),
+			});
+		} catch {
+			return ctx.sendMessage({
+				components: [this.noticeView(ctx, "Premium — Unexpected Error", "Something went wrong. Please try again.")],
 				flags: MessageFlags.IsComponentsV2,
 			});
 		}
-
-		if (action !== "redeem") {
-			return ctx.sendMessage({
-				components: [this.noticeView(ctx, "Premium command", "Use `/premium status` or `/premium redeem code:<activation-code>`." )],
-				flags: MessageFlags.IsComponentsV2,
-			});
-		}
-
-		const code = ctx.isInteraction ? ctx.options.getString("code", true) : ctx.args[1];
-		if (!code) {
-			return ctx.sendMessage({
-				components: [this.noticeView(ctx, "Activation code required", "Use the private activation code supplied by the bot owner.")],
-				flags: this.privateV2Flags(ctx),
-			});
-		}
-
-		const result = await PremiumCode.redeem(code, ctx.author!.id);
-		if (result.status !== "redeemed") {
-			const messages = {
-				invalid: "This activation code is not valid.",
-				used: "This activation code has already been redeemed.",
-				expired: "This activation code has expired.",
-			};
-			return ctx.sendMessage({
-				components: [this.noticeView(ctx, "Activation unsuccessful", messages[result.status])],
-				flags: this.privateV2Flags(ctx),
-			});
-		}
-
-		return ctx.sendMessage({
-			components: [this.activatedView(ctx, result.premiumUntil)],
-			flags: this.privateV2Flags(ctx),
-		});
 	}
 
 	private statusView(ctx: Context, active: boolean, expiresAt: Date | null): ContainerBuilder {
@@ -116,7 +145,6 @@ export default class Premium extends Command {
 		);
 
 		return new ContainerBuilder()
-			.setAccentColor(ctx.client.config.colors.main)
 			.addSectionComponents(heading)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(status))
@@ -137,7 +165,6 @@ export default class Premium extends Command {
 
 	private activatedView(ctx: Context, expiresAt: Date): ContainerBuilder {
 		return new ContainerBuilder()
-			.setAccentColor(ctx.client.config.colors.main)
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## Premium Activated\n-# **Your private access is ready.**"))
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(
@@ -149,7 +176,6 @@ export default class Premium extends Command {
 
 	private noticeView(ctx: Context, title: string, description: string): ContainerBuilder {
 		return new ContainerBuilder()
-			.setAccentColor(ctx.client.config.colors.main)
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}\n-# **${description}**`));
 	}
 

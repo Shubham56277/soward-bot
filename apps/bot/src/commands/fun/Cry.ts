@@ -36,7 +36,7 @@ export default class Cry extends Command {
         else message = "OSCAR-WORTHY DRAMA! 🎭";
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(0x000000)
             .setDescription(`${ctx.author} is crying! ${message}`)
             .setImage(data.link)
             .setFooter({ text: `Drama Level: ${dramaLevel}%` });

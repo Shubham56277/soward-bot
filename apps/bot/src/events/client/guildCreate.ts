@@ -29,7 +29,7 @@ export default class GuildCreate extends Event {
                 // Create embed with guild information
                 const embed = {
                     title: `Joined a new guild: ${guild.name}`,
-                    color: 0x00ff00,
+                    color: 0x000000,
                     thumbnail: {
                         url: guild.iconURL({ extension: "png", size: 1024 }) ||
                             "",

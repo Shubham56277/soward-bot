@@ -1,4 +1,4 @@
-import { EmbedBuilder, GuildMember, ApplicationCommandOptionType, Colors } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -45,55 +45,48 @@ export default class Unmute extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
-        const target = ctx.options.getMember("user",) as GuildMember | null;
+        const target = ctx.options.getMember("user") as GuildMember | null;
         let reason = ctx.options.getString("reason", false) || "No reason provided";
 
-        // Handle text command arguments
         if (!ctx.isInteraction) {
             reason = ctx.args.slice(1).join(" ") || "No reason provided";
         }
 
-        // Validate target
         if (!target) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("Member not found");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("Member not found."));
         }
 
-        // Check if member is actually muted
         if (!target.isCommunicationDisabled()) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Orange)
-                .setDescription("This member is not currently muted");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("This member is not currently muted."));
         }
 
         try {
-            // Remove timeout
-            await target.timeout(null, reason).catch(() => { });
-            // Create response embed
-            const unmuteEmbed = new EmbedBuilder()
-                .setColor(Colors.Green)
-                .setTitle("🔈 Member Unmuted")
-                .setThumbnail(target.displayAvatarURL())
-                .setDescription(
+            await target.timeout(null, reason).catch(() => {});
+
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔈 Member Unmuted**`))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `**User:** ${target.toString()}\n` +
                     `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
                     `**Reason:** ${reason}`
-                )
-                .setFooter({ text: `ID: ${target.id}` })
-                .setTimestamp();
+                ))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${target.id}`));
 
-            return await ctx.sendMessage({ embeds: [unmuteEmbed] });
+            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 
         } catch (error) {
             console.error("Unmute Error:", error);
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("An error occurred while trying to unmute this member");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("An error occurred while trying to unmute this member."));
         }
     }
 }

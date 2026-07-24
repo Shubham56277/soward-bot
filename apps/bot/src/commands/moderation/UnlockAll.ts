@@ -1,4 +1,4 @@
-import { EmbedBuilder, Colors, ChannelType, ApplicationCommandOptionType } from "discord.js";
+import { EmbedBuilder, ChannelType, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -36,7 +36,7 @@ export default class UnlockAll extends Command {
 
 		// Confirmation
 		const confirmEmbed = new EmbedBuilder()
-			.setColor(Colors.Yellow)
+			.setColor(0x000000)
 			.setTitle("⚠️ Confirm Mass Unlock")
 			.setDescription("This will unlock ALL text channels in the server.")
 			.addFields(
@@ -74,19 +74,19 @@ export default class UnlockAll extends Command {
 
 			if (confirmation.customId === "cancel_unlockall") {
 				await confirmation.update({
-					embeds: [new EmbedBuilder().setColor(Colors.Green).setDescription("<:Tick:1375519268292264012> Operation cancelled")],
+					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> Operation cancelled")],
 					components: [],
 				});
 				return;
 			}
 
 			await confirmation.update({
-				embeds: [new EmbedBuilder().setColor(Colors.Blue).setDescription("⏳ Processing...")],
+				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("⏳ Processing...")],
 				components: [],
 			});
 		} catch (_error) {
 			await confirmMessage.edit({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
+				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
 				components: [],
 			});
 			return;
@@ -98,12 +98,12 @@ export default class UnlockAll extends Command {
 			);
 
 			if (channels.size === 0) {
-				const embed = new EmbedBuilder().setColor(Colors.Yellow).setDescription("No channels found to unlock");
+				const embed = new EmbedBuilder().setColor(0x000000).setDescription("No channels found to unlock");
 				return await ctx.sendMessage({ embeds: [embed] });
 			}
 
 			const progressEmbed = new EmbedBuilder()
-				.setColor(Colors.Blue)
+				.setColor(0x000000)
 				.setTitle("🔓 Unlocking All Channels")
 				.setDescription(`Processing ${channels.size} channels...`)
 				.addFields({ name: "Progress", value: `0/${channels.size} (0%)` }, { name: "Reason", value: reason });
@@ -145,7 +145,7 @@ export default class UnlockAll extends Command {
 
 			const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 			const resultEmbed = new EmbedBuilder()
-				.setColor(Colors.Green)
+				.setColor(0x000000)
 				.setTitle("<:Tick:1375519268292264012> Mass Unlock Complete")
 				.setDescription(`Successfully unlocked ${processed} channels`)
 				.addFields({ name: "Total Time", value: `${elapsed} seconds` }, { name: "Moderator", value: ctx.author?.toString() || "Unknown" });
@@ -153,7 +153,7 @@ export default class UnlockAll extends Command {
 			await progressMessage.edit({ embeds: [resultEmbed] });
 		} catch (error) {
 			console.error("UnlockAll Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> An error occurred during mass unlock");
+			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> An error occurred during mass unlock");
 			await ctx.sendMessage({ embeds: [embed] });
 		}
 	}

@@ -6,10 +6,13 @@ import {
 	ButtonBuilder,
 	ButtonStyle,
 	ChannelSelectMenuBuilder,
-	EmbedBuilder,
+	ContainerBuilder,
 	MessageFlags,
 	ModalBuilder,
 	RoleSelectMenuBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 	UserSelectMenuBuilder,
@@ -17,6 +20,14 @@ import {
 	StringSelectMenuOptionBuilder,
 	ButtonInteraction,
 } from "discord.js";
+
+/** Build a Components V2 panel with title, divider, and body */
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class AutoModCommand extends Command {
 	constructor() {
@@ -72,52 +83,30 @@ export default class AutoModCommand extends Command {
 			};
 		}
 
-		const getEmbed = (ctx: Context, settings: AutoMod) => {
-			const emoji = {
-				enabled: ctx.client.config.emojis.on || "<:Tick:1375519268292264012>",
-				disabled: ctx.client.config.emojis.off || "<:Cross:1375519752746958858>",
-				settings: "⚙️",
-				shield: "🛡️",
-				link: "🔗",
-				spam: "🔄",
-				user: "👤",
-				channel: "📝",
-				role: "👥",
-			};
+		const getContainer = (ctx: Context, settings: AutoMod) => {
+			const on = ctx.client.config.emojis.on || "<:Tick:1375519268292264012>";
+			const off = ctx.client.config.emojis.off || "<:Cross:1375519752746958858>";
 
-			const embed = new EmbedBuilder()
-				.setTitle(`${emoji.shield} AutoMod Configuration`)
-				.setDescription(`Control your server's automatic moderation features`)
-				.addFields(
-					{
-						name: "__Global Settings__",
-						value: `**Status:** ${settings.enabled ? `${emoji.enabled} Enabled` : `${emoji.disabled} Disabled`}`,
-					},
-					{
-						name: `${emoji.spam} Spam Protection`,
-						value:
-							`**Status:** ${settings.spam?.enabled ? `${emoji.enabled} Enabled` : `${emoji.disabled} Disabled`}\n` +
-							`**Action:** ${settings.spam?.action || "None"}\n` +
-							`**Message Limit:** ${settings.spam?.spamLimit || 0} messages\n` +
-							`**Max Emojis:** ${settings.spam?.maxEmojis || 0} per message\n` +
-							`**Ignored:** ${settings.spam?.ignoredChannels?.length || 0} channels, ${settings.spam?.ignoredRoles?.length || 0} roles, ${settings.spam?.ignoredUsers?.length || 0} users`,
-						inline: true,
-					},
-					{
-						name: `${emoji.link} Link Protection`,
-						value:
-							`**Status:** ${settings.link?.enabled ? `${emoji.enabled} Enabled` : `${emoji.disabled} Disabled`}\n` +
-							`**Action:** ${settings.link?.action || "None"}\n` +
-							`**Allowed Domains:** ${settings.link?.allowedDomains?.length || 0}\n` +
-							`**Ignored:** ${settings.link?.ignoredChannels?.length || 0} channels, ${settings.link?.ignoredRoles?.length || 0} roles, ${settings.link?.ignoredUsers?.length || 0} users`,
-						inline: true,
-					},
-				)
-				.setColor(ctx.client.config.colors.main)
-				.setFooter({ text: "Select an option below to configure AutoMod settings" })
-				.setTimestamp();
+			const body = [
+				`**Global Status:** ${settings.enabled ? `${on} Enabled` : `${off} Disabled`}`,
+				"",
+				`🔄 **Spam Protection**`,
+				`**Status:** ${settings.spam?.enabled ? `${on} Enabled` : `${off} Disabled`}`,
+				`**Action:** ${settings.spam?.action || "None"}`,
+				`**Message Limit:** ${settings.spam?.spamLimit || 0} messages`,
+				`**Max Emojis:** ${settings.spam?.maxEmojis || 0} per message`,
+				`**Ignored:** ${settings.spam?.ignoredChannels?.length || 0} channels, ${settings.spam?.ignoredRoles?.length || 0} roles, ${settings.spam?.ignoredUsers?.length || 0} users`,
+				"",
+				`🔗 **Link Protection**`,
+				`**Status:** ${settings.link?.enabled ? `${on} Enabled` : `${off} Disabled`}`,
+				`**Action:** ${settings.link?.action || "None"}`,
+				`**Allowed Domains:** ${settings.link?.allowedDomains?.length || 0}`,
+				`**Ignored:** ${settings.link?.ignoredChannels?.length || 0} channels, ${settings.link?.ignoredRoles?.length || 0} roles, ${settings.link?.ignoredUsers?.length || 0} users`,
+				"",
+				`-# Select an option below to configure AutoMod settings`,
+			].join("\n");
 
-			return embed;
+			return buildPanel("🛡️ AutoMod Configuration", body);
 		};
 
 		// Main navigation buttons
@@ -147,8 +136,8 @@ export default class AutoModCommand extends Command {
 		const homeButton = new ButtonBuilder().setCustomId("automod_home").setLabel("Back to Main Menu").setStyle(ButtonStyle.Secondary).setEmoji("🏠");
 
 		const msg = await ctx.editOrReply({
-			embeds: [getEmbed(ctx, settings)],
-			components: getMainButtons(settings),
+			components: [getContainer(ctx, settings), ...getMainButtons(settings)],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		const filter = (i: any) => {
@@ -175,8 +164,7 @@ export default class AutoModCommand extends Command {
 			if (i.customId === "automod_toggle") {
 				settings = await AutoMod.update(ctx.guild.id!, { enabled: !settings.enabled });
 				await i.update({
-					embeds: [getEmbed(ctx, settings)],
-					components: getMainButtons(settings),
+					components: [getContainer(ctx, settings), ...getMainButtons(settings)],
 				});
 			}
 			// Main menu select menu
@@ -194,8 +182,7 @@ export default class AutoModCommand extends Command {
 			// Back to home button
 			else if (i.customId === "automod_home") {
 				await i.update({
-					embeds: [getEmbed(ctx, settings)],
-					components: getMainButtons(settings),
+					components: [getContainer(ctx, settings), ...getMainButtons(settings)],
 				});
 			}
 			// Spam toggle button
@@ -235,9 +222,10 @@ export default class AutoModCommand extends Command {
 				};
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder().setTitle("<:Tick:1375519268292264012> Success").setDescription("Updated spam protection ignored users").setColor(ctx.client.config.colors.main);
-
-				await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await i.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated spam protection ignored users")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 				await handleSpamIgnoredMenu(i);
 			}
 			// Spam ignored role select menu
@@ -249,9 +237,10 @@ export default class AutoModCommand extends Command {
 				};
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder().setTitle("<:Tick:1375519268292264012> Success").setDescription("Updated spam protection ignored roles").setColor(ctx.client.config.colors.main);
-
-				await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await i.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated spam protection ignored roles")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 				await handleSpamIgnoredMenu(i);
 			}
 			// Spam ignored channel select menu
@@ -263,9 +252,10 @@ export default class AutoModCommand extends Command {
 				};
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder().setTitle("<:Tick:1375519268292264012> Success").setDescription("Updated spam protection ignored channels").setColor(ctx.client.config.colors.main);
-
-				await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await i.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated spam protection ignored channels")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 				await handleSpamIgnoredMenu(i);
 			}
 			// Link ignored user select menu
@@ -277,9 +267,10 @@ export default class AutoModCommand extends Command {
 				};
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder().setTitle("<:Tick:1375519268292264012> Success").setDescription("Updated link protection ignored users").setColor(ctx.client.config.colors.main);
-
-				await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await i.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated link protection ignored users")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 				await handleLinkIgnoredMenu(i);
 			}
 			// Link ignored role select menu
@@ -291,9 +282,10 @@ export default class AutoModCommand extends Command {
 				};
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder().setTitle("<:Tick:1375519268292264012> Success").setDescription("Updated link protection ignored roles").setColor(ctx.client.config.colors.main);
-
-				await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await i.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated link protection ignored roles")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 				await handleLinkIgnoredMenu(i);
 			}
 			// Link ignored channel select menu
@@ -305,9 +297,10 @@ export default class AutoModCommand extends Command {
 				};
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder().setTitle("<:Tick:1375519268292264012> Success").setDescription("Updated link protection ignored channels").setColor(ctx.client.config.colors.main);
-
-				await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await i.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated link protection ignored channels")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 				await handleLinkIgnoredMenu(i);
 			}
 			// Return to spam menu from ignored menu
@@ -323,32 +316,24 @@ export default class AutoModCommand extends Command {
 		collector.on("end", async () => {
 			await msg
 				.edit({
-					components: [],
-					embeds: [
-						new EmbedBuilder()
-							.setTitle("AutoMod Configuration")
-							.setDescription("This configuration session has expired. Use `/automod` to start a new session.")
-							.setColor(ctx.client.config.colors.orange),
-					],
+					components: [buildPanel("AutoMod Configuration", "This configuration session has expired. Use `/automod` to start a new session.")],
+					embeds: [],
 				})
 				.catch(() => { });
 		});
 
 		// Handle spam menu
 		async function handleSpamMenu(i: any) {
-			const embed = new EmbedBuilder()
-				.setTitle("🔄 Spam Protection")
-				.setDescription("Configure how the bot handles spam messages and excessive emojis")
-				.addFields({
-					name: "Current Settings",
-					value:
-						`**Status:** ${settings.spam?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}\n` +
-						`**Action:** ${settings.spam?.action || "None"}\n` +
-						`**Message Limit:** ${settings.spam?.spamLimit || 0} messages\n` +
-						`**Max Emojis:** ${settings.spam?.maxEmojis || 0} per message`,
-				})
-				.setColor(ctx.client.config.colors.main)
-				.setFooter({ text: "Use the buttons below to configure spam protection" });
+			const body = [
+				`**Status:** ${settings.spam?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}`,
+				`**Action:** ${settings.spam?.action || "None"}`,
+				`**Message Limit:** ${settings.spam?.spamLimit || 0} messages`,
+				`**Max Emojis:** ${settings.spam?.maxEmojis || 0} per message`,
+				"",
+				"-# Use the buttons below to configure spam protection",
+			].join("\n");
+
+			const container = buildPanel("🔄 Spam Protection", body);
 
 			const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
@@ -365,31 +350,27 @@ export default class AutoModCommand extends Command {
 			);
 
 			await i.update({
-				embeds: [embed],
-				components: [row1, row2],
+				components: [container, row1, row2],
 			});
 		}
 
 		// Handle link menu
 		async function handleLinkMenu(i: any) {
-			const embed = new EmbedBuilder()
-				.setTitle("🔗 Link Protection")
-				.setDescription("Configure how the bot handles links posted in your server")
-				.addFields(
-					{
-						name: "Current Settings",
-						value:
-							`**Status:** ${settings.link?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}\n` +
-							`**Action:** ${settings.link?.action || "None"}\n` +
-							`**Allowed Domains:** ${settings.link?.allowedDomains?.length || 0}`,
-					},
-					{
-						name: "Allowed Domains",
-						value: settings.link?.allowedDomains && settings.link.allowedDomains.length > 0 ? settings.link.allowedDomains.join(", ") : "No domains added",
-					},
-				)
-				.setColor(ctx.client.config.colors.main)
-				.setFooter({ text: "Use the buttons below to configure link protection" });
+			const domainsText = settings.link?.allowedDomains && settings.link.allowedDomains.length > 0
+				? settings.link.allowedDomains.join(", ")
+				: "No domains added";
+
+			const body = [
+				`**Status:** ${settings.link?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}`,
+				`**Action:** ${settings.link?.action || "None"}`,
+				`**Allowed Domains:** ${settings.link?.allowedDomains?.length || 0}`,
+				"",
+				`**Allowed Domains List:** ${domainsText}`,
+				"",
+				"-# Use the buttons below to configure link protection",
+			].join("\n");
+
+			const container = buildPanel("🔗 Link Protection", body);
 
 			const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
@@ -406,17 +387,13 @@ export default class AutoModCommand extends Command {
 			);
 
 			await i.update({
-				embeds: [embed],
-				components: [row1, row2],
+				components: [container, row1, row2],
 			});
 		}
 
 		// Handle ignored menu
 		async function handleIgnoredMenu(i: any) {
-			const embed = new EmbedBuilder()
-				.setTitle("🛡️ Exception Management")
-				.setDescription("Select which protection feature you want to configure exceptions for")
-				.setColor(ctx.client.config.colors.main);
+			const container = buildPanel("🛡️ Exception Management", "Select which protection feature you want to configure exceptions for.");
 
 			const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder().setCustomId("spam_ignored").setLabel("Spam Protection Exceptions").setStyle(ButtonStyle.Primary).setEmoji("🔄"),
@@ -425,8 +402,7 @@ export default class AutoModCommand extends Command {
 			);
 
 			await i.update({
-				embeds: [embed],
-				components: [row],
+				components: [container, row],
 			});
 		}
 
@@ -481,21 +457,16 @@ export default class AutoModCommand extends Command {
 				// Validate action
 				if (!actionOptions.includes(action)) {
 					return submission.reply({
-						embeds: [
-							new EmbedBuilder()
-								.setTitle("<:Cross:1375519752746958858> Error")
-								.setDescription(`Invalid action. Please use one of: ${actionOptions.join(", ")}`)
-								.setColor(ctx.client.config.colors.red),
-						],
-						flags: MessageFlags.Ephemeral,
+						components: [buildPanel("<:Cross:1375519752746958858> Error", `Invalid action. Please use one of: ${actionOptions.join(", ")}`)],
+						flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 					});
 				}
 
 				// Validate numbers
 				if (Number.isNaN(Number(spamLimit)) || Number.isNaN(Number(maxEmojis))) {
 					return submission.reply({
-						embeds: [new EmbedBuilder().setTitle("<:Cross:1375519752746958858> Error").setDescription("Message limit and max emojis must be numbers.").setColor(ctx.client.config.colors.red)],
-						flags: MessageFlags.Ephemeral,
+						components: [buildPanel("<:Cross:1375519752746958858> Error", "Message limit and max emojis must be numbers.")],
+						flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 					});
 				}
 
@@ -512,12 +483,16 @@ export default class AutoModCommand extends Command {
 
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder()
-					.setTitle("<:Tick:1375519268292264012> Spam Protection Updated")
-					.setDescription(`**Action:** ${action}\n` + `**Message Limit:** ${spamLimit} messages\n` + `**Max Emojis:** ${maxEmojis} per message`)
-					.setColor(ctx.client.config.colors.main);
+				const spamUpdatedBody = [
+					`**Action:** ${action}`,
+					`**Message Limit:** ${spamLimit} messages`,
+					`**Max Emojis:** ${maxEmojis} per message`,
+				].join("\n");
 
-				await submission.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await submission.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Spam Protection Updated", spamUpdatedBody)],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 
 				// Update the main message
 				const message = await submission.message?.fetch();
@@ -567,13 +542,8 @@ export default class AutoModCommand extends Command {
 				// Validate action
 				if (!actionOptions.includes(action)) {
 					return submission.reply({
-						embeds: [
-							new EmbedBuilder()
-								.setTitle("<:Cross:1375519752746958858> Error")
-								.setDescription(`Invalid action. Please use one of: ${actionOptions.join(", ")}`)
-								.setColor(ctx.client.config.colors.red),
-						],
-						flags: MessageFlags.Ephemeral,
+						components: [buildPanel("<:Cross:1375519752746958858> Error", `Invalid action. Please use one of: ${actionOptions.join(", ")}`)],
+						flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 					});
 				}
 
@@ -595,12 +565,15 @@ export default class AutoModCommand extends Command {
 
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
-				const embed = new EmbedBuilder()
-					.setTitle("<:Tick:1375519268292264012> Link Protection Updated")
-					.setDescription(`**Action:** ${action}\n` + `**Allowed Domains:** ${allowedDomains.length > 0 ? allowedDomains.join(", ") : "None"}`)
-					.setColor(ctx.client.config.colors.main);
+				const linkUpdatedBody = [
+					`**Action:** ${action}`,
+					`**Allowed Domains:** ${allowedDomains.length > 0 ? allowedDomains.join(", ") : "None"}`,
+				].join("\n");
 
-				await submission.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+				await submission.reply({
+					components: [buildPanel("<:Tick:1375519268292264012> Link Protection Updated", linkUpdatedBody)],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
 
 				// Update the main message
 				const message = await submission.message?.fetch();
@@ -618,13 +591,18 @@ export default class AutoModCommand extends Command {
 			const roles = settings.spam?.ignoredRoles ?? [];
 			const channels = settings.spam?.ignoredChannels ?? [];
 
-			const embed = new EmbedBuilder()
-				.setTitle("🔄 Spam Protection Exceptions")
-				.setDescription(
-					`Configure which users, roles, and channels should be exempt from spam protection.\n\n**Current Exceptions:**\n• ${users.length} Users\n• ${roles.length} Roles\n• ${channels.length} Channels`,
-				)
-				.setColor(ctx.client.config.colors.main)
-				.setFooter({ text: "Use the select menus below to update exceptions" });
+			const body = [
+				"Configure which users, roles, and channels should be exempt from spam protection.",
+				"",
+				"**Current Exceptions:**",
+				`• ${users.length} Users`,
+				`• ${roles.length} Roles`,
+				`• ${channels.length} Channels`,
+				"",
+				"-# Use the select menus below to update exceptions",
+			].join("\n");
+
+			const container = buildPanel("🔄 Spam Protection Exceptions", body);
 
 			const usermenu = new UserSelectMenuBuilder().setCustomId("automod_spam_ignored_user").setPlaceholder("Select users to exempt from spam protection").setMinValues(0).setMaxValues(25);
 
@@ -655,8 +633,7 @@ export default class AutoModCommand extends Command {
 			);
 
 			await i.update({
-				embeds: [embed],
-				components: [row1, row2, row3, row4],
+				components: [container, row1, row2, row3, row4],
 			});
 		}
 
@@ -665,13 +642,18 @@ export default class AutoModCommand extends Command {
 			const roles = settings.link?.ignoredRoles ?? [];
 			const channels = settings.link?.ignoredChannels ?? [];
 
-			const embed = new EmbedBuilder()
-				.setTitle("🔗 Link Protection Exceptions")
-				.setDescription(
-					`Configure which users, roles, and channels should be exempt from link protection.\n\n**Current Exceptions:**\n• ${users.length} Users\n• ${roles.length} Roles\n• ${channels.length} Channels`,
-				)
-				.setColor(ctx.client.config.colors.main)
-				.setFooter({ text: "Use the select menus below to update exceptions" });
+			const body = [
+				"Configure which users, roles, and channels should be exempt from link protection.",
+				"",
+				"**Current Exceptions:**",
+				`• ${users.length} Users`,
+				`• ${roles.length} Roles`,
+				`• ${channels.length} Channels`,
+				"",
+				"-# Use the select menus below to update exceptions",
+			].join("\n");
+
+			const container = buildPanel("🔗 Link Protection Exceptions", body);
 
 			const usermenu = new UserSelectMenuBuilder()
 				.setCustomId("automod_links_ignored_user")
@@ -714,8 +696,7 @@ export default class AutoModCommand extends Command {
 			);
 
 			await i.update({
-				embeds: [embed],
-				components: [row1, row2, row3, row4],
+				components: [container, row1, row2, row3, row4],
 			});
 		}
 	}

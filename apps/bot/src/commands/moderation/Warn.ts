@@ -1,7 +1,8 @@
-import { ApplicationCommandOptionType, Colors, EmbedBuilder, GuildMember } from "discord.js";
+import { ApplicationCommandOptionType, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { Warning } from "@repo/db";
+import * as reply from "../../utils/reply";
 
 export default class Warn extends Command {
 	constructor() {
@@ -87,6 +88,7 @@ export default class Warn extends Command {
 			],
 		});
 	}
+
 	public run(ctx: Context): Promise<any> {
 		const subcommand = ctx.options.getSubCommand();
 
@@ -103,90 +105,88 @@ export default class Warn extends Command {
 				return this.handleAdd(ctx);
 		}
 	}
+
 	private async handleAdd(ctx: Context, isSubcommand = false) {
 		if (!ctx.guild || !ctx.author) return;
 
 		const target = ctx.options.getMember("user", isSubcommand ? 1 : 0) as GuildMember | null;
+		const reason = ctx.isInteraction
+			? ctx.options.getString("reason", false) || "No reason provided"
+			: ctx.args.slice(isSubcommand ? 2 : 1).join(" ") || "No reason provided";
 
-		const reason = ctx.isInteraction ? ctx.options.getString("reason", false) || "No reason provided" : ctx.args.slice(isSubcommand ? 2 : 1).join(" ") || "No reason provided";
-
-		if (!target) {
-			return this.sendError(ctx, "User not found");
-		}
-
-		if (target.id === ctx.author.id) {
-			return this.sendError(ctx, "You cannot warn yourself");
-		}
-
-		if (target.id === ctx.client.user?.id) {
-			return this.sendError(ctx, "I cannot warn myself");
-		}
+		if (!target) return this.sendError(ctx, "User not found");
+		if (target.id === ctx.author.id) return this.sendError(ctx, "You cannot warn yourself");
+		if (target.id === ctx.client.user?.id) return this.sendError(ctx, "I cannot warn myself");
 
 		try {
 			const warning = await Warning.create({
 				guildId: ctx.guild.id,
 				userId: target.id,
 				moderatorId: ctx.author.id,
-				reason: reason,
+				reason,
 			});
 
-			if (!warning) {
-				return this.sendError(ctx, "Failed to create warning");
-			}
+			if (!warning) return this.sendError(ctx, "Failed to create warning");
 
 			const warningsCount = await Warning.getUserWarningCount(ctx.guild.id, target.id);
 
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Orange)
-				.setTitle("⚠️ User Warned")
-				.setThumbnail(target.displayAvatarURL())
-				.setDescription(
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**⚠️ User Warned**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 					`**User:** ${target.toString()}\n` +
 					`**Moderator:** ${ctx.author.toString()}\n` +
 					`**Reason:** ${reason}\n` +
 					`**Total Warnings:** ${warningsCount}`
-				)
-				.setFooter({ text: `Warning ID: ${warning.id}` });
+				))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Warning ID: ${warning.id}`));
 
-			await target.send({ embeds: [embed] }).catch(() => { });
-			return ctx.sendMessage({ embeds: [embed] });
+			// DM the warned user (use embed for DM since it's a different context)
+			await target.send({
+				embeds: [{
+					color: 0x000000,
+					title: "⚠️ You have been warned",
+					description: `**Server:** ${ctx.guild.name}\n**Reason:** ${reason}\n**Moderator:** ${ctx.author.toString()}\n**Warning ID:** \`${warning.id}\``,
+				}]
+			}).catch(() => {});
+
+			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("Warn Error:", error);
 			return this.sendError(ctx, "An error occurred while warning this user");
 		}
 	}
+
 	private async handleList(ctx: Context) {
 		if (!ctx.guild) return;
 
 		const target = ctx.options.getMember("user", 1) as GuildMember | null;
 
-		if (!target) {
-			return this.sendError(ctx, "User not found");
-		}
+		if (!target) return this.sendError(ctx, "User not found");
 
 		const warnings = await Warning.getUserWarnings(ctx.guild.id, target.id);
 		const warningsCount = warnings.length;
 
 		if (warningsCount === 0) {
-			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Blue).setDescription(`${target.toString()} has no warnings`)],
-			});
+			return reply.info(ctx, `${target.toString()} has no warnings`);
 		}
 
-		const formattedWarnings = warnings.map((warn, index) => {
-			return (
-				`**#${index + 1}** - \`${warn.id}\`\n` + `> **Reason:** ${warn.reason}\n` + `> **Moderator:** <@${warn.moderatorId}>\n` + `> **Date:** <t:${Math.floor(warn.createdAt.getTime() / 1000)}:R>\n`
-			);
-		});
+		const formattedWarnings = warnings.map((warn, index) =>
+			`**#${index + 1}** - \`${warn.id}\`\n` +
+			`> **Reason:** ${warn.reason}\n` +
+			`> **Moderator:** <@${warn.moderatorId}>\n` +
+			`> **Date:** <t:${Math.floor(warn.createdAt.getTime() / 1000)}:R>`
+		).join("\n\n");
 
-		const embed = new EmbedBuilder()
-			.setColor(Colors.Orange)
-			.setTitle(`${target.user.tag}'s Warnings (${warningsCount})`)
-			.setDescription(formattedWarnings.join("\n"))
-			.setThumbnail(target.displayAvatarURL())
-			.setFooter({ text: `User ID: ${target.id}` });
+		const container = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${target.user.tag}'s Warnings (${warningsCount})**`))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(formattedWarnings))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# User ID: ${target.id}`));
 
-		return ctx.sendMessage({ embeds: [embed] });
+		return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 	}
 
 	private async handleRemove(ctx: Context) {
@@ -194,9 +194,7 @@ export default class Warn extends Command {
 
 		const warningId = ctx.isInteraction ? ctx.options.getString("warning_id", true) : ctx.args[1];
 
-		if (!warningId) {
-			return this.sendError(ctx, "Please provide a warning ID");
-		}
+		if (!warningId) return this.sendError(ctx, "Please provide a warning ID");
 
 		try {
 			const warning = await Warning.getById(warningId);
@@ -207,22 +205,24 @@ export default class Warn extends Command {
 
 			await Warning.delete(warningId);
 
-			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Green).setDescription(`<:Tick:1375519268292264012> Successfully removed warning \`${warningId}\``)],
-			});
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`<:Tick:1375519268292264012> Successfully removed warning \`${warningId}\``
+				));
+
+			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("Remove Warning Error:", error);
 			return this.sendError(ctx, "Failed to remove warning");
 		}
 	}
+
 	private async handleClear(ctx: Context) {
 		if (!ctx.guild || !ctx.author) return;
 
 		const target = ctx.options.getMember("user", 1) as GuildMember | null;
 
-		if (!target) {
-			return this.sendError(ctx, "User not found");
-		}
+		if (!target) return this.sendError(ctx, "User not found");
 
 		try {
 			const countBefore = await Warning.getUserWarningCount(ctx.guild.id, target.id);
@@ -233,31 +233,19 @@ export default class Warn extends Command {
 
 			await Warning.deleteAllUserWarnings(ctx.guild.id, target.id);
 
-			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Green).setDescription(`<:Tick:1375519268292264012> Cleared ${countBefore} warnings for ${target.toString()}`)],
-			});
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`<:Tick:1375519268292264012> Cleared **${countBefore}** warning${countBefore !== 1 ? "s" : ""} for ${target.toString()}`
+				));
+
+			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("Clear Warnings Error:", error);
 			return this.sendError(ctx, "Failed to clear warnings");
 		}
 	}
-	private async showHelp(ctx: Context) {
-		const embed = new EmbedBuilder()
-			.setColor(Colors.Blue)
-			.setTitle("Warn Command Help")
-			.setDescription(
-				"**Subcommands:**\n" +
-				"`/warn add <user> [reason]` - Warn a user\n" +
-				"`/warn list <user>` - List user's warnings\n" +
-				"`/warn remove <warning_id>` - Remove a warning\n" +
-				"`/warn clear <user>` - Clear all warnings for a user",
-			);
 
-		return ctx.sendMessage({ embeds: [embed] });
-	}
 	private async sendError(ctx: Context, message: string) {
-		return ctx.sendMessage({
-			embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription(`<:Cross:1375519752746958858> ${message}`)],
-		});
+		return reply.error(ctx, message);
 	}
 }

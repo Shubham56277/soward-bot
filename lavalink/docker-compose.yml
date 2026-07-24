@@ -6,7 +6,7 @@ services:
     cpus: 1.5
     mem_limit: 1024m
     environment:
-      - _JAVA_OPTIONS=-Xms128M -Xmx768M -Dhttp.proxyHost=p.webshare.io -Dhttp.proxyPort=80 -Dhttp.proxyUser=mcvyluus -Dhttp.proxyPassword=i28vm5zdidf3 -Dhttps.proxyHost=p.webshare.io -Dhttps.proxyPort=80 -Dhttps.proxyUser=mcvyluus -Dhttps.proxyPassword=i28vm5zdidf3
+      - _JAVA_OPTIONS=-Xms128M -Xmx768M
       - SERVER_PORT=2333
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
@@ -19,7 +19,7 @@ services:
     ports:
       - "127.0.0.1:2333:2333"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:2333/version || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- --header='Authorization: 3f10f1d469138eea6ddc1cb731c2a8783bd0faacfc44e168cfda75aacf458789' http://localhost:2333/version || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

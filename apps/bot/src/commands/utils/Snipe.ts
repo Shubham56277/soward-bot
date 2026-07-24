@@ -1,8 +1,15 @@
-import { EmbedBuilder, ApplicationCommandOptionType, Colors } from "discord.js";
+import { ContainerBuilder, ApplicationCommandOptionType, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { messageTracker } from "../../modules/MessageTracker";
-import { Pagination } from "../../utils/Pagination";
+import { ContainerPagination } from "../../utils/Pagination";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 
 export default class Snipe extends Command {
@@ -61,10 +68,10 @@ export default class Snipe extends Command {
 			}
 		} catch (error) {
 			console.error("Snipe Error:", error);
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Red)
-				.setDescription("<:Cross:1375519752746958858> An error occurred while trying to snipe messages");
-			await ctx.sendMessage({ embeds: [embed] });
+			await ctx.sendMessage({
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> An error occurred while trying to snipe messages"))],
+				flags: MessageFlags.IsComponentsV2,
+			});
 		}
 	}
 
@@ -72,49 +79,29 @@ export default class Snipe extends Command {
 		const editedMessages = await messageTracker.getEditedMessages(ctx.client.redis, ctx.channel.id);
 
 		if (!editedMessages || editedMessages.length === 0) {
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Red)
-				.setDescription("No edited messages found in this channel");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage({
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("No edited messages found in this channel"))],
+				flags: MessageFlags.IsComponentsV2,
+			});
 		}
 
-		const messagesPerPage = 1;
-		const embedPages: EmbedBuilder[] = [];
+		const pages: ContainerBuilder[] = [];
 
 		editedMessages.forEach((message, index) => {
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Blue)
-				.setAuthor({
-					name: `Edited Message ${index + 1}/${editedMessages.length}`,
-					iconURL: message.authorAvatar || ctx.client.user?.displayAvatarURL()
-				})
-				.setDescription(`👤 **Author:** **[${message.author}](https://discord.com/users/${message.authorId})**\n` +
-					`🆔 **Author ID:** \`${message.authorId}\`\n` +
-					`📣 **Author Mention:** <@${message.authorId}>\n` +
-					`🕒 **Edited:** <t:${Math.floor(message.editTimestamp / 1000)}:R>`)
-				.setFooter({
-					text: `Total Edited Messages: ${editedMessages.length} | Requested by ${ctx.author?.tag}`,
-					iconURL: ctx.author?.displayAvatarURL()
-				});
-
-			if (message.oldContent) {
-				embed.addFields({ name: '📝 **Original Content:**', value: message.oldContent });
-			}
-			if (message.content) {
-				embed.addFields({ name: '✏️ **Edited Content:**', value: message.content });
-			}
-
-			if (message.messageId) {
-				embed.addFields({
-					name: '🔗 **Message Link:**',
-					value: `[Jump to Message](https://discord.com/channels/${ctx.guild.id}/${ctx.channel.id}/${message.messageId})`
-				});
-			}
-
-			embedPages.push(embed);
+			const lines = [
+				`👤 **Author:** **[${message.author}](https://discord.com/users/${message.authorId})**`,
+				`🆔 **Author ID:** \`${message.authorId}\``,
+				`📣 **Author Mention:** <@${message.authorId}>`,
+				`🕒 **Edited:** <t:${Math.floor(message.editTimestamp / 1000)}:R>`,
+			];
+			if (message.oldContent) lines.push(`\n📝 **Original Content:**\n${message.oldContent}`);
+			if (message.content) lines.push(`\n✏️ **Edited Content:**\n${message.content}`);
+			if (message.messageId) lines.push(`\n🔗 **Message Link:** [Jump to Message](https://discord.com/channels/${ctx.guild.id}/${ctx.channel.id}/${message.messageId})`);
+			lines.push(`\n-# Total Edited Messages: ${editedMessages.length} | Requested by ${ctx.author?.tag}`);
+			pages.push(buildPanel(`Edited Message ${index + 1}/${editedMessages.length}`, lines.join("\n")));
 		});
 
-		const pagination = new Pagination(ctx, embedPages);
+		const pagination = new ContainerPagination(ctx, pages);
 		await pagination.start();
 	}
 
@@ -122,44 +109,28 @@ export default class Snipe extends Command {
 		const deletedMessages = await messageTracker.getDeletedMessages(ctx.client.redis, ctx.channel.id);
 
 		if (!deletedMessages || deletedMessages.length === 0) {
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Red)
-				.setDescription("No deleted messages found in this channel");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage({
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("No deleted messages found in this channel"))],
+				flags: MessageFlags.IsComponentsV2,
+			});
 		}
 
-		const messagesPerPage = 1;
-		const embedPages: EmbedBuilder[] = [];
+		const pages: ContainerBuilder[] = [];
 
 		deletedMessages.forEach((message, index) => {
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Red)
-				.setAuthor({
-					name: `Deleted Message ${index + 1}/${deletedMessages.length}`,
-					iconURL: message.authorAvatar || ctx.client.user?.displayAvatarURL()
-				})
-				.setDescription(`👤 **Author:** **[${message.author}](https://discord.com/users/${message.authorId})**\n` +
-					`🆔 **Author ID:** \`${message.authorId}\`\n` +
-					`📣 **Author Mention:** <@${message.authorId}>\n` +
-					`🕒 **Deleted:** <t:${Math.floor(message.timestamp / 1000)}:R>`)
-				.setFooter({
-					text: `Total Deleted Messages: ${deletedMessages.length} | Requested by ${ctx.author?.tag}`,
-					iconURL: ctx.author?.displayAvatarURL()
-				});
-
-			if (message.content) {
-				embed.addFields({ name: '📝 **Content:**', value: message.content });
-			}
-
-			if (message.image) {
-				embed.setImage(message.image);
-				embed.addFields({ name: '📎 **Attachment:**', value: `[View Image](${message.image})` });
-			}
-
-			embedPages.push(embed);
+			const lines = [
+				`👤 **Author:** **[${message.author}](https://discord.com/users/${message.authorId})**`,
+				`🆔 **Author ID:** \`${message.authorId}\``,
+				`📣 **Author Mention:** <@${message.authorId}>`,
+				`🕒 **Deleted:** <t:${Math.floor(message.timestamp / 1000)}:R>`,
+			];
+			if (message.content) lines.push(`\n📝 **Content:**\n${message.content}`);
+			if (message.image) lines.push(`\n📎 **Attachment:** [View Image](${message.image})`);
+			lines.push(`\n-# Total Deleted Messages: ${deletedMessages.length} | Requested by ${ctx.author?.tag}`);
+			pages.push(buildPanel(`Deleted Message ${index + 1}/${deletedMessages.length}`, lines.join("\n")));
 		});
 
-		const pagination = new Pagination(ctx, embedPages);
+		const pagination = new ContainerPagination(ctx, pages);
 		await pagination.start();
 	}
 }

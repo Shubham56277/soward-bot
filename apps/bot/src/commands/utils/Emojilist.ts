@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -45,26 +45,29 @@ export default class Emojilist extends Command {
 		}
 
 		const total = staticCount + animatedCount;
+
 		if (total === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder().setColor(ctx.client.config.colors.main).setDescription("This server has no emojis.")],
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("This server has no emojis."))],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
-		const embed = new EmbedBuilder()
-			.setColor(ctx.client.config.colors.main)
-			.setAuthor({ name: `Emoji List for ${ctx.guild.name}`, iconURL: ctx.guild.iconURL() ?? undefined })
-			.setDescription(`Total Emojis: ${total}\nStatic: ${staticCount} | Animated: ${animatedCount}`)
-			.setFooter({ text: `Requested by ${ctx.author?.tag}`, iconURL: ctx.author?.displayAvatarURL() })
-			.setTimestamp();
-
+		const lines = [
+			`**Emoji List for ${ctx.guild.name}**`,
+			`Total Emojis: ${total} | Static: ${staticCount} | Animated: ${animatedCount}`,
+		];
 		if (animatedCount > 0) {
-			embed.addFields({ name: "Animated Emojis", value: animatedEmojis.length > 1000 ? "Too many to display." : animatedEmojis });
+			lines.push("", "**Animated Emojis:**", animatedEmojis.length > 1000 ? "Too many to display." : animatedEmojis);
 		}
 		if (staticCount > 0) {
-			embed.addFields({ name: "Static Emojis", value: staticEmojis.length > 1000 ? "Too many to display." : staticEmojis });
+			lines.push("", "**Static Emojis:**", staticEmojis.length > 1000 ? "Too many to display." : staticEmojis);
 		}
+		lines.push("", `-# Requested by ${ctx.author?.tag}`);
 
-		return ctx.editOrReply({ embeds: [embed] });
+		const panel = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(lines.join("\n")));
+
+		return ctx.editOrReply({ components: [panel], flags: MessageFlags.IsComponentsV2 });
 	}
 }

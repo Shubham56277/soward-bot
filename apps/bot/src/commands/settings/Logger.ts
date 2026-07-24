@@ -7,10 +7,21 @@ import {
     ButtonStyle,
     ChannelSelectMenuBuilder,
     ChannelType,
-    EmbedBuilder,
+    ContainerBuilder,
     MessageFlags,
-    StringSelectMenuBuilder
+    SeparatorBuilder,
+    SeparatorSpacingSize,
+    StringSelectMenuBuilder,
+    TextDisplayBuilder,
 } from "discord.js";
+
+/** Build a Components V2 panel */
+function buildPanel(title: string, body: string): ContainerBuilder {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class Logger extends Command {
     selected: string[] = [];
@@ -112,26 +123,24 @@ export default class Logger extends Command {
         const row2 = new ActionRowBuilder<ChannelSelectMenuBuilder>().setComponents(channelMenu);
         const row3 = new ActionRowBuilder<ButtonBuilder>().setComponents(autoSetupButton);
 
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Audit Log Configuration")
-            .setDescription([
-                "**Step 1:** Select which events you want to log",
-                "**Step 2:** Choose the channel where logs will be sent",
-                "",
-                "✨ **New Features:**",
-                "- Use **Auto Setup with Channels** for optimized logging setup with dedicated channels:",
-                "  • Member events (joins, leaves, updates)",
-                "  • Moderation events (bans, kicks)",
-                "  • Guild events (roles, channels, server updates)",
-                "  • Content events (messages, emojis, webhooks)",
-                "- Each event type can be configured separately",
-            ].join("\n"))
-            .setTimestamp();
+        const setupBody = [
+            "**Step 1:** Select which events you want to log",
+            "**Step 2:** Choose the channel where logs will be sent",
+            "",
+            "✨ **New Features:**",
+            "- Use **Auto Setup with Channels** for optimized logging setup with dedicated channels:",
+            "  • Member events (joins, leaves, updates)",
+            "  • Moderation events (bans, kicks)",
+            "  • Guild events (roles, channels, server updates)",
+            "  • Content events (messages, emojis, webhooks)",
+            "- Each event type can be configured separately",
+        ].join("\n");
+
+        const embed = buildPanel("Audit Log Configuration", setupBody);
 
         const msg = await ctx.editOrReply({
-            embeds: [embed],
-            components: [row, row2, row3],
+            components: [embed, row, row2, row3],
+            flags: MessageFlags.IsComponentsV2,
         });
 
         const collector = msg.createMessageComponentCollector({
@@ -142,13 +151,12 @@ export default class Logger extends Command {
         collector.on("collect", async (i) => {
             if (i.customId === "logger-menu" && i.isStringSelectMenu()) {
                 this.selected = i.values;
+                const updatedBody = [
+                    `**Step 1:** <:Tick:1375519268292264012> Selected events: ${this.selected.map(type => loggerTypes[type as keyof typeof loggerTypes]).join(", ")}`,
+                    "**Step 2:** Select a channel where logs will be sent",
+                ].join("\n");
                 await i.update({
-                    embeds: [
-                        embed.setDescription([
-                            `**Step 1:** <:Tick:1375519268292264012> Selected events: ${this.selected.map(type => loggerTypes[type as keyof typeof loggerTypes]).join(", ")}`,
-                            "**Step 2:** Select a channel where logs will be sent",
-                        ].join("\n"))
-                    ]
+                    components: [buildPanel("Audit Log Configuration", updatedBody), row, row2, row3],
                 });
             } else if (i.customId === "logger-channel" && i.isChannelSelectMenu()) {
                 const channelId = i.values[0]!;
@@ -335,21 +343,21 @@ export default class Logger extends Command {
                         enabled: true,
                     });
 
-                    const embed = new EmbedBuilder()
-                        .setColor(ctx.client.config.colors.main)
-                        .setTitle("Logger Setup Complete")
-                        .setDescription(`Successfully set up specialized log channels under the "Server Logs" category.`)
-                        .addFields(
-                            Object.entries(channelGroups).map(([_key, group]) => ({
-                                name: `📋 ${group.name}`,
-                                value: group.events.map(type => `• ${loggerTypes[type as keyof typeof loggerTypes]}`).join("\n"),
-                                inline: true
-                            }))
-                        )
-                        .setFooter({ text: "You can customize these settings further with the Add/Remove Event options." });
+                    const setupCompleteLines = Object.entries(channelGroups).map(([_key, group]) => {
+                        const eventsText = group.events.map(type => `• ${loggerTypes[type as keyof typeof loggerTypes]}`).join("\n");
+                        return `**📋 ${group.name}**\n${eventsText}`;
+                    }).join("\n\n");
+
+                    const autoSetupBody = [
+                        `Successfully set up specialized log channels under the "Server Logs" category.`,
+                        "",
+                        setupCompleteLines,
+                        "",
+                        "-# You can customize these settings further with the Add/Remove Event options.",
+                    ].join("\n");
 
                     await i.editReply({
-                        embeds: [embed],
+                        components: [buildPanel("Logger Setup Complete", autoSetupBody)],
                     });
                     collector.stop();
                 } catch (error) {
@@ -389,20 +397,12 @@ export default class Logger extends Command {
             eventsByChannel[entry.channelId]!.push(entry.type);
         });
 
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Logger Settings")
-            .setDescription("Current logger configuration:")
-            .setTimestamp();
+        const channelLines = Object.entries(eventsByChannel).map(([channelId, events]) => {
+            const evtList = events.map(e => `  • ${loggerTypes[e as keyof typeof loggerTypes]}`).join("\n");
+            return `**Channel <#${channelId}>**\n${evtList}`;
+        }).join("\n\n");
 
-        // Add field for each channel with its events
-        Object.entries(eventsByChannel).forEach(([channelId, events]) => {
-            embed.addFields({
-                name: `Channel <#${channelId}>`,
-                value: events.map(e => `• ${loggerTypes[e as keyof typeof loggerTypes]}`).join("\n"),
-                inline: false,
-            });
-        });
+        const embed = buildPanel("Logger Settings", `Current logger configuration:\n\n${channelLines}`);
 
         // Create buttons for actions
         const addButton = new ButtonBuilder()
@@ -426,8 +426,8 @@ export default class Logger extends Command {
         const row = new ActionRowBuilder<ButtonBuilder>().setComponents(addButton, removeButton, resetButton);
 
         const msg = await ctx.editOrReply({
-            embeds: [embed],
-            components: [row],
+            components: [embed, row],
+            flags: MessageFlags.IsComponentsV2,
         });
 
         const collector = msg.createMessageComponentCollector({
@@ -479,16 +479,11 @@ export default class Logger extends Command {
                 const eventRow = new ActionRowBuilder<StringSelectMenuBuilder>().setComponents(eventMenu);
                 const channelRow = new ActionRowBuilder<ChannelSelectMenuBuilder>().setComponents(channelMenu);
 
-                const addEmbed = new EmbedBuilder()
-                    .setColor(ctx.client.config.colors.main)
-                    .setTitle("Add Logger Event")
-                    .setDescription("Select the event type and channel for the new logger entry:")
-                    .setTimestamp();
+                const addBody = "Select the event type and channel for the new logger entry:";
 
                 await i.reply({
-                    embeds: [addEmbed],
-                    components: [eventRow, channelRow],
-                    flags: MessageFlags.Ephemeral,
+                    components: [buildPanel("Add Logger Event", addBody), eventRow, channelRow],
+                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
                 });
 
                 const addCollector = i.channel!.createMessageComponentCollector({
@@ -505,18 +500,14 @@ export default class Logger extends Command {
                     if (interaction.customId === "logger-event-add" && interaction.isStringSelectMenu()) {
                         selectedEvent = interaction.values[0]!;
                         await interaction.update({
-                            embeds: [
-                                addEmbed.setDescription(`Selected event: **${loggerTypes[selectedEvent as keyof typeof loggerTypes]}**\nNow select a channel:`)
-                            ],
+                            components: [buildPanel("Add Logger Event", `Selected event: **${loggerTypes[selectedEvent as keyof typeof loggerTypes]}**\nNow select a channel:`), eventRow, channelRow],
                         });
                     } else if (interaction.customId === "logger-channel-add" && interaction.isChannelSelectMenu()) {
                         selectedChannel = interaction.values[0]!;
 
                         if (!selectedEvent) {
                             await interaction.update({
-                                embeds: [
-                                    addEmbed.setDescription("Please select an event type first!")
-                                ],
+                                components: [buildPanel("Add Logger Event", "Please select an event type first!"), eventRow, channelRow],
                             });
                             return;
                         }
@@ -527,12 +518,7 @@ export default class Logger extends Command {
 
                             addCollector.stop();
                             await interaction.update({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setColor(ctx.client.config.colors.main)
-                                        .setDescription(`Successfully added **${loggerTypes[selectedEvent as keyof typeof loggerTypes]}** events to <#${selectedChannel}>.`)
-                                ],
-                                components: [],
+                                components: [buildPanel("Logger", `Successfully added **${loggerTypes[selectedEvent as keyof typeof loggerTypes]}** events to <#${selectedChannel}>.`)],
                             });
 
                             // Refresh the main menu
@@ -541,12 +527,7 @@ export default class Logger extends Command {
                         } catch (error) {
                             console.error(error);
                             await interaction.update({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setColor(ctx.client.config.colors.red)
-                                        .setDescription("Failed to add the logger event.")
-                                ],
-                                components: [],
+                                components: [buildPanel("Logger — Error", "Failed to add the logger event.")],
                             });
                         }
                     }
@@ -555,12 +536,7 @@ export default class Logger extends Command {
                 addCollector.on("end", async (_collected, reason) => {
                     if (reason === "time") {
                         await i.editReply({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setColor(ctx.client.config.colors.red)
-                                    .setDescription("Operation timed out.")
-                            ],
-                            components: [],
+                            components: [buildPanel("Logger — Timed Out", "Operation timed out.")],
                         }).catch(() => { });
                     }
                 });
@@ -594,15 +570,10 @@ export default class Logger extends Command {
 
                 const removeRow = new ActionRowBuilder<StringSelectMenuBuilder>().setComponents(removeMenu);
 
-                const removeEmbed = new EmbedBuilder()
-                    .setColor(ctx.client.config.colors.main)
-                    .setTitle("Remove Logger Event")
-                    .setDescription("Select the event you want to remove:")
-                    .setTimestamp();
+                const removeBody = "Select the event you want to remove:";
 
                 await i.editReply({
-                    embeds: [removeEmbed],
-                    components: [removeRow],
+                    components: [buildPanel("Remove Logger Event", removeBody), removeRow],
                 });
 
                 const removeCollector = i.channel!.createMessageComponentCollector({
@@ -620,12 +591,7 @@ export default class Logger extends Command {
 
                             removeCollector.stop();
                             await interaction.update({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setColor(ctx.client.config.colors.main)
-                                        .setDescription(`Successfully removed **${loggerTypes[eventType as keyof typeof loggerTypes]}** events from <#${channelId}>.`)
-                                ],
-                                components: [],
+                                components: [buildPanel("Logger", `Successfully removed **${loggerTypes[eventType as keyof typeof loggerTypes]}** events from <#${channelId}>.`)],
                             });
 
                             // Refresh the main menu
@@ -639,12 +605,7 @@ export default class Logger extends Command {
                         } catch (_error) {
                             console.error(error);
                             await interaction.update({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setColor(ctx.client.config.colors.red)
-                                        .setDescription("Failed to remove the logger event.")
-                                ],
-                                components: [],
+                                components: [buildPanel("Logger — Error", "Failed to remove the logger event.")],
                             });
                         }
                     }
@@ -653,12 +614,7 @@ export default class Logger extends Command {
                 removeCollector.on("end", async (_collected, reason) => {
                     if (reason === "time") {
                         await i.editReply({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setColor(ctx.client.config.colors.red)
-                                    .setDescription("Operation timed out.")
-                            ],
-                            components: [],
+                            components: [buildPanel("Logger — Timed Out", "Operation timed out.")],
                         }).catch(() => { });
                     }
                 });
@@ -676,16 +632,9 @@ export default class Logger extends Command {
 
                 const confirmRow = new ActionRowBuilder<ButtonBuilder>().setComponents(confirmButton, cancelButton);
 
-                const confirmEmbed = new EmbedBuilder()
-                    .setColor(ctx.client.config.colors.red)
-                    .setTitle("Reset Logger Configuration")
-                    .setDescription("⚠️ Are you sure you want to reset all logger settings? This will remove all configured events.")
-                    .setTimestamp();
-
                 await i.reply({
-                    embeds: [confirmEmbed],
-                    components: [confirmRow],
-                    flags: MessageFlags.Ephemeral,
+                    components: [buildPanel("Reset Logger Configuration", "⚠️ Are you sure you want to reset all logger settings? This will remove all configured events."), confirmRow],
+                    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
                 });
 
                 const confirmCollector = i.channel!.createMessageComponentCollector({
@@ -702,12 +651,7 @@ export default class Logger extends Command {
 
                             confirmCollector.stop();
                             await interaction.update({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setColor(ctx.client.config.colors.main)
-                                        .setDescription("Successfully reset all logger settings.")
-                                ],
-                                components: [],
+                                components: [buildPanel("Logger", "Successfully reset all logger settings.")],
                             });
 
                             // Go back to new logger setup
@@ -715,23 +659,13 @@ export default class Logger extends Command {
                         } catch (_error) {
                             console.error(error);
                             await interaction.update({
-                                embeds: [
-                                    new EmbedBuilder()
-                                        .setColor(ctx.client.config.colors.red)
-                                        .setDescription("Failed to reset logger settings.")
-                                ],
-                                components: [],
+                                components: [buildPanel("Logger — Error", "Failed to reset logger settings.")],
                             });
                         }
                     } else if (interaction.customId === "logger-reset-cancel") {
                         confirmCollector.stop();
                         await interaction.update({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setColor(ctx.client.config.colors.main)
-                                    .setDescription("Reset operation cancelled.")
-                            ],
-                            components: [],
+                            components: [buildPanel("Logger", "Reset operation cancelled.")],
                         });
                     }
                 });
@@ -739,12 +673,7 @@ export default class Logger extends Command {
                 confirmCollector.on("end", async (_collected, reason) => {
                     if (reason === "time") {
                         await i.editReply({
-                            embeds: [
-                                new EmbedBuilder()
-                                    .setColor(ctx.client.config.colors.red)
-                                    .setDescription("Operation timed out.")
-                            ],
-                            components: [],
+                            components: [buildPanel("Logger — Timed Out", "Operation timed out.")],
                         }).catch(() => { });
                     }
                 });

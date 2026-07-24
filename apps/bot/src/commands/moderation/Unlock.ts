@@ -1,6 +1,7 @@
-import { EmbedBuilder, ApplicationCommandOptionType, Colors, ChannelType, GuildChannel, TextChannel } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ApplicationCommandOptionType, ChannelType, GuildChannel, TextChannel } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import * as reply from "../../utils/reply";
 
 export default class Unlock extends Command {
 	constructor() {
@@ -42,8 +43,7 @@ export default class Unlock extends Command {
 		const reason = ctx.options?.getString("reason", false) || "No reason provided";
 
 		if (channel.type !== ChannelType.GuildText) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("This command only works for text channels");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return reply.error(ctx, "This command only works for text channels");
 		}
 
 		try {
@@ -54,26 +54,31 @@ export default class Unlock extends Command {
 				},
 				{ reason },
 			);
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Green)
-				.setTitle("🔓 Channel Unlocked")
-				.setDescription(
+
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔓 Channel Unlocked**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 					`**Channel:** ${channel.toString()}\n` +
 					`**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
 					`**Reason:** ${reason}`
-				);
+				));
 
-			await ctx.sendMessage({ embeds: [embed] });
+			await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 
 			if (channel.id !== ctx.channel.id) {
-				const unlockNotice = new EmbedBuilder().setColor(Colors.Green).setTitle("🔓 Channel Unlocked").setDescription(`This channel has been unlocked by a moderator.\n**Reason:** ${reason}`);
+				const noticeContainer = new ContainerBuilder()
+					.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+						`**🔓 Channel Unlocked**\nThis channel has been unlocked by a moderator.\n**Reason:** ${reason}`
+					));
 
-				if (channel instanceof TextChannel) await channel.send({ embeds: [unlockNotice] });
+				if (channel instanceof TextChannel) {
+					await channel.send({ components: [noticeContainer], flags: MessageFlags.IsComponentsV2 });
+				}
 			}
 		} catch (error) {
 			console.error("Unlock Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Failed to unlock channel");
-			await ctx.sendMessage({ embeds: [embed] });
+			return reply.error(ctx, "Failed to unlock channel");
 		}
 	}
 }

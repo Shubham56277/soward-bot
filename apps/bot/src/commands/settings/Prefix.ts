@@ -1,4 +1,4 @@
-import { PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits, ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { Guild } from "@repo/db";
@@ -41,18 +41,19 @@ export default class Prefix extends Command {
 
         return this.setPrefix(ctx, prefix);
     }
+
     private async setPrefix(ctx: Context, prefix: string) {
         await Guild.update(ctx.guild!.id, {
             prefix,
         });
 
         return ctx.sendMessage({
-            embeds: [
-                {
-                    description: `Seccessfully set prefix to \`${prefix}\``,
-                    color: ctx.client.config.colors.main,
-                },
+            components: [
+                new ContainerBuilder().addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Successfully set prefix to \`${prefix}\``)
+                )
             ],
+            flags: MessageFlags.IsComponentsV2,
         });
     }
 
@@ -62,13 +63,12 @@ export default class Prefix extends Command {
         });
 
         return ctx.sendMessage({
-            embeds: [
-                {
-                    description:
-                        `Reset prefix to \`${ctx.client.config.prefix}\``,
-                    color: ctx.client.config.colors.main,
-                },
+            components: [
+                new ContainerBuilder().addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Reset prefix to \`${ctx.client.config.prefix}\``)
+                )
             ],
+            flags: MessageFlags.IsComponentsV2,
         });
     }
 }

@@ -1,4 +1,4 @@
-import { EmbedBuilder, GuildMember, ApplicationCommandOptionType, Colors } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import ms from "@lukeed/ms";
@@ -58,104 +58,76 @@ export default class Timeout extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const target = ctx.options.getMember("user") as GuildMember | null;
-        const durationInput = ctx.options.getString("duration", true, 1)
-
-        // Convert duration to milliseconds
+        const durationInput = ctx.options.getString("duration", true, 1);
         const duration = ms.parse(durationInput ?? "5minute");
         let reason = ctx.options.getString("reason", false, 2) || "No reason provided";
 
-        // Handle text command arguments
         if (!ctx.isInteraction) {
             const args = ctx.args;
             if (args.length < 2) {
-                const embed = new EmbedBuilder()
-                    .setColor(Colors.Red)
-                    .setDescription("Please specify both a user and duration");
-                return await ctx.sendMessage({ embeds: [embed] });
+                return await ctx.sendMessage(this.msg("Please specify both a user and duration."));
             }
             reason = args.slice(2).join(" ") || "No reason provided";
         }
 
-        // Validate target
         if (!target) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("Member not found");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("Member not found."));
         }
 
-        // Validate duration
         if (!duration || Number.isNaN(duration)) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("Invalid duration format. Use examples like 30m, 2h, 1d");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("Invalid duration format. Use examples like `30m`, `2h`, `1d`."));
         }
 
-        const minDuration = 10_000; // 10 seconds
-        const maxDuration = 28 * 24 * 60 * 60 * 1000; // 28 days
+        const minDuration = 10_000;
+        const maxDuration = 28 * 24 * 60 * 60 * 1000;
 
         if (duration < minDuration || duration > maxDuration) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("Duration must be between 10 seconds and 28 days");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("Duration must be between 10 seconds and 28 days."));
         }
 
-        // Validation checks
         if (target.id === ctx.author?.id) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot timeout yourself");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot timeout yourself."));
         }
 
         if (target.id === ctx.client.user?.id) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot timeout me");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot timeout me."));
         }
 
         if (target.id === ctx.guild.ownerId) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot timeout the server owner");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot timeout the server owner."));
         }
 
         if (target.roles.highest.position >= (ctx.member?.roles.highest.position ?? 0) && ctx.author?.id !== ctx.guild.ownerId) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot timeout someone with higher or equal role");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot timeout someone with a higher or equal role."));
         }
 
         if (ctx.guild.members.me && target.roles.highest.position >= ctx.guild.members.me.roles.highest.position) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("I cannot timeout someone with higher or equal role");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("I cannot timeout someone with a higher or equal role."));
         }
 
-        // Execute the timeout
         await target.timeout(duration, reason);
 
-        // Create response embed
-        const timeoutEmbed = new EmbedBuilder()
-            .setColor(Colors.Orange)
-            .setTitle("⏳ Member Timed Out")
-            .setThumbnail(target.displayAvatarURL())
-            .setDescription(
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**⏳ Member Timed Out**`))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                 `**User:** ${target.toString()}\n` +
                 `**Duration:** ${durationInput}\n` +
                 `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
                 `**Reason:** ${reason}`
-            )
-            .setFooter({ text: `ID: ${target.id}` })
-            .setTimestamp();
-        return await ctx.sendMessage({ embeds: [timeoutEmbed] });
+            ))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${target.id}`));
+
+        return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 }

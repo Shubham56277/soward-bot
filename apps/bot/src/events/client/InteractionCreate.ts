@@ -79,6 +79,116 @@ export default class InteractionCreate extends Event {
 						`Executing ${isAutocomplete ? "autocomplete" : "chatInput command"} ${interaction.commandName}`,
 					);
 					if (isAutocomplete) {
+						// ── Music play autocomplete: SC + AM, unique, language-aware trending ──
+						if (
+							(interaction.commandName === "music" || interaction.commandName === "play") &&
+							interaction.options.getFocused(true).name === "query"
+						) {
+							const raw = interaction.options.getFocused();
+							const query = (raw ?? "").trim();
+
+							const nodes = [...this.client.manager.nodeManager.nodes.values()].filter(n => n.connected);
+							if (!nodes.length) return interaction.respond([]).catch(() => undefined);
+
+							try {
+								// ── Language detection ───────────────────────────────────────
+								// Unicode ranges for Devanagari (Hindi) and other South Asian scripts
+								const isHindi = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F]/.test(query);
+
+								// Latin-only input — could be romanised Hindi or English
+								// If romanised Hindi keywords detected, treat as Hindi
+								const hindiRomanKeywords = [
+									"aaj", "kal", "dil", "pyar", "mohabbat", "ishq", "yaar", "zindagi",
+									"main", "tere", "meri", "tumhari", "tumhara", "kabhi", "koi",
+									"nahi", "hai", "hum", "aap", "raat", "subah", "baarish", "dard",
+									"teri", "mera", "tera", "bewafa", "tadap", "intezaar", "shayad",
+								];
+								const words = query.toLowerCase().split(/\s+/);
+								const looksHindi = isHindi || words.some(w => hindiRomanKeywords.includes(w));
+
+								// ── Trending queries when input is empty or very short ────────
+								const HINDI_TRENDING = [
+									"Kesariya", "Tum Hi Ho", "Raataan Lambiyan", "Tera Ban Jaunga",
+									"Dil Chahta Hai", "Ae Dil Hai Mushkil", "Chaiyya Chaiyya",
+									"Kal Ho Naa Ho", "Tere Bina", "Humsafar",
+								];
+								const ENGLISH_TRENDING = [
+									"Blinding Lights", "Shape of You", "Stay", "As It Was",
+									"Levitating", "Unholy", "Flowers", "Anti-Hero", "Bad Guy",
+									"Someone Like You",
+								];
+
+								if (query.length < 2) {
+									const trending = looksHindi ? HINDI_TRENDING : ENGLISH_TRENDING;
+									const suggestions = trending.slice(0, 8).map(name => ({ name, value: name }));
+									return interaction.respond(suggestions).catch(() => undefined);
+								}
+
+								// ── Live search ───────────────────────────────────────────────
+								const searchQuery = looksHindi && !isHindi
+									? `${query} hindi song`   // help SC/AM find Hindi romanised queries
+									: query;
+
+								const [scRes, amRes] = await Promise.allSettled([
+									this.client.manager.search(`scsearch:${searchQuery}`, interaction.user),
+									this.client.manager.search(`amsearch:${searchQuery}`, interaction.user),
+								]);
+
+								const scTracks = scRes.status === "fulfilled" ? (scRes.value?.tracks ?? []).slice(0, 5) : [];
+								const amTracks = amRes.status === "fulfilled" ? (amRes.value?.tracks ?? []).slice(0, 5) : [];
+
+								// ── Deduplicate by normalised core title ─────────────────────
+								// Strip noise: "(official)", "(audio)", "(lyrics)", feat., ft., etc.
+								function coreTitle(raw: string): string {
+									return raw
+										.toLowerCase()
+										.replace(/\(.*?\)/g, "")           // remove parenthetical
+										.replace(/\[.*?\]/g, "")            // remove bracketed
+										.replace(/\bfeat\.?\b.*$/i, "")     // remove feat.
+										.replace(/\bft\.?\b.*$/i, "")       // remove ft.
+										.replace(/[-–—|]/g, " ")            // remove separators
+										.replace(/\s+/g, " ")
+										.trim();
+								}
+
+								const seenCore = new Set<string>();
+								const suggestions: { name: string; value: string }[] = [];
+
+								// Interleave SC and AM so both sources get represented
+								const interleaved: (typeof scTracks[number] | typeof amTracks[number])[] = [];
+								const maxLen = Math.max(scTracks.length, amTracks.length);
+								for (let i = 0; i < maxLen; i++) {
+									if (i < scTracks.length) interleaved.push(scTracks[i]!);
+									if (i < amTracks.length) interleaved.push(amTracks[i]!);
+								}
+
+								for (const track of interleaved) {
+									if (!track) continue;
+									const src = track.info.sourceName ?? "";
+									if (src === "youtube" || src === "youtubemusic") continue;
+
+									const title  = track.info.title ?? "";
+									const author = track.info.author ?? "";
+									const core   = coreTitle(title);
+
+									// One unique core title across ALL sources — if "Amplifier" was
+									// already added from SC, skip the AM "Amplifier" entirely.
+									if (seenCore.has(core)) continue;
+									seenCore.add(core);
+
+									// Format: "Title — Artist" (no source tag needed, song is unique)
+									const label  = `${title} — ${author}`.slice(0, 100);
+									const value  = title.slice(0, 100);
+
+									suggestions.push({ name: label, value });
+									if (suggestions.length >= 8) break;
+								}
+
+								return interaction.respond(suggestions).catch(() => undefined);
+							} catch {
+								return interaction.respond([]).catch(() => undefined);
+							}
+						}
 						return interaction.respond([]).catch(() => undefined);
 					} else if (interaction.isChatInputCommand()) {
 						if (!interaction.guild || !interaction.channel) return;
@@ -224,7 +334,7 @@ export default class InteractionCreate extends Event {
 							const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 							const embed = new EmbedBuilder()
-								.setColor("#FF69B4")
+								.setColor(0x000000)
 								.setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
 								.setDescription("Slash Commad")
 								.addFields(

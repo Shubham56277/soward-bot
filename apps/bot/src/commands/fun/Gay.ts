@@ -42,7 +42,7 @@ export default class Gay extends Command {
         else message = "ULTRA GAY POWER! 💥🏳️‍⚧️";
 
         const embed = new EmbedBuilder()
-            .setColor('#FF69B4')
+            .setColor(0x000000)
             .setTitle(`Gay Meter for ${user?.username}`)
             .setDescription(`${message}\n**Gay Percentage:** ${gayPercentage}% gay!`)
             .setImage(`https://some-random-api.com/canvas/gay?avatar=${avatar}`)

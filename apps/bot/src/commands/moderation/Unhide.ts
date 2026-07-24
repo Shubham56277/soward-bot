@@ -1,4 +1,4 @@
-import { EmbedBuilder, ApplicationCommandOptionType, Colors, ChannelType, GuildChannel, Role } from "discord.js";
+import { EmbedBuilder, ApplicationCommandOptionType, ChannelType, GuildChannel, Role } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -43,7 +43,7 @@ export default class Unhide extends Command {
 		const role = ctx.options?.getRole("role", false) || ctx.guild.roles.everyone;
 
 		if (![ChannelType.GuildText, ChannelType.GuildVoice].includes(channel.type)) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("This command only works for text and voice channels");
+			const embed = new EmbedBuilder().setColor(0x000000).setDescription("This command only works for text and voice channels");
 			return await ctx.sendMessage({ embeds: [embed] });
 		}
 
@@ -57,7 +57,7 @@ export default class Unhide extends Command {
 			);
 
 			const embed = new EmbedBuilder()
-				.setColor(Colors.Green)
+				.setColor(0x000000)
 				.setTitle("👁️ Channel Unhidden")
 				.setDescription(
 					`**Channel:** ${channel.toString()}\n` +
@@ -68,7 +68,7 @@ export default class Unhide extends Command {
 			await ctx.sendMessage({ embeds: [embed] });
 		} catch (error) {
 			console.error("Unhide Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Failed to unhide channel");
+			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Failed to unhide channel");
 			await ctx.sendMessage({ embeds: [embed] });
 		}
 	}

@@ -12,6 +12,7 @@
     "bot:deploy": "bash deploy/scripts/deploy.sh",
     "bot:launch": "bash scripts/start-bot.sh",
     "bot:health": "curl -sf http://127.0.0.1:9090/health | node -e \"process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.stringify(JSON.parse(d),null,2)))\"",
+    "dashboard": "node scripts/dashboard.js",
     "bot:diagnose": "bash deploy/scripts/diagnose-server.sh",
     "clean": "turbo clean",
     "clean:all": "turbo clean:all",

@@ -42,7 +42,7 @@ export default class Kiss extends Command {
         else message = "SOULMATES! 💞";
 
         const embed = new EmbedBuilder()
-            .setColor('#FF69B4')
+            .setColor(0x000000)
             .setDescription(`${ctx.author} kisses ${user}! ${message}`)
             .setImage(data.link)
             .setFooter({ text: `Love Meter: ${lovePercentage}% compatible` });

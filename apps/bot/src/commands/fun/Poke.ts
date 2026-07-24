@@ -34,7 +34,7 @@ export default class Poke extends Command {
         const data = await body.json() as { link: string };
         
         const embed = new EmbedBuilder()
-            .setColor('#FF69B4')
+            .setColor(0x000000)
             .setDescription(`${ctx.author} pokes ${user}!`)
             .setImage(data.link);
 

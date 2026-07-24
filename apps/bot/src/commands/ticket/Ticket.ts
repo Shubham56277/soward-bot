@@ -7,12 +7,16 @@ import {
 	ChannelType,
 	ColorResolvable,
 	ComponentType,
+	ContainerBuilder,
 	EmbedBuilder,
 	MessageFlags,
 	ModalBuilder,
 	RoleSelectMenuBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
 	TextChannel,
+	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 	parseEmoji,
@@ -120,24 +124,23 @@ export default class TicketCommand extends Command {
 		}
 	}
 
-	// Helper function to create styled embeds
-	private createStyledEmbed(title: string, description: string, color: ColorResolvable): EmbedBuilder {
-		return new EmbedBuilder()
-			.setTitle(`🎫 ${title}`)
-			.setDescription(description)
-			.setColor(color)
-			.setFooter({ text: "Ticket System • Made with ❤️" })
-			.setTimestamp();
+	// Helper function to create styled panels (Components V2)
+	private createStyledPanel(title: string, description: string): ContainerBuilder {
+		return new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🎫 ${title}**`))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(description))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Ticket System • Made with ❤️`));
 	}
 
 	public async run(ctx: Context): Promise<any> {
 		const subcommand = ctx.options.getSubCommand(true, 0);
 
 		if (subcommand === "create") {
-			const welcomeEmbed = this.createStyledEmbed(
+			const welcomeEmbed = this.createStyledPanel(
 				"Ticket System Creation",
-				"Welcome to the interactive ticket setup wizard! Choose how you'd like to set up your ticket system:",
-				ctx.client.config.colors.main
+				"Welcome to the interactive ticket setup wizard! Choose how you'd like to set up your ticket system:"
 			);
 
 			const styleRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -216,10 +219,9 @@ export default class TicketCommand extends Command {
 					);
 
 					await interaction.editReply({
-						embeds: [this.createStyledEmbed(
+						embeds: [this.createStyledPanel(
 							"Template Selection",
-							"Choose a pre-made template for your ticket system:",
-							ctx.client.config.colors.main
+							"Choose a pre-made template for your ticket system:"
 						)],
 						components: [templateSelect]
 					});
@@ -305,10 +307,9 @@ export default class TicketCommand extends Command {
 			collector.on("end", async (collected, reason) => {
 				if (reason === "time" && collected.size === 0) {
 					await message.edit({
-						embeds: [this.createStyledEmbed(
+						embeds: [this.createStyledPanel(
 							"Setup Wizard Closed",
-							"The ticket setup wizard has timed out. Please run the command again if you want to create a ticket system.",
-							"Red"
+							"The ticket setup wizard has timed out. Please run the command again if you want to create a ticket system."
 						)],
 						components: []
 					});
@@ -331,10 +332,9 @@ export default class TicketCommand extends Command {
 				});
 			}
 
-			const confirmEmbed = this.createStyledEmbed(
+			const confirmEmbed = this.createStyledPanel(
 				"Delete Ticket System",
-				`Are you sure you want to delete the ticket system in <#${channel.id}>? This action cannot be undone.`,
-				"Red"
+				`Are you sure you want to delete the ticket system in <#${channel.id}>? This action cannot be undone.`
 			);
 
 			const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -393,10 +393,9 @@ export default class TicketCommand extends Command {
 					await TicketConfig.delete(ticketConfig.id);
 
 					await interaction.editReply({
-						embeds: [this.createStyledEmbed(
+						embeds: [this.createStyledPanel(
 							"Ticket System Deleted",
-							`<:Tick:1375519268292264012> Successfully deleted the ticket system in <#${channel.id}>.`,
-							"Green"
+							`<:Tick:1375519268292264012> Successfully deleted the ticket system in <#${channel.id}>.`
 						)],
 						components: []
 					});
@@ -404,10 +403,9 @@ export default class TicketCommand extends Command {
 					await interaction.deferUpdate();
 
 					await interaction.editReply({
-						embeds: [this.createStyledEmbed(
+						embeds: [this.createStyledPanel(
 							"Action Cancelled",
-							"The deletion has been cancelled.",
-							ctx.client.config.colors.main
+							"The deletion has been cancelled."
 						)],
 						components: []
 					});
@@ -417,10 +415,9 @@ export default class TicketCommand extends Command {
 			collector.on("end", async (collected, reason) => {
 				if (reason === "time" && collected.size === 0) {
 					await message.edit({
-						embeds: [this.createStyledEmbed(
+						embeds: [this.createStyledPanel(
 							"Action Cancelled",
-							"The deletion has been cancelled due to timeout.",
-							ctx.client.config.colors.main
+							"The deletion has been cancelled due to timeout."
 						)],
 						components: []
 					});
@@ -459,10 +456,9 @@ export default class TicketCommand extends Command {
 				});
 			}
 
-			const editEmbed = this.createStyledEmbed(
+			const editEmbed = this.createStyledPanel(
 				"Edit Ticket System",
-				"Choose what you want to edit:",
-				ctx.client.config.colors.main
+				"Choose what you want to edit:"
 			);
 
 			const editRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -573,7 +569,7 @@ export default class TicketCommand extends Command {
 				});
 			}
 
-			const infoEmbed = this.createStyledEmbed(
+			const infoEmbed = this.createStyledPanel(
 				"Ticket System Info",
 				[
 					`**Panel Channel:** <#${ticketConfig.channelId}>`,
@@ -583,8 +579,7 @@ export default class TicketCommand extends Command {
 					`**Support Roles:** ${ticketConfig.supportRoles.length ? ticketConfig.supportRoles.map(role => `<@&${role}>`).join(", ") : "None"}`,
 					`**Open Limit:** ${ticketConfig.openLimit || "None"}`,
 					`**Logger Channel:** ${ticketConfig.loggerChannelId ? `<#${ticketConfig.loggerChannelId}>` : "None"}`,
-				].join("\n"),
-				ctx.client.config.colors.main
+				].join("\n")
 			);
 
 			const actionsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -650,10 +645,9 @@ export default class TicketCommand extends Command {
 				});
 			}
 
-			const listEmbed = this.createStyledEmbed(
+			const listEmbed = this.createStyledPanel(
 				"Ticket Systems List",
-				`Found ${ticketConfigs.length} ticket system${ticketConfigs.length > 1 ? 's' : ''} in this server:`,
-				ctx.client.config.colors.main
+				`Found ${ticketConfigs.length} ticket system${ticketConfigs.length > 1 ? 's' : ''} in this server:`
 			);
 
 			// Add field for each ticket system
@@ -702,16 +696,16 @@ export default class TicketCommand extends Command {
 				.setEmoji(options.buttonEmoji)
 		);
 
-		const embed = new EmbedBuilder()
-			.setTitle(options.title)
-			.setDescription(options.description)
-			.setColor(ctx.client.config.colors.main)
-			.setFooter({ text: `${ctx.guild.name} • Ticket System` })
-			.setTimestamp();
+		const embed = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${options.title}**`))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(options.description))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${ctx.guild.name} • Ticket System`));
 
 		const message = await channel?.send({
-			embeds: [embed],
-			components: [button],
+			components: [embed, button],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		if (!message) {
@@ -731,7 +725,7 @@ export default class TicketCommand extends Command {
 			loggerChannelId: null,
 		});
 
-		const successEmbed = this.createStyledEmbed(
+		const successEmbed = this.createStyledPanel(
 			"Ticket System Created",
 			[
 				"<:Tick:1375519268292264012> Successfully created the ticket system!",
@@ -741,8 +735,7 @@ export default class TicketCommand extends Command {
 				`**Panel Message:** [Click Here](${message.url})`,
 				"",
 				"**What would you like to do next?**"
-			].join("\n"),
-			"Green"
+			].join("\n")
 		);
 
 		const nextStepsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -791,10 +784,9 @@ export default class TicketCommand extends Command {
 			if (i.customId === "add_options") {
 				await i.deferUpdate();
 
-				const optionsEmbed = this.createStyledEmbed(
+				const optionsEmbed = this.createStyledPanel(
 					"Additional Options",
-					"Select what you want to add to your ticket system:",
-					ctx.client.config.colors.main
+					"Select what you want to add to your ticket system:"
 				);
 
 				const optionsRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -856,10 +848,9 @@ export default class TicketCommand extends Command {
 			else if (i.customId === "customize_panel") {
 				await i.deferUpdate();
 
-				const customizeEmbed = this.createStyledEmbed(
+				const customizeEmbed = this.createStyledPanel(
 					"Customize Panel",
-					"Select what you want to customize:",
-					ctx.client.config.colors.main
+					"Select what you want to customize:"
 				);
 
 				const customizeRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -959,13 +950,13 @@ export default class TicketCommand extends Command {
 			"Confirm & Create"
 		];
 
-		let embed: EmbedBuilder;
+		let embed: ContainerBuilder;
 		let components: ActionRowBuilder<any>[] = [];
 
 		switch (setupData.step) {
 			case 1: {
 				// Step 1: Select Category
-				embed = this.createStyledEmbed(
+				embed = this.createStyledPanel(
 					"Manual Setup - Step 1/6",
 					[
 						"**Select a category where tickets will be created**",
@@ -975,8 +966,7 @@ export default class TicketCommand extends Command {
 						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n") || "Getting started..."}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
-					].join("\n"),
-					ctx.client.config.colors.main
+					].join("\n")
 				);
 
 				const categorySelect = new ChannelSelectMenuBuilder()
@@ -1001,7 +991,7 @@ export default class TicketCommand extends Command {
 
 			case 2: {
 				// Step 2: Select Channel
-				embed = this.createStyledEmbed(
+				embed = this.createStyledPanel(
 					"Manual Setup - Step 2/6",
 					[
 						"**Select a channel for the ticket panel**",
@@ -1012,8 +1002,7 @@ export default class TicketCommand extends Command {
 						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
-					].join("\n"),
-					ctx.client.config.colors.main
+					].join("\n")
 				);
 
 				const channelSelect = new ChannelSelectMenuBuilder()
@@ -1038,7 +1027,7 @@ export default class TicketCommand extends Command {
 
 			case 3: {
 				// Step 3: Customize Embed
-				embed = this.createStyledEmbed(
+				embed = this.createStyledPanel(
 					"Manual Setup - Step 3/6",
 					[
 						"**Customize the ticket panel embed**",
@@ -1054,8 +1043,7 @@ export default class TicketCommand extends Command {
 						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
-					].join("\n"),
-					ctx.client.config.colors.main
+					].join("\n")
 				);
 
 				const customizeEmbedBtn = new ButtonBuilder()
@@ -1084,7 +1072,7 @@ export default class TicketCommand extends Command {
 
 			case 4: {
 				// Step 4: Customize Button
-				embed = this.createStyledEmbed(
+				embed = this.createStyledPanel(
 					"Manual Setup - Step 4/6",
 					[
 						"**Customize the ticket creation button**",
@@ -1102,8 +1090,7 @@ export default class TicketCommand extends Command {
 						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
-					].join("\n"),
-					ctx.client.config.colors.main
+					].join("\n")
 				);
 
 				const customizeButtonBtn = new ButtonBuilder()
@@ -1132,7 +1119,7 @@ export default class TicketCommand extends Command {
 
 			case 5: {
 				// Step 5: Additional Settings
-				embed = this.createStyledEmbed(
+				embed = this.createStyledPanel(
 					"Manual Setup - Step 5/6",
 					[
 						"**Additional settings (Optional)**",
@@ -1151,8 +1138,7 @@ export default class TicketCommand extends Command {
 						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps[setupData.step]}`
-					].join("\n"),
-					ctx.client.config.colors.main
+					].join("\n")
 				);
 
 				const additionalSelect = new StringSelectMenuBuilder()
@@ -1200,7 +1186,7 @@ export default class TicketCommand extends Command {
 
 			case 6: {
 				// Step 6: Confirm & Create
-				embed = this.createStyledEmbed(
+				embed = this.createStyledPanel(
 					"Manual Setup - Step 6/6",
 					[
 						"**Review and confirm your ticket system**",
@@ -1218,8 +1204,7 @@ export default class TicketCommand extends Command {
 						`**Logger Channel:** ${setupData.loggerChannel ? `<#${setupData.loggerChannel}>` : "None"}`,
 						"",
 						"**Ready to create your ticket system?**"
-					].join("\n"),
-					"Green"
+					].join("\n")
 				);
 
 				const createBtn = new ButtonBuilder()
@@ -1474,10 +1459,9 @@ export default class TicketCommand extends Command {
 	private async handleAdditionalSetting(ctx: Context, interaction: any, setupData: any, setting: string) {
 		switch (setting) {
 			case "add_support_roles": {
-				const embed = this.createStyledEmbed(
+				const embed = this.createStyledPanel(
 					"Add Support Roles",
-					"Select roles that can manage tickets:",
-					ctx.client.config.colors.main
+					"Select roles that can manage tickets:"
 				);
 
 				const roleSelect = new RoleSelectMenuBuilder()
@@ -1558,10 +1542,9 @@ export default class TicketCommand extends Command {
 			}
 
 			case "add_logger_channel": {
-				const embed = this.createStyledEmbed(
+				const embed = this.createStyledPanel(
 					"Add Logger Channel",
-					"Select a channel for ticket logs:",
-					ctx.client.config.colors.main
+					"Select a channel for ticket logs:"
 				);
 
 				const channelSelect = new ChannelSelectMenuBuilder()
@@ -1626,16 +1609,13 @@ export default class TicketCommand extends Command {
 				categoryId = category?.id;
 			}
 
-			// Create ticket panel embed
-			const ticketEmbed = new EmbedBuilder()
-				.setTitle(setupData.title)
-				.setDescription(setupData.description)
-				.setColor(ctx.client.config.colors.main)
-				.setTimestamp()
-				.setFooter({
-					text: "Click the button below to create a ticket",
-					iconURL: interaction.guild?.iconURL() || undefined
-				});
+			// Create ticket panel container
+			const ticketEmbed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${setupData.title}**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(setupData.description))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent("-# Click the button below to create a ticket"));
 
 			// Create ticket button
 			const ticketButton = new ButtonBuilder()
@@ -1651,8 +1631,8 @@ export default class TicketCommand extends Command {
 			const channel = interaction.guild?.channels.cache.get(setupData.channel);
 			if (channel && channel.isTextBased()) {
 				message = await channel.send({
-					embeds: [ticketEmbed],
-					components: [row]
+					components: [ticketEmbed, row],
+					flags: MessageFlags.IsComponentsV2,
 				});
 			}
 
@@ -1669,7 +1649,7 @@ export default class TicketCommand extends Command {
 			})
 
 			// Success message
-			const successEmbed = this.createStyledEmbed(
+			const successEmbed = this.createStyledPanel(
 				"<:Tick:1375519268292264012> Ticket System Created Successfully!",
 				[
 					`**Ticket panel sent to:** <#${setupData.channel}>`,
@@ -1679,8 +1659,7 @@ export default class TicketCommand extends Command {
 					setupData.loggerChannel ? `**Logger Channel:** <#${setupData.loggerChannel}>` : "",
 					"",
 					"Your ticket system is now active! Users can create tickets by clicking the button."
-				].filter(Boolean).join("\n"),
-				"Green"
+				].filter(Boolean).join("\n")
 			);
 
 			await interaction.editReply({
@@ -1823,10 +1802,9 @@ export default class TicketCommand extends Command {
 	}
 
 	private async handleLoggerChannelSelection(ctx: Context, interaction: any, setupData: any) {
-		const embed = this.createStyledEmbed(
+		const embed = this.createStyledPanel(
 			"Select Logger Channel",
-			"Choose a channel where ticket logs will be sent:",
-			ctx.client.config.colors.main
+			"Choose a channel where ticket logs will be sent:"
 		);
 
 		const channelSelect = new ChannelSelectMenuBuilder()
@@ -1866,12 +1844,12 @@ export default class TicketCommand extends Command {
 			}
 
 			// Create the ticket panel message
-			const embed = new EmbedBuilder()
-				.setTitle(setupData.title)
-				.setDescription(setupData.description)
-				.setColor(ctx.client.config.colors.main)
-				.setFooter({ text: `${ctx.guild.name} • Ticket System` })
-				.setTimestamp();
+			const embed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${setupData.title}**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(setupData.description))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${ctx.guild.name} • Ticket System`));
 
 			const button = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
@@ -1883,8 +1861,8 @@ export default class TicketCommand extends Command {
 
 			const channel = ctx.guild.channels.cache.get(setupData.channel) as TextChannel;
 			const message = await channel.send({
-				embeds: [embed],
-				components: [button],
+				components: [embed, button],
+				flags: MessageFlags.IsComponentsV2,
 			});
 
 			// Save to database
@@ -1899,7 +1877,7 @@ export default class TicketCommand extends Command {
 				loggerChannelId: setupData.loggerChannel,
 			});
 
-			const successEmbed = this.createStyledEmbed(
+			const successEmbed = this.createStyledPanel(
 				"Ticket System Created Successfully!",
 				[
 					"🎉 Your ticket system has been created and is now active!",
@@ -1915,8 +1893,7 @@ export default class TicketCommand extends Command {
 					"<:Tick:1375519268292264012> Users can now create tickets by clicking the button in the panel channel!",
 					"",
 					"**Need to make changes?** Use `/ticket edit` command."
-				].join("\n"),
-				"Green"
+				].join("\n")
 			);
 
 			const visitBtn = new ButtonBuilder()
@@ -1934,10 +1911,9 @@ export default class TicketCommand extends Command {
 		} catch (error) {
 			console.error("Error creating ticket system:", error);
 
-			const errorEmbed = this.createStyledEmbed(
+			const errorEmbed = this.createStyledPanel(
 				"Error Creating Ticket System",
-				"<:Cross:1375519752746958858> An error occurred while creating your ticket system. Please try again or contact support.",
-				"Red"
+				"<:Cross:1375519752746958858> An error occurred while creating your ticket system. Please try again or contact support."
 			);
 
 			await interaction.editReply({
@@ -2021,48 +1997,48 @@ export default class TicketCommand extends Command {
 			const colorValue = modalSubmit.fields.getTextInputValue("embed_color") || "#3498db";
 			const footerText = modalSubmit.fields.getTextInputValue("embed_footer") || `${ctx.guild.name} • Ticket System`;
 
-			// Parse color
-			let color: ColorResolvable = "#3498db";
+			// Parse color (kept for reference but not used in V2)
+			let _color: ColorResolvable = "#3498db";
 			try {
 				if (colorValue.startsWith("#")) {
-					color = colorValue as ColorResolvable;
+					_color = colorValue as ColorResolvable;
 				} else {
-					color = colorValue as ColorResolvable;
+					_color = colorValue as ColorResolvable;
 				}
 			} catch (error) {
 				console.error("Invalid color:", error);
 			}
 
-			// Create new embed
-			const newEmbed = new EmbedBuilder()
-				.setTitle(title)
-				.setDescription(description)
-				.setColor(color)
-				.setFooter({ text: footerText })
-				.setTimestamp();
+			// Create new container (Components V2)
+			const newEmbed = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(description))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${footerText}`));
 
 			// Edit the message
 			await ticketMessage.edit({
-				embeds: [newEmbed],
-				components: ticketMessage.components
+				components: [newEmbed, ...ticketMessage.components.slice(1)],
+				embeds: [],
+				flags: MessageFlags.IsComponentsV2,
 			});
 
 			// Send success message
 			await modalSubmit.editReply({
-				embeds: [this.createStyledEmbed(
+				components: [this.createStyledPanel(
 					"Embed Updated",
-					"<:Tick:1375519268292264012> Successfully updated the ticket embed!",
-					"Green"
+					"<:Tick:1375519268292264012> Successfully updated the ticket embed!"
 				)],
-				components: []
+				flags: MessageFlags.IsComponentsV2,
+				embeds: [],
 			});
 		} catch (error) {
 			console.error("Modal error:", error);
 			await interaction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Error",
-					"<:Cross:1375519752746958858> There was an error updating the embed. Please try again.",
-					"Red"
+					"<:Cross:1375519752746958858> There was an error updating the embed. Please try again."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2126,20 +2102,18 @@ export default class TicketCommand extends Command {
 			// Validate emoji
 			if (emoji && !this.isValidEmoji(emoji)) {
 				return modalSubmit.editReply({
-					embeds: [this.createStyledEmbed(
+					embeds: [this.createStyledPanel(
 						"Invalid Emoji",
-						"<:Cross:1375519752746958858> The emoji you entered is invalid. Please use a valid emoji.",
-						"Red"
+						"<:Cross:1375519752746958858> The emoji you entered is invalid. Please use a valid emoji."
 					)],
 					components: []
 				});
 			}
 
 			// Create style selector
-			const styleEmbed = this.createStyledEmbed(
+			const styleEmbed = this.createStyledPanel(
 				"Button Style",
-				"Choose a style for your button:",
-				ctx.client.config.colors.main
+				"Choose a style for your button:"
 			);
 
 			const styleRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -2219,10 +2193,9 @@ export default class TicketCommand extends Command {
 
 				// Send success message
 				await i.editReply({
-					embeds: [this.createStyledEmbed(
+					embeds: [this.createStyledPanel(
 						"Button Updated",
-						"<:Tick:1375519268292264012> Successfully updated the ticket button!",
-						"Green"
+						"<:Tick:1375519268292264012> Successfully updated the ticket button!"
 					)],
 					components: []
 				});
@@ -2231,10 +2204,9 @@ export default class TicketCommand extends Command {
 			styleCollector.on("end", async (collected, reason) => {
 				if (reason === "time" && collected.size === 0) {
 					await modalSubmit.editReply({
-						embeds: [this.createStyledEmbed(
+						embeds: [this.createStyledPanel(
 							"Action Cancelled",
-							"The button style selection has timed out.",
-							ctx.client.config.colors.main
+							"The button style selection has timed out."
 						)],
 						components: []
 					}).catch(() => null);
@@ -2243,10 +2215,9 @@ export default class TicketCommand extends Command {
 		} catch (error) {
 			console.error("Modal error:", error);
 			await interaction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Error",
-					"<:Cross:1375519752746958858> There was an error updating the button. Please try again.",
-					"Red"
+					"<:Cross:1375519752746958858> There was an error updating the button. Please try again."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2266,10 +2237,9 @@ export default class TicketCommand extends Command {
 		);
 
 		await interaction.editReply({
-			embeds: [this.createStyledEmbed(
+			embeds: [this.createStyledPanel(
 				"Select Support Roles",
-				"Select the roles that should have access to tickets when they are created:",
-				ctx.client.config.colors.main
+				"Select the roles that should have access to tickets when they are created:"
 			)],
 			components: [roleSelector]
 		});
@@ -2302,20 +2272,18 @@ export default class TicketCommand extends Command {
 			});
 
 			await roleInteraction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Support Roles Added",
-					`<:Tick:1375519268292264012> Successfully added ${selectedRoles.length} support role${selectedRoles.length > 1 ? 's' : ''}!`,
-					"Green"
+					`<:Tick:1375519268292264012> Successfully added ${selectedRoles.length} support role${selectedRoles.length > 1 ? 's' : ''}!`
 				)],
 				components: []
 			});
 		} catch (error) {
 			console.error("Role selection error:", error);
 			await interaction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Selection Timed Out",
-					"You didn't select any roles in time. Please try again.",
-					"Red"
+					"You didn't select any roles in time. Please try again."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2334,10 +2302,9 @@ export default class TicketCommand extends Command {
 		);
 
 		await interaction.editReply({
-			embeds: [this.createStyledEmbed(
+			embeds: [this.createStyledPanel(
 				"Select Logger Channel",
-				"Select a channel where ticket logs will be sent:",
-				ctx.client.config.colors.main
+				"Select a channel where ticket logs will be sent:"
 			)],
 			components: [channelSelector]
 		});
@@ -2370,20 +2337,18 @@ export default class TicketCommand extends Command {
 			});
 
 			await channelInteraction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Logger Channel Added",
-					`<:Tick:1375519268292264012> Successfully set <#${selectedChannel}> as the logger channel!`,
-					"Green"
+					`<:Tick:1375519268292264012> Successfully set <#${selectedChannel}> as the logger channel!`
 				)],
 				components: []
 			});
 		} catch (error) {
 			console.error("Channel selection error:", error);
 			await interaction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Selection Timed Out",
-					"You didn't select a channel in time. Please try again.",
-					"Red"
+					"You didn't select a channel in time. Please try again."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2433,10 +2398,9 @@ export default class TicketCommand extends Command {
 			const limit = Number.parseInt(limitStr);
 			if (Number.isNaN(limit) || limit < 1 || limit > 10) {
 				return modalSubmit.editReply({
-					embeds: [this.createStyledEmbed(
+					embeds: [this.createStyledPanel(
 						"Invalid Limit",
-						"<:Cross:1375519752746958858> Please enter a valid number between 1 and 10.",
-						"Red"
+						"<:Cross:1375519752746958858> Please enter a valid number between 1 and 10."
 					)],
 					components: []
 				});
@@ -2448,20 +2412,18 @@ export default class TicketCommand extends Command {
 			});
 
 			await modalSubmit.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Open Limit Set",
-					`<:Tick:1375519268292264012> Successfully set the open ticket limit to ${limit} per user!`,
-					"Green"
+					`<:Tick:1375519268292264012> Successfully set the open ticket limit to ${limit} per user!`
 				)],
 				components: []
 			});
 		} catch (error) {
 			console.error("Modal error:", error);
 			await interaction.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					"Action Cancelled",
-					"The limit setting has timed out.",
-					ctx.client.config.colors.main
+					"The limit setting has timed out."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2472,10 +2434,9 @@ export default class TicketCommand extends Command {
 	private async handleChangeCategories(ctx: Context, interaction: any, ticketConfig: any) {
 		await interaction.deferUpdate();
 
-		const categoriesEmbed = this.createStyledEmbed(
+		const categoriesEmbed = this.createStyledPanel(
 			"Change Categories",
-			"Select what category you want to change:",
-			ctx.client.config.colors.main
+			"Select what category you want to change:"
 		);
 
 		const categoriesRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -2528,10 +2489,9 @@ export default class TicketCommand extends Command {
 				: "Select the category where open tickets will be placed:";
 
 			await i.editReply({
-				embeds: [this.createStyledEmbed(
+				embeds: [this.createStyledPanel(
 					title,
-					description,
-					ctx.client.config.colors.main
+					description
 				)],
 				components: [channelSelector]
 			});
@@ -2570,20 +2530,18 @@ export default class TicketCommand extends Command {
 				}
 
 				await categoryInteraction.editReply({
-					embeds: [this.createStyledEmbed(
+					embeds: [this.createStyledPanel(
 						"Category Updated",
-						`<:Tick:1375519268292264012> Successfully updated the category to <#${selectedCategory}>!`,
-						"Green"
+						`<:Tick:1375519268292264012> Successfully updated the category to <#${selectedCategory}>!`
 					)],
 					components: []
 				});
 			} catch (error) {
 				console.error("Category selection error:", error);
 				await i.editReply({
-					embeds: [this.createStyledEmbed(
+					embeds: [this.createStyledPanel(
 						"Selection Timed Out",
-						"You didn't select a category in time. Please try again.",
-						"Red"
+						"You didn't select a category in time. Please try again."
 					)],
 					components: []
 				}).catch(() => null);
@@ -2593,10 +2551,9 @@ export default class TicketCommand extends Command {
 		collector.on("end", async (collected: any, reason: any) => {
 			if (reason === "time" && collected.size === 0) {
 				await message.edit({
-					embeds: [this.createStyledEmbed(
+					embeds: [this.createStyledPanel(
 						"Action Cancelled",
-						"The category selection has timed out.",
-						ctx.client.config.colors.main
+						"The category selection has timed out."
 					)],
 					components: []
 				}).catch(() => null);

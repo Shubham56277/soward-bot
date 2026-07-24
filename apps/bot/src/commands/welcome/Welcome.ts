@@ -6,11 +6,15 @@ import {
 	ButtonInteraction,
 	ButtonStyle,
 	ChannelSelectMenuBuilder,
+	ContainerBuilder,
 	EmbedBuilder,
 	Message,
 	MessageFlags,
 	ModalBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
 	TextChannel,
+	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
@@ -19,6 +23,13 @@ import Context from "../../lib/Context";
 import { Welcome } from "@repo/db";
 import { replacePlaceholders } from "../../utils/helper";
 import { createWelcomeImage } from "../../utils/canvas";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class WelcomeCommand extends Command {
 	private collectors: Set<any> = new Set();
@@ -58,8 +69,8 @@ export default class WelcomeCommand extends Command {
 		this.collectors.clear();
 	}
 
-	private createChannelSelectionEmbed(baseEmbed: EmbedBuilder): EmbedBuilder {
-		return baseEmbed.setDescription(
+	private createChannelSelectionPanel(): ContainerBuilder {
+		return buildPanel("✨ Welcome Configuration",
 			"### Welcome Configuration\n" +
 			"Please select a channel where welcome messages will be sent\n\n" +
 			"🔹 This channel will receive notifications when new members join\n" +
@@ -104,13 +115,12 @@ export default class WelcomeCommand extends Command {
 			if (welcome.type === "card") {
 				const cardMessage = replacePlaceholders(welcome.message || "hey {mention} welcome to the {server}", ctx.member!, ctx.guild!);
 				const cardBuffer = await createWelcomeImage(ctx.member!, ctx.guild!);
-				const attachment = new AttachmentBuilder(cardBuffer, { name: "welcome.png" });
-
-				await interaction.reply({
-					content: cardMessage,
-					files: [attachment],
-					flags: MessageFlags.Ephemeral,
-				});
+				if (cardBuffer) {
+					const attachment = new AttachmentBuilder(cardBuffer, { name: "welcome.png" });
+					await interaction.reply({ content: cardMessage, files: [attachment], flags: MessageFlags.Ephemeral });
+				} else {
+					await interaction.reply({ content: cardMessage, flags: MessageFlags.Ephemeral });
+				}
 			} else if (welcome.type === "embed-text") {
 				if (welcome.embed) {
 					const embedData = welcome.embed;
@@ -217,18 +227,12 @@ export default class WelcomeCommand extends Command {
 					});
 					setTimeout(async () => {
 						try {
-							const baseEmbed = new EmbedBuilder()
-								.setTitle("✨ Welcome Message Setup")
-								.setDescription("Customize how new members are greeted")
-								.setColor(ctx.client.config.colors.main)
-
-							const channelSelectEmbed = this.createChannelSelectionEmbed(baseEmbed);
+							const channelPanel = this.createChannelSelectionPanel();
 							const channelRow = this.createChannelSelectRow();
 
 							await interaction.editReply({
 								content: null,
-								embeds: [channelSelectEmbed],
-								components: [channelRow],
+								components: [channelPanel, channelRow],
 							});
 						} catch (error) {
 							console.error("Error refreshing after reset:", error);
@@ -294,7 +298,7 @@ export default class WelcomeCommand extends Command {
 		}
 	}
 
-	private async handleCardWelcome(interaction: ButtonInteraction, ctx: Context, baseEmbed: EmbedBuilder): Promise<void> {
+	private async handleCardWelcome(interaction: ButtonInteraction, ctx: Context): Promise<void> {
 		try {
 			const welcome = await Welcome.update(ctx.guild!.id, {
 				type: "card",
@@ -302,15 +306,11 @@ export default class WelcomeCommand extends Command {
 
 			const variablesText = this.getVariablesText();
 
-			const embed = new EmbedBuilder()
-				.setColor(ctx.client.config.colors.main)
-				.setDescription(
-					`### Welcome Card Setup\nWelcome message will be sent in <#${welcome?.channelId}>\nA welcome card will be generated with the user's avatar\n\n**Please set a message to display on the card:**\n\`Example: hey {mention} welcome to the {server}\`\n\n${variablesText}`,
-				);
+			const cardBody = `### Welcome Card Setup\nWelcome message will be sent in <#${welcome?.channelId}>\nA welcome card will be generated with the user's avatar\n\n**Please set a message to display on the card:**\n\`Example: hey {mention} welcome to the {server}\`\n\n${variablesText}`;
 
 			await interaction.update({
-				embeds: [embed],
 				components: [
+					buildPanel("Welcome Card Setup", cardBody),
 					new ActionRowBuilder<ButtonBuilder>().addComponents(
 						new ButtonBuilder().setCustomId("welcome_message").setLabel("Set Message").setEmoji("📝").setStyle(ButtonStyle.Primary),
 						new ButtonBuilder().setCustomId("welcome_skip").setLabel("Use Default").setEmoji("➡️").setStyle(ButtonStyle.Secondary),
@@ -331,7 +331,7 @@ export default class WelcomeCommand extends Command {
 		}
 	}
 
-	private async handleEmbedMessageWelcome(interaction: ButtonInteraction, ctx: Context, baseEmbed: EmbedBuilder): Promise<void> {
+	private async handleEmbedMessageWelcome(interaction: ButtonInteraction, ctx: Context): Promise<void> {
 		try {
 			const welcome = await Welcome.update(ctx.guild!.id, {
 				type: "embed-text",
@@ -339,15 +339,11 @@ export default class WelcomeCommand extends Command {
 
 			const variablesText = this.getVariablesText();
 
-			const embed = new EmbedBuilder()
-				.setColor(ctx.client.config.colors.main)
-				.setDescription(
-					`### Embed + Message Setup\nWelcome message will be sent in <#${welcome?.channelId}>\n\n**You can send either:**\n🔹 **Upload JSON File** - Upload a .json file with embed data\n🔹 **Text Message** - Simple text message\n\n${variablesText}\n\n✨ **Need help making Embed JSON?** Try it here: [embed.appujet.site](https://embed.appujet.site)\n\n**Example Embed JSON:**\n\`\`\`json\n{\n  "title": "Welcome to {server}!",\n  "description": "Hey {mention}, welcome to our server!",\n  "color": 5814783,\n  "thumbnail": {\n    "url": "{avatar}"\n  }\n}\n\`\`\``
-				);
+			const embedMsgBody = `### Embed + Message Setup\nWelcome message will be sent in <#${welcome?.channelId}>\n\n**You can send either:**\n🔹 **Upload JSON File** - Upload a .json file with embed data\n🔹 **Text Message** - Simple text message\n\n${variablesText}\n\n✨ **Need help making Embed JSON?** Try it here: [embed.appujet.site](https://embed.appujet.site)\n\n**Example Embed JSON:**\n\`\`\`json\n{\n  "title": "Welcome to {server}!",\n  "description": "Hey {mention}, welcome to our server!",\n  "color": 5814783,\n  "thumbnail": {\n    "url": "{avatar}"\n  }\n}\n\`\`\``;
 
 			await interaction.update({
-				embeds: [embed],
 				components: [
+					buildPanel("Embed + Message Setup", embedMsgBody),
 					new ActionRowBuilder<ButtonBuilder>().addComponents(
 						new ButtonBuilder().setCustomId("welcome_upload_json").setLabel("Upload JSON File").setEmoji("📁").setStyle(ButtonStyle.Primary),
 						new ButtonBuilder().setCustomId("welcome_text_message").setLabel("Set Text Message").setEmoji("📝").setStyle(ButtonStyle.Secondary),
@@ -435,18 +431,16 @@ export default class WelcomeCommand extends Command {
 									enabled: true
 								});
 
-								const embed = new EmbedBuilder()
-									.setColor(ctx.client.config.colors.main)
-									.setTitle("<:Tick:1375519268292264012> JSON File Uploaded Successfully")
-									.setDescription(
+								const embed = new ContainerBuilder()
+									.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+										`## <:Tick:1375519268292264012> JSON File Uploaded Successfully\n` +
 										`### Welcome Embed Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Uploaded JSON File\n**File:** ${jsonAttachment.name}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
-									);
+									));
 
 								const managementRow = this.createManagementRow();
 
 								await message.edit({
-									embeds: [embed],
-									components: [managementRow],
+									components: [embed, managementRow],
 								});
 
 								// Delete the user's message with the file
@@ -509,18 +503,16 @@ export default class WelcomeCommand extends Command {
 							enabled: true
 						});
 
-						const embed = new EmbedBuilder()
-							.setColor(ctx.client.config.colors.main)
-							.setTitle("<:Tick:1375519268292264012> Text Message Setup Complete")
-							.setDescription(
-								`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Text Message\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`,
-							);
+						const embed = new ContainerBuilder()
+							.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+								`## <:Tick:1375519268292264012> Text Message Setup Complete\n` +
+								`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Text Message\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
+							));
 
 						const managementRow = this.createManagementRow();
 
 						await modalSubmit.editReply({
-							embeds: [embed],
-							components: [managementRow],
+							components: [embed, managementRow],
 						});
 					}
 				} else if (init.customId === "welcome_skip_embed") {
@@ -542,18 +534,16 @@ export default class WelcomeCommand extends Command {
 						enabled: true,
 					});
 
-					const embed = new EmbedBuilder()
-						.setColor(ctx.client.config.colors.main)
-						.setTitle("<:Tick:1375519268292264012> Default Embed Setup Complete")
-						.setDescription(
-							`### Welcome Embed Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Default Embed JSON\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`,
-						);
+					const embed = new ContainerBuilder()
+						.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+							`## <:Tick:1375519268292264012> Default Embed Setup Complete\n` +
+							`### Welcome Embed Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Default Embed JSON\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
+						));
 
 					const managementRow = this.createManagementRow();
 
 					await init.update({
-						embeds: [embed],
-						components: [managementRow],
+						components: [embed, managementRow],
 					});
 				}
 			} catch (error) {
@@ -565,12 +555,12 @@ export default class WelcomeCommand extends Command {
 			this.collectors.delete(collector);
 		});
 	}
-	private createConfigMenuEmbed(baseEmbed: EmbedBuilder, welcome: any): EmbedBuilder {
+	private createConfigMenuPanel(welcome: any): ContainerBuilder {
 		const status = welcome?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled";
 		const type = this.formatWelcomeType(welcome?.type);
 		const channel = welcome?.channelId ? `<#${welcome.channelId}>` : "Not set";
 
-		return baseEmbed.setDescription(
+		return buildPanel("✨ Welcome Configuration",
 			`### Welcome Configuration\nCustomize how new members are greeted in your server\n\n**Status:** ${status}\n**Type:** ${type}\n**Channel:** ${channel}\n\nSelect an option below to configure your welcome message`,
 		);
 	}
@@ -625,18 +615,16 @@ export default class WelcomeCommand extends Command {
 						await modalSubmit.deferUpdate();
 						const updatedWelcome = await Welcome.update(ctx.guild!.id, { message: messageText, enabled: true });
 
-						const embed = new EmbedBuilder()
-							.setColor(ctx.client.config.colors.main)
-							.setTitle("<:Tick:1375519268292264012> Setup Complete")
-							.setDescription(
-								`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`,
-							);
+						const embed = new ContainerBuilder()
+							.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+								`## <:Tick:1375519268292264012> Setup Complete\n` +
+								`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
+							));
 
 						const managementRow = this.createManagementRow();
 
 						await modalSubmit.editReply({
-							embeds: [embed],
-							components: [managementRow],
+							components: [embed, managementRow],
 						});
 					}
 				} else if (init.customId === "welcome_skip") {
@@ -645,18 +633,16 @@ export default class WelcomeCommand extends Command {
 						enabled: true,
 					});
 
-					const embed = new EmbedBuilder()
-						.setColor(ctx.client.config.colors.main)
-						.setTitle("<:Tick:1375519268292264012> Setup Complete")
-						.setDescription(
-							`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`,
-						);
+					const embed = new ContainerBuilder()
+						.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+							`## <:Tick:1375519268292264012> Setup Complete\n` +
+							`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
+						));
 
 					const managementRow = this.createManagementRow();
 
 					await init.update({
-						embeds: [embed],
-						components: [managementRow],
+						components: [embed, managementRow],
 					});
 				}
 			} catch (error) {
@@ -691,14 +677,8 @@ export default class WelcomeCommand extends Command {
 	public async run(ctx: Context): Promise<any> {
 		this.cleanupCollectors();
 
-		const mainColor = ctx.client.config.colors.main;
 		const welcome = await Welcome.get(ctx.guild!.id);
 		let setupMsg: Message | undefined;
-
-		const baseEmbed = new EmbedBuilder()
-			.setTitle("✨ Welcome Message Setup")
-			.setColor(mainColor)
-			.setFooter({ text: "Customize how new members are greeted" });
 
 		const filter = (interaction: any) => {
 			if (interaction.user.id === ctx.author?.id) return true;
@@ -710,20 +690,20 @@ export default class WelcomeCommand extends Command {
 		};
 
 		if (!welcome) {
-			const channelSelectEmbed = this.createChannelSelectionEmbed(baseEmbed);
+			const channelPanel = this.createChannelSelectionPanel();
 			const channelRow = this.createChannelSelectRow();
 
 			setupMsg = await ctx.editOrReply({
-				embeds: [channelSelectEmbed],
-				components: [channelRow],
+				components: [channelPanel, channelRow],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		} else {
-			const configEmbed = this.createConfigMenuEmbed(baseEmbed, welcome);
+			const configPanel = this.createConfigMenuPanel(welcome);
 			const buttonRow = this.createMainButtonRow();
 
 			setupMsg = await ctx.editOrReply({
-				embeds: [configEmbed],
-				components: [buttonRow],
+				components: [configPanel, buttonRow],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
@@ -744,17 +724,16 @@ export default class WelcomeCommand extends Command {
 					const channelId = interaction.values[0];
 					await Welcome.update(ctx.guild!.id, { channelId });
 					await interaction.update({
-						embeds: [this.createConfigMenuEmbed(baseEmbed, { channelId })],
-						components: [this.createMainButtonRow()],
+						components: [this.createConfigMenuPanel({ channelId }), this.createMainButtonRow()],
 					});
 				}
 
 				if (customId === "welcome_type_card") {
-					await this.handleCardWelcome(interaction as ButtonInteraction, ctx, baseEmbed);
+					await this.handleCardWelcome(interaction as ButtonInteraction, ctx);
 				}
 
 				if (customId === "welcome_type_embed_message") {
-					await this.handleEmbedMessageWelcome(interaction as ButtonInteraction, ctx, baseEmbed);
+					await this.handleEmbedMessageWelcome(interaction as ButtonInteraction, ctx);
 				}
 
 				if (customId === "preview_welcome") {
@@ -775,12 +754,11 @@ export default class WelcomeCommand extends Command {
 
 				if (customId === "home") {
 					const currentWelcome = await Welcome.get(ctx.guild!.id);
-					const configEmbed = this.createConfigMenuEmbed(baseEmbed, currentWelcome);
+					const configPanel = this.createConfigMenuPanel(currentWelcome);
 					const buttonRow = this.createMainButtonRow();
 
 					await interaction.update({
-						embeds: [configEmbed],
-						components: [buttonRow],
+						components: [configPanel, buttonRow],
 					});
 				}
 			} catch (error) {

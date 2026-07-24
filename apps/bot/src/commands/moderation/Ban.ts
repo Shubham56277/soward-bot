@@ -1,4 +1,4 @@
-import { EmbedBuilder, GuildMember, ApplicationCommandOptionType, Colors } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -51,65 +51,50 @@ export default class Ban extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         // Get target user
         const target = ctx.options.getMember("user") as GuildMember | null;
         const targetUser = ctx.options.getUser("user", true);
         const silent = ctx.options.getBoolean("silent", false, 2) ?? false;
 
-        // Handle user not found
         if (!targetUser) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("User not found");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("User not found."));
         }
 
         // Get reason
         let reason = ctx.options.getString("reason", false, 1) || "No reason provided";
 
-        // Handle text command arguments
         if (!ctx.isInteraction) {
             const args = ctx.args.slice(1);
-            if (args.length > 0) {
-                reason = args.join(" ");
-            }
+            if (args.length > 0) reason = args.join(" ");
         }
 
         if (targetUser.id === ctx.author?.id) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot ban yourself");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot ban yourself."));
         }
 
         if (targetUser.id === ctx.client.user?.id) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot ban me");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot ban me."));
         }
 
         if (targetUser.id === ctx.guild.ownerId) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot ban the server owner");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot ban the server owner."));
         }
 
         const moderatorPosition = ctx.member?.roles.highest.position ?? 0;
         if (target && target.roles.highest.position >= moderatorPosition && ctx.author?.id !== ctx.guild.ownerId) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("You cannot ban someone with higher or equal role");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("You cannot ban someone with a higher or equal role."));
         }
 
         if (target && ctx.guild.members.me && target.roles.highest.position >= ctx.guild.members.me.roles.highest.position) {
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription(" I cannot ban someone with higher or equal role");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("I cannot ban someone with a higher or equal role."));
         }
 
         try {
@@ -117,41 +102,33 @@ export default class Ban extends Command {
             if (!silent) {
                 try {
                     const dmEmbed = new EmbedBuilder()
-                        .setColor(Colors.Red)
+                        .setColor(0x000000)
                         .setTitle(`You've been banned from ${ctx.guild.name}`)
                         .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.toString() || "Unknown"}`)
                         .setTimestamp();
-
                     await targetUser.send({ embeds: [dmEmbed] });
                 } catch {
                     // DMs are closed, continue anyway
                 }
             }
 
-            // Execute the ban
             await ctx.guild.members.ban(targetUser, { reason });
 
-            // Create audit log embed
-            const banEmbed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setTitle("🔨 Member Banned")
-                .setDescription(
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔨 Member Banned**`))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `**User:** ${targetUser.toString()}\n` +
                     `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
                     `**Reason:** ${reason}`
-                )
-                .setThumbnail(targetUser.displayAvatarURL())
-                .setFooter({ text: `ID: ${targetUser.id}` })
-                .setTimestamp();
+                ))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${targetUser.id}`));
 
-            return await ctx.sendMessage({ embeds: [banEmbed] });
-
+            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         } catch (error) {
             console.error("Ban Error:", error);
-            const embed = new EmbedBuilder()
-                .setColor(Colors.Red)
-                .setDescription("<:Cross:1375519752746958858> An error occurred while trying to ban this user");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("<:Cross:1375519752746958858> An error occurred while trying to ban this user."));
         }
     }
 }

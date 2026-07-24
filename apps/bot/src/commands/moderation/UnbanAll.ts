@@ -1,4 +1,4 @@
-import { EmbedBuilder, ApplicationCommandOptionType, Colors } from "discord.js";
+import { EmbedBuilder, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -58,7 +58,7 @@ export default class UnbanAll extends Command {
 
 		// Confirm action
 		const confirmEmbed = new EmbedBuilder()
-			.setColor(Colors.Yellow)
+			.setColor(0x000000)
 			.setTitle("⚠️ Confirm Mass Unban")
 			.setDescription(`This will unban up to ${limit} users. Are you sure you want to proceed?`)
 			.addFields({ name: "Reason", value: reason });
@@ -95,20 +95,20 @@ export default class UnbanAll extends Command {
 
 			if (confirmation.customId === "cancel_unban") {
 				await confirmation.update({
-					embeds: [new EmbedBuilder().setColor(Colors.Green).setDescription("<:Tick:1375519268292264012> Mass unban cancelled")],
+					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> Mass unban cancelled")],
 					components: [],
 				});
 				return;
 			}
 
 			await confirmation.update({
-				embeds: [new EmbedBuilder().setColor(Colors.Blue).setDescription("⏳ Processing unbans...")],
+				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("⏳ Processing unbans...")],
 				components: [],
 			});
 		} catch (_error) {
 			// Interaction timed out
 			await confirmMessage.edit({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
+				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
 				components: [],
 			});
 			return;
@@ -121,13 +121,13 @@ export default class UnbanAll extends Command {
 			const totalBans = bannedUsers.length;
 
 			if (totalBans === 0) {
-				const embed = new EmbedBuilder().setColor(Colors.Green).setDescription("<:Tick:1375519268292264012> No users are currently banned");
+				const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> No users are currently banned");
 				return await ctx.sendMessage({ embeds: [embed] });
 			}
 
 			// Initialize progress embed
 			const progressEmbed = new EmbedBuilder()
-				.setColor(Colors.Blue)
+				.setColor(0x000000)
 				.setTitle("🔓 Processing Mass Unban")
 				.setDescription(`Unbanning ${totalBans} users...`)
 				.addFields({ name: "Progress", value: `0/${totalBans} (0%)` }, { name: "Estimated Time", value: "Calculating..." }, { name: "Reason", value: reason });
@@ -176,7 +176,7 @@ export default class UnbanAll extends Command {
 			// Final result
 			const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 			const resultEmbed = new EmbedBuilder()
-				.setColor(Colors.Green)
+				.setColor(0x000000)
 				.setTitle("<:Tick:1375519268292264012> Mass Unban Complete")
 				.setDescription(`Successfully unbanned ${processed} users`)
 				.addFields({ name: "Total Time", value: `${elapsed} seconds` }, { name: "Reason", value: reason });
@@ -184,7 +184,7 @@ export default class UnbanAll extends Command {
 			await progressMessage.edit({ embeds: [resultEmbed] });
 		} catch (error) {
 			console.error("UnbanAll Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> An error occurred while processing the mass unban");
+			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> An error occurred while processing the mass unban");
 			await ctx.sendMessage({ embeds: [embed] });
 		}
 	}

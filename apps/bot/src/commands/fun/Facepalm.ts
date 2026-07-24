@@ -36,7 +36,7 @@ export default class Facepalm extends Command {
         else message = "BRAIN CELLS LOST FOREVER!";
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(0x000000)
             .setDescription(`${ctx.author} facepalms! ${message}`)
             .setImage(data.link)
             .setFooter({ text: `Facepalm Power: ${facepalmPower}%` });

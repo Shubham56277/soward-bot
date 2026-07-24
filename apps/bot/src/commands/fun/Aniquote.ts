@@ -29,7 +29,7 @@ export default class AnimeQuote extends Command {
         const data = await body.json() as { sentence: string, character: string, anime: string };
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(0x000000)
             .setTitle('Random Anime Quote')
             .setDescription(`"${data.sentence}"`)
             .addFields(

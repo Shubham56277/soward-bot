@@ -1122,7 +1122,7 @@ export class AuditLogService {
 			const logChannel = await AuditLogger.getChannelForType(guild.id, logType);
 			if (!logChannel) return;
 
-			const msgContainer = new ContainerBuilder().setAccentColor(this.client.config.colors.main);
+			const msgContainer = new ContainerBuilder();
 			const section = new SectionBuilder()
 				.addTextDisplayComponents(
 					new TextDisplayBuilder().setContent(

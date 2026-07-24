@@ -1,4 +1,4 @@
-import { ChannelType, EmbedBuilder } from "discord.js";
+import { ChannelType, ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -99,15 +99,11 @@ export default class Guildinfo extends Command {
 			topRoles.length ? topRoles.map((role) => role.toString()).join(" ") : "-# **No displayable roles.**",
 		].join("\n");
 
-		const embed = new EmbedBuilder()
-			.setColor(ctx.client.config.colors.main)
-			.setTitle(`${guild.name}'s Info`)
-			.setDescription(description)
-			.setFooter({
-				text: `${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · Powered by ${ctx.client.user?.username || "Soward"}`,
-			});
+		const panel = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder()
+				.setContent(`## ${guild.name}'s Info\n${description}\n\n-# ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · Powered by ${ctx.client.user?.username || "Soward"}`));
 
-		return ctx.editOrReply({ embeds: [embed], allowedMentions: { parse: [], repliedUser: false } });
+		return ctx.editOrReply({ components: [panel], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [], repliedUser: false } });
 	}
 }
 

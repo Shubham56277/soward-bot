@@ -38,7 +38,7 @@ export default class Nuke extends Command {
 
         // Confirmation embed
         const confirmEmbed = new EmbedBuilder()
-            .setColor('#FF0000')
+            .setColor(0x000000)
             .setTitle('⚠️ Channel Nuke Confirmation')
             .setDescription('Are you sure you want to nuke this channel? This will delete ALL messages and cannot be undone!')
             .setFooter({ text: 'This action will timeout in 30 seconds' });
@@ -87,7 +87,7 @@ export default class Nuke extends Command {
 
                 // Send confirmation to the clone
                 const embed = new EmbedBuilder()
-                    .setColor('#FF0000')
+                    .setColor(0x000000)
                     .setTitle('Channel Nuked 💥')
                     .setDescription(`This channel was nuked by ${ctx.author}`); 
 

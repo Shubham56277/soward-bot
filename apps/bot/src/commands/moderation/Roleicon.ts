@@ -51,7 +51,7 @@ export default class RoleIconCommand extends Command {
             return ctx.sendMessage({
                 embeds: [
                     new EmbedBuilder()
-                        .setColor(0xff0000)
+                        .setColor(0x000000)
                         .setTitle("Insufficient Server Boosts")
                         .setDescription("This server needs to be at least **level 2 boosted** to set role icons.")
                         .addFields(
@@ -120,7 +120,7 @@ export default class RoleIconCommand extends Command {
             return ctx.sendMessage({
                 embeds: [
                     new EmbedBuilder()
-                        .setColor(0xff0000)
+                        .setColor(0x000000)
                         .setTitle("Error Setting Role Icon")
                         .setDescription("An error occurred while trying to set the role icon. Please ensure:")
                         .addFields(

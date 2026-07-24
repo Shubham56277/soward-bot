@@ -6,11 +6,9 @@ lavalink:
       snapshot: false
     - dependency: com.github.topi314.sponsorblock:sponsorblock-plugin:3.0.1
       snapshot: false
-    - dependency: dev.lavalink.youtube:youtube-plugin:1.18.1
-      snapshot: false
   pluginsDir: ./plugins
   server:
-    bufferDurationMs: 225
+    bufferDurationMs: 1000
     filters:
       channelMix: true
       distortion: true
@@ -22,12 +20,12 @@ lavalink:
       tremolo: true
       vibrato: true
       volume: true
-    frameBufferDurationMs: 5000
+    frameBufferDurationMs: 8000
     gc-warnings: true
     nonAllocatingFrameBuffer: false
     opusEncodingQuality: 10
-    password: "SowardLavalink2025"
-    playerUpdateInterval: 1
+    password: "${LAVALINK_PASSWORD}"
+    playerUpdateInterval: 5
     resamplingQuality: HIGH
     soundcloudSearchEnabled: true
     sources:
@@ -40,10 +38,10 @@ lavalink:
       twitch: false
       vimeo: false
       youtube: false
-    trackStuckThresholdMs: 5000
+    trackStuckThresholdMs: 15000
     useSeekGhosting: true
-    youtubePlaylistLoadLimit: 2
-    youtubeSearchEnabled: true
+    youtubePlaylistLoadLimit: 0
+    youtubeSearchEnabled: false
 logging:
   file:
     max-history: 2
@@ -58,7 +56,7 @@ logging:
       max-history: 5
   request:
     enabled: false
-    includeClientInfo: true
+    includeClientInfo: false
     includeHeaders: false
     includePayload: false
     includeQueryString: true
@@ -81,46 +79,29 @@ plugins:
       voice: Anushri
     lyrics-sources:
       deezer: false
-      spotify: true
+      spotify: false
       vkmusic: false
       yandexmusic: false
-      youtube: true
+      youtube: false
     providers:
-      - "ytsearch:\"%ISRC%\""
-      - "ytsearch:%QUERY%"
+      - "amsearch:%QUERY%"
       - "scsearch:%QUERY%"
     sources:
       applemusic: true
       deezer: false
       flowerytts: true
       qobuz: false
-      spotify: true
+      spotify: false
       tidal: false
       vkmusic: false
       yandexmusic: false
-      youtube: true
+      youtube: false
     spotify:
-      albumLoadLimit: 4
+      albumLoadLimit: 0
       countryCode: IN
       localFiles: false
-      playlistLoadLimit: 2
-      resolveArtistsInSearch: true
-    youtube:
-      countryCode: IN
-      language: en
-  youtube:
-    allowDirectPlaylistIds: true
-    allowDirectVideoIds: true
-    allowSearch: true
-    clients:
-      - MUSIC
-      - ANDROID_VR
-      - WEB
-      - WEBEMBEDDED
-    enabled: true
-    oauth:
-      enabled: false
-      skipInitialization: true
+      playlistLoadLimit: 0
+      resolveArtistsInSearch: false
 sentry:
   dsn: ""
   environment: ""
@@ -128,4 +109,4 @@ server:
   address: 0.0.0.0
   http2:
     enabled: false
-  port: 2333
+  port: "${PORT:2333}"

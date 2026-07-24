@@ -102,21 +102,20 @@ export default class Ai extends Command {
 	}
 
 	private answerView(ctx: Context, answer: AiAnswer): ContainerBuilder {
+		const latency = answer.cached ? "cache" : `${(answer.latencyMs / 1_000).toFixed(2)}s`;
 		const container = new ContainerBuilder()
-			.setAccentColor(ctx.client.config.colors.main)
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## AI Answer\n-# **A private premium response.**"))
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
 		for (const part of splitText(answer.text, 3_500)) {
 			container.addTextDisplayComponents(new TextDisplayBuilder().setContent(part));
 		}
 		return container.addTextDisplayComponents(
-			new TextDisplayBuilder().setContent(`-# **${answer.provider} · ${answer.model} · ${answer.cached ? "Redis cache" : `${(answer.latencyMs / 1_000).toFixed(2)}s`}**`),
+			new TextDisplayBuilder().setContent(`-# Elfaria · Powered by AI · ${latency}`),
 		);
 	}
 
 	private sendNotice(ctx: Context, title: string, description: string): Promise<any> {
 		const view = new ContainerBuilder()
-			.setAccentColor(ctx.client.config.colors.main)
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}\n${description}`));
 		return ctx.sendMessage({ components: [view], flags: MessageFlags.IsComponentsV2 });
 	}

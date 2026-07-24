@@ -1,6 +1,6 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 
 export default class Invite extends Command {
     constructor() {
@@ -30,10 +30,8 @@ export default class Invite extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Invite the Bot!")
-            .setDescription("Add the bot to your server using the link below!")
+        const panel = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent("## Invite the Bot!\nAdd the bot to your server using the link below!"));
 
         const button = new ActionRowBuilder<ButtonBuilder>()
             .addComponents(
@@ -44,6 +42,6 @@ export default class Invite extends Command {
                     )
                     .setStyle(ButtonStyle.Link),
             );
-        return ctx.sendMessage({ embeds: [embed], components: [button] });
+        return ctx.sendMessage({ components: [panel, button], flags: MessageFlags.IsComponentsV2 });
     }
 }

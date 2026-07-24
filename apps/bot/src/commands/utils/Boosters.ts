@@ -1,4 +1,4 @@
-import { EmbedBuilder, Colors } from "discord.js";
+import { ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -7,9 +7,9 @@ export default class Boosters extends Command {
 		super({
 			name: "boosters",
 			description: {
-				content: "View all current server boosters",
-				examples: ["boosters"],
-				usage: "boosters",
+                content: "View all current server boosters",
+                examples: ["boosters"],
+                usage: "boosters",
 			},
 			category: "utils",
 			cooldown: 10,
@@ -28,18 +28,16 @@ export default class Boosters extends Command {
 
 		if (boosters.size === 0) {
 			return ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> No current boosters found.")],
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> No current boosters found."))],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
 		const list = boosters.map((member) => `• ${member.user.tag} (${member}) - Boosting since <t:${Math.floor(member.premiumSinceTimestamp! / 1000)}:R>`).join("\n");
 
-		const embed = new EmbedBuilder()
-			.setColor(Colors.Purple)
-			.setTitle("🚀 Current Server Boosters")
-			.setDescription(list)
-			.setFooter({ text: `Total Boosters: ${boosters.size}` });
+		const panel = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🚀 Current Server Boosters\n${list}\n\n-# Total Boosters: ${boosters.size}`));
 
-		await ctx.sendMessage({ embeds: [embed] });
+		await ctx.sendMessage({ components: [panel], flags: MessageFlags.IsComponentsV2 });
 	}
 }

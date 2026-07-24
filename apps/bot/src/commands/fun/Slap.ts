@@ -103,7 +103,7 @@ export default class Slap extends Command {
             const { url } = await body.json() as { url: string };
     
             const embed = new EmbedBuilder()
-                .setColor('#FF5555')
+                .setColor(0x000000)
                 .setAuthor({ 
                     name: `${ctx.author?.username} slaps ${user?.username}!`, 
                     iconURL: ctx.author?.displayAvatarURL() 

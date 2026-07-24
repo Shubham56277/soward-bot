@@ -1,4 +1,4 @@
-import { EmbedBuilder, GuildMember, ApplicationCommandOptionType, Colors, Role, PermissionFlagsBits, PermissionResolvable } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, Role, PermissionFlagsBits, PermissionResolvable } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -13,6 +13,13 @@ const dangerPermissions: PermissionResolvable[] = [
 	PermissionFlagsBits.MentionEveryone,
 	PermissionFlagsBits.ManageWebhooks,
 ];
+
+function msg(text: string): any {
+	return {
+		components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+		flags: MessageFlags.IsComponentsV2,
+	};
+}
 
 export default class GiveRole extends Command {
 	constructor() {
@@ -50,75 +57,72 @@ export default class GiveRole extends Command {
 		});
 	}
 
-	 private hasDangerousPermissions(role: Role): boolean {
-			return dangerPermissions.some(perm => role.permissions.has(perm));
-		}
+	private hasDangerousPermissions(role: Role): boolean {
+		return dangerPermissions.some(perm => role.permissions.has(perm));
+	}
+
 	public async run(ctx: Context): Promise<any> {
 		const target = ctx.options.getMember("user", 0) as GuildMember;
 		const role = ctx.options.getRole("role", true, 1) as Role;
 
 		if (!target) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("Member not found");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(msg("<:Cross:1375519752746958858> Member not found"));
 		}
 
 		if (!role) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("Role not found");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(msg("<:Cross:1375519752746958858> Role not found"));
 		}
+
 		if (this.hasDangerousPermissions(role) && ctx.author?.id !== ctx.guild.ownerId) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("You cannot give a role with dangerous permissions");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(msg("<:Cross:1375519752746958858> You cannot give a role with dangerous permissions"));
 		}
+
 		// Permission checks
 		if (role.position >= ctx.guild.members.me!.roles.highest.position) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("I cannot assign a role higher than my highest role");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(msg("<:Cross:1375519752746958858> I cannot assign a role higher than my highest role"));
 		}
 
 		if (role.position >= (ctx.member?.roles.highest.position ?? 0)) {
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("You cannot assign a role higher than your highest role");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(msg("<:Cross:1375519752746958858> You cannot assign a role higher than your highest role"));
 		}
 
 		if (target.roles.cache.has(role.id)) {
 			// remove role
 			try {
 				await target.roles.remove(role, `Removed by ${ctx.author?.tag}`);
-				const embed = new EmbedBuilder()
-					.setColor(Colors.Green)
-					.setTitle("<:Tick:1375519268292264012> Role Removed")
-					.setDescription(
+
+				const container = new ContainerBuilder()
+					.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**<:Tick:1375519268292264012> Role Removed**`))
+					.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+					.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 						`**Member:** ${target.toString()}\n` +
 						`**Role:** ${role.toString()}\n` +
 						`**Moderator:** ${ctx.author?.toString() || "Unknown"}`
-					);
+					));
 
-				return await ctx.sendMessage({ embeds: [embed] });
+				return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 			} catch (error) {
 				console.error("RemoveRole Error:", error);
-				const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Failed to remove role");
-				await ctx.sendMessage({ embeds: [embed] });
+				return await ctx.sendMessage(msg("<:Cross:1375519752746958858> Failed to remove role"));
 			}
 		}
 
 		try {
 			await target.roles.add(role, `Added by ${ctx.author?.tag}`);
 
-			const embed = new EmbedBuilder()
-				.setColor(Colors.Green)
-				.setTitle("<:Tick:1375519268292264012> Role Added")
-				.setDescription(
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**<:Tick:1375519268292264012> Role Added**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 					`**Member:** ${target.toString()}\n` +
 					`**Role:** ${role.toString()}\n` +
 					`**Moderator:** ${ctx.author?.toString() || "Unknown"}`
-				);
+				));
 
-			await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("GiveRole Error:", error);
-			const embed = new EmbedBuilder().setColor(Colors.Red).setDescription("<:Cross:1375519752746958858> Failed to add role");
-			await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(msg("<:Cross:1375519752746958858> Failed to add role"));
 		}
 	}
 }

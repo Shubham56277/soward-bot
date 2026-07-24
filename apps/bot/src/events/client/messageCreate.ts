@@ -63,28 +63,38 @@ export default class MessageCreate extends Event {
 						.then((msg) => setTimeout(() => msg.delete().catch(() => { }), 5000))
 						.catch(() => { });
 				}
+				const { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import("discord.js");
+				const botName = this.client.user?.username || "Elfaria";
+				const container = new ContainerBuilder()
+					.addTextDisplayComponents(
+						new TextDisplayBuilder().setContent(`## ${botName}`),
+					)
+					.addTextDisplayComponents(
+						new TextDisplayBuilder().setContent(
+							`A powerful multi-purpose Discord bot built for modern servers.\n\nGet started with \`${prefix}help\` to explore all commands, or invite me to your own server.`,
+						),
+					)
+					.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+					.addActionRowComponents(
+						new ActionRowBuilder<ButtonBuilder>().addComponents(
+							new ButtonBuilder()
+								.setLabel("Commands")
+								.setStyle(ButtonStyle.Secondary)
+								.setCustomId("mention_help_noop")
+								.setDisabled(true),
+							new ButtonBuilder()
+								.setLabel("Invite")
+								.setStyle(ButtonStyle.Link)
+								.setURL(this.client.config.links.invite),
+							new ButtonBuilder()
+								.setLabel("Support")
+								.setStyle(ButtonStyle.Link)
+								.setURL(this.client.config.links.supportServer),
+						),
+					);
 				await message.reply({
-					embeds: [
-						{
-							color: this.client.config.colors.main,
-							title: `✨ Hey ${message.author.username}!`,
-							fields: [
-								{
-									name: "How can I help you?",
-									value: [
-										`> ➡️ Use \`${prefix}help\` to get commands list`,
-										"> ➡️ If you have any problems you can join",
-										`> ↪️** [our support server](${this.client.config.links.supportServer}) **for help !`,
-									].join("\n"),
-								},
-								{
-									name: "Need Assistance?",
-									value: `Check out **[\`${prefix}help\`](${this.client.config.links.supportServer})** for a full list of commands or visit our **[Support Server](${this.client.config.links.supportServer})** to get help and stay updated.`,
-								},
-							],
-						},
-					],
-					flags: MessageFlags.SuppressNotifications,
+					components: [container],
+					flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications,
 				});
 				return;
 			}
@@ -312,7 +322,7 @@ export default class MessageCreate extends Event {
 						const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 						const embed = new EmbedBuilder()
-							.setColor("#FF69B4")
+							.setColor(0x000000)
 							.setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
 							.setDescription("Message Commad")
 							.addFields(
@@ -352,8 +362,9 @@ async function sendAiMessageResult(message: Message, result: AiRequestResult): P
 
 	const chunks = splitDiscordMessage(result.answer.text);
 	const first = chunks.shift() || "No response was returned.";
+	const latency = result.answer.cached ? "cache" : `${(result.answer.latencyMs / 1_000).toFixed(2)}s`;
 	await message.reply({
-		content: `${first}\n\n-# **${result.answer.provider} · ${result.answer.model} · ${result.answer.cached ? "Redis cache" : `${(result.answer.latencyMs / 1_000).toFixed(2)}s`}**`,
+		content: `${first}\n-# Elfaria · ${latency}`,
 		allowedMentions: { parse: [], repliedUser: false },
 		flags: MessageFlags.SuppressNotifications,
 	});

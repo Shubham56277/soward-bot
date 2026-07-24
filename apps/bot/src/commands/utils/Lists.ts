@@ -1,9 +1,20 @@
-import { ChannelType, EmbedBuilder, GuildMember, VoiceBasedChannel, ApplicationCommandOptionType, MessageFlags } from "discord.js";
+import { ChannelType, ContainerBuilder, GuildMember, VoiceBasedChannel, ApplicationCommandOptionType, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { Pagination } from "../../utils/Pagination";
+import { ContainerPagination } from "../../utils/Pagination";
 
 const CHUNK_SIZE = 10;
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
+
+function simplePanel(text: string): ContainerBuilder {
+	return new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
+}
 
 export default class ListCommand extends Command {
 	constructor() {
@@ -79,10 +90,8 @@ export default class ListCommand extends Command {
 				return this.listBans(ctx);
 			default:
 				return ctx.editOrReply({
-					embeds: [new EmbedBuilder()
-						.setColor(ctx.client.config.colors.main)
-						.setTitle("Invalid Subcommand")
-						.setDescription("Valid subcommands: `members`, `boosters`, `emojis`, `roles`, `bots`, `bans`")],
+					components: [buildPanel("Invalid Subcommand", "Valid subcommands: `members`, `boosters`, `emojis`, `roles`, `bots`, `bans`")],
+					flags: MessageFlags.IsComponentsV2,
 				});
 		}
 	}
@@ -104,21 +113,20 @@ export default class ListCommand extends Command {
 
 		if (filtered.length === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription(query ? `No members found matching "${query}".` : "No members found in this server.")],
+				components: [simplePanel(query ? `No members found matching "${query}".` : "No members found in this server.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
 		// Escape Discord markdown in usernames
 		const safeName = (name: string) => name.replace(/[*_~`|\\]/g, "\\$&");
 
-		const embeds = this.buildEmbeds(ctx, filtered, (m) =>
+		const pages = this.buildPages(ctx, filtered, (m) =>
 			`${m} - \\\`${safeName(m.user.id)}\\\``,
 			`Members (${filtered.length})${query ? ` matching "${query}"` : ""}`,
 		);
 
-		return this.sendPaginated(ctx, embeds);
+		return this.sendPaginated(ctx, pages);
 	}
 
 	private async listBoosters(ctx: Context): Promise<any> {
@@ -126,18 +134,17 @@ export default class ListCommand extends Command {
 
 		if (boosters.length === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("No server boosters found.")],
+				components: [simplePanel("No server boosters found.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
-		const embeds = this.buildEmbeds(ctx, boosters, (m) =>
+		const pages = this.buildPages(ctx, boosters, (m) =>
 			`${m} - Boosting since ${m.premiumSince?.toLocaleDateString() ?? "unknown"}`,
 			`Server Boosters (${boosters.length})`,
 		);
 
-		return this.sendPaginated(ctx, embeds);
+		return this.sendPaginated(ctx, pages);
 	}
 
 	private async listEmojis(ctx: Context): Promise<any> {
@@ -145,18 +152,17 @@ export default class ListCommand extends Command {
 
 		if (emojis.length === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("No emojis found in this server.")],
+				components: [simplePanel("No emojis found in this server.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
-		const embeds = this.buildEmbeds(ctx, emojis, (e) =>
+		const pages = this.buildPages(ctx, emojis, (e) =>
 			`${e} - \\\`${e.animated ? "<a:" : "<:"}${e.name}:${e.id}>\\\``,
 			`Server Emojis (${emojis.length})`,
 		);
 
-		return this.sendPaginated(ctx, embeds);
+		return this.sendPaginated(ctx, pages);
 	}
 
 	private async listRoles(ctx: Context): Promise<any> {
@@ -167,18 +173,17 @@ export default class ListCommand extends Command {
 
 		if (roles.length === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("No roles found in this server.")],
+				components: [simplePanel("No roles found in this server.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
-		const embeds = this.buildEmbeds(ctx, roles, (r) =>
+		const pages = this.buildPages(ctx, roles, (r) =>
 			`${r} - \\\`${r.id}\\\` (${r.members.size} members)`,
 			`Server Roles (${roles.length})`,
 		);
 
-		return this.sendPaginated(ctx, embeds);
+		return this.sendPaginated(ctx, pages);
 	}
 
 	private async listBots(ctx: Context): Promise<any> {
@@ -186,26 +191,24 @@ export default class ListCommand extends Command {
 
 		if (bots.length === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("No bots found in this server.")],
+				components: [simplePanel("No bots found in this server.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
-		const embeds = this.buildEmbeds(ctx, bots, (m) =>
+		const pages = this.buildPages(ctx, bots, (m) =>
 			`${m} - \\\`${m.user.id}\\\``,
 			`Bots (${bots.length})`,
 		);
 
-		return this.sendPaginated(ctx, embeds);
+		return this.sendPaginated(ctx, pages);
 	}
 
 	private async listBans(ctx: Context): Promise<any> {
 		if (!ctx.member?.permissions.has("BanMembers")) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("You need the **Ban Members** permission to view bans.")],
+				components: [simplePanel("You need the **Ban Members** permission to view bans.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
@@ -215,69 +218,59 @@ export default class ListCommand extends Command {
 
 			if (banArray.length === 0) {
 				return ctx.editOrReply({
-					embeds: [new EmbedBuilder()
-						.setColor(ctx.client.config.colors.main)
-						.setDescription("No bans found in this server.")],
+					components: [simplePanel("No bans found in this server.")],
+					flags: MessageFlags.IsComponentsV2,
 				});
 			}
 
 			const safeReason = (reason: string | null | undefined) =>
 				reason ? reason.replace(/[*_~`|\\]/g, "\\$&").slice(0, 500) : "No reason provided";
 
-			const embeds = this.buildEmbeds(ctx, banArray, (b) =>
+			const pages = this.buildPages(ctx, banArray, (b) =>
 				`**${b.user.tag}** (\\\`${b.user.id}\\\`)\nReason: ${safeReason(b.reason)}`,
 				`Banned Members (${banArray.length})`,
 			);
 
-			return this.sendPaginated(ctx, embeds);
+			return this.sendPaginated(ctx, pages);
 		} catch {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("I don't have permission to view bans, or an error occurred.")],
+				components: [simplePanel("I don't have permission to view bans, or an error occurred.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 	}
 
-	private buildEmbeds<T>(
+	private buildPages<T>(
 		ctx: Context,
 		items: T[],
 		format: (item: T) => string,
 		title: string,
-	): EmbedBuilder[] {
-		const embeds: EmbedBuilder[] = [];
+	): ContainerBuilder[] {
+		const pages: ContainerBuilder[] = [];
 		for (let i = 0; i < items.length; i += CHUNK_SIZE) {
 			const chunk = items.slice(i, i + CHUNK_SIZE);
 			const page = Math.floor(i / CHUNK_SIZE) + 1;
 			const totalPages = Math.ceil(items.length / CHUNK_SIZE);
 			const desc = chunk.map(format).join("\n");
-
-			// Respect Discord embed field limits (1024 chars per field, 6000 total)
-			const safeDesc = desc.length > 4096 ? `${desc.slice(0, 4093)}...` : desc;
-
-			embeds.push(new EmbedBuilder()
-				.setColor(ctx.client.config.colors.main)
-				.setTitle(title)
-				.setDescription(safeDesc)
-				.setFooter({ text: `Page ${page}/${totalPages} • ${items.length} total` }));
+			const safeDesc = desc.length > 4000 ? `${desc.slice(0, 3997)}...` : desc;
+			pages.push(buildPanel(title, safeDesc + `\n\n-# Page ${page}/${totalPages} • ${items.length} total`));
 		}
-		return embeds;
+		return pages;
 	}
 
-	private async sendPaginated(ctx: Context, embeds: EmbedBuilder[]): Promise<any> {
-		if (embeds.length === 0) {
+	private async sendPaginated(ctx: Context, pages: ContainerBuilder[]): Promise<any> {
+		if (pages.length === 0) {
 			return ctx.editOrReply({
-				embeds: [new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setDescription("No results found.")],
+				components: [simplePanel("No results found.")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
-		if (embeds.length === 1) {
-			return ctx.editOrReply({ embeds: [embeds[0]!] });
+		if (pages.length === 1) {
+			return ctx.editOrReply({ components: [pages[0]!], flags: MessageFlags.IsComponentsV2 });
 		}
 
-		const pagination = new Pagination(ctx, embeds);
+		const pagination = new ContainerPagination(ctx, pages);
 		return pagination.start();
 	}
 }

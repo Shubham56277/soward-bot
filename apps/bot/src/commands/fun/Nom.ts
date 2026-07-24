@@ -42,7 +42,7 @@ export default class Nom extends Command {
         else message = "DEVOURED WHOLE! 🍖";
 
         const embed = new EmbedBuilder()
-            .setColor('#FF69B4')
+            .setColor(0x000000)
             .setDescription(`${ctx.author} noms ${user}! ${message}`)
             .setImage(data.link)
             .setFooter({ text: `Hunger Level: ${hungerLevel}%` });

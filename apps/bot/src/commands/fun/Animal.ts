@@ -94,7 +94,7 @@ export default class Animal extends Command {
             const funStars = "⭐".repeat(funRating) + "☆".repeat(5 - funRating);
 
             const embed = new EmbedBuilder()
-                .setColor("#3BA55C")
+                .setColor(0x000000)
                 .setTitle(
                     `${animal.charAt(0).toUpperCase() + animal.slice(1)} Fact`,
                 )

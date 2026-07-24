@@ -144,7 +144,6 @@ export default class Stats extends Command {
 			)
 			.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription(`${botName} profile picture`));
 		const container = new ContainerBuilder()
-			.setAccentColor(client.config.colors.main)
 			.addSectionComponents(heading)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
 

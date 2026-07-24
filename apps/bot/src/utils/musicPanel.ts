@@ -45,13 +45,13 @@ export function createMusicPanel(player: Player, track: Track, accentColor: numb
 	const details = new SectionBuilder()
 		.addTextDisplayComponents(
 			new TextDisplayBuilder().setContent(
-				`### Now Playing\n**${title}** - ${sourceName(track.info.sourceName)}\n**Duration:** ${duration}\n**Requested by:** ${requesterName(track)}`,
+				`### Now Playing\n**${title}** – ${sourceName(track.info.sourceName)}\n**Duration:** ${duration}\n**Requested by:** ${requesterName(track)}`,
 			),
 		)
 		.setThumbnailAccessory(new ThumbnailBuilder().setURL(artwork).setDescription(`${track.info.title} artwork`));
 
 	const status = new TextDisplayBuilder().setContent(
-		`${progressBar(player.position, track.info.duration)}\n-# ${position} / ${duration}  |  Volume ${Math.round(player.volume)}%  |  Loop ${repeat}  |  Queue ${player.queue.tracks.length}`,
+		`-# ${position} / ${duration}  |  Volume ${Math.round(player.volume)}%  |  Loop ${repeat}  |  Queue ${player.queue.tracks.length}`,
 	);
 
 	const primaryControls = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -101,16 +101,30 @@ export function createMusicPanel(player: Player, track: Track, accentColor: numb
 }
 
 export function createQueueAddedPanel(track: Track): ContainerBuilder {
-	const title = escapeMarkdown(track.info.title).slice(0, 220);
+	const rawTitle = track.info.title.slice(0, 220);
+	const title = escapeMarkdown(rawTitle);
 	const author = escapeMarkdown(track.info.author || "Unknown artist").slice(0, 180);
 	const duration = track.info.isStream ? "`LIVE`" : `\`${TimeFormat.toDotted(track.info.duration)}\``;
 	const artwork = track.info.artworkUrl || FALLBACK_ARTWORK;
 	const name = requesterName(track);
+	const uri = track.info.uri || "";
+
+	// Source emoji — YouTube gets the red play icon look via text
+	const sourceEmoji = track.info.sourceName === "youtube" || track.info.sourceName === "youtubemusic"
+		? "🔴 "
+		: track.info.sourceName === "spotify" ? "🟢 "
+		: track.info.sourceName === "applemusic" ? "🍎 "
+		: "";
+
+	// Clickable title if URI available, plain bold otherwise
+	const titleLine = uri
+		? `${sourceEmoji}[**${title}**](${uri}) – ${author}`
+		: `${sourceEmoji}**${title}** – ${author}`;
 
 	const details = new SectionBuilder()
 		.addTextDisplayComponents(
 			new TextDisplayBuilder().setContent(
-				`### Added to Queue\n\n**${title}** – ${author}\nDuration: ${duration}\nRequested by ${name}`
+				`### Added to Queue\n\n${titleLine}\nDuration: ${duration}\nRequested by ${name}`
 			),
 		)
 		.setThumbnailAccessory(new ThumbnailBuilder().setURL(artwork).setDescription(title));
