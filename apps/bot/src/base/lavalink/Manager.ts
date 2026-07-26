@@ -9,22 +9,19 @@ export default class LavalinkClient extends LavalinkManager {
         super({
             nodes: env.NODES.map(node => ({
                 ...node,
-                // Retry indefinitely — Railway and similar proxies drop idle
-                // WebSockets (code 1006). We must keep retrying until the node
-                // comes back rather than giving up after a handful of attempts.
+                // Retry indefinitely so the bot reconnects after any transient
+                // network blip or Lavalink restart without manual intervention.
                 retryAmount: node.retryAmount ?? Infinity,
-                // Wait 5 s between retries so the proxy/server has time to
-                // accept a new connection instead of being flooded.
-                retryDelay: node.retryDelay ?? 5_000,
-                // Must cover at least retryDelay * retryAmount window.
-                // Set high enough (1 hour) so retries are never considered stale.
+                // Direct connection (Azure VM) — 3s between retries is fast enough
+                // without flooding the server on repeated failures.
+                retryDelay: node.retryDelay ?? 3_000,
+                // Window for retry tracking — 1 hour ensures retries never expire.
                 retryTimespan: 3_600_000,
                 requestSignalTimeoutMS: node.requestSignalTimeoutMS ?? 10_000,
-                // Send a WebSocket ping every 30 s to keep the proxy alive and
-                // detect silent drops before they become code-1006 disconnects.
-                heartBeatInterval: node.heartBeatInterval ?? 15_000,
-                // Also ping via the Lavalink /stats endpoint to confirm the node
-                // is alive beyond just the WebSocket layer.
+                // Heartbeat every 30s — direct connections are stable, no proxy
+                // timeout to worry about. Just enough to detect silent TCP drops.
+                heartBeatInterval: node.heartBeatInterval ?? 30_000,
+                // Ping via /stats endpoint to verify node health beyond WebSocket.
                 enablePingOnStatsCheck: node.enablePingOnStatsCheck ?? true,
                 // Do not close the connection on a node error — let retries handle it.
                 closeOnError: node.closeOnError ?? false,

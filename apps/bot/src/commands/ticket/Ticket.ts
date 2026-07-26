@@ -320,7 +320,7 @@ export default class TicketCommand extends Command {
 			const channel = ctx.options.getChannel("channel", true, 1) as TextChannel;
 			if (!channel) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> Channel not found.",
+					content: "Channel not found.",
 				});
 			}
 
@@ -328,7 +328,7 @@ export default class TicketCommand extends Command {
 
 			if (!ticketConfig) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> No ticket system found in this channel.",
+					content: "No ticket system found in this channel.",
 				});
 			}
 
@@ -347,7 +347,7 @@ export default class TicketCommand extends Command {
 					.setCustomId("cancel_delete")
 					.setLabel("Cancel")
 					.setStyle(ButtonStyle.Secondary)
-					.setEmoji("<:Cross:1375519752746958858>")
+					.setEmoji("[X]")
 			);
 
 			const message = await ctx.editOrReply({
@@ -395,7 +395,7 @@ export default class TicketCommand extends Command {
 					await interaction.editReply({
 						embeds: [this.createStyledPanel(
 							"Ticket System Deleted",
-							`<:Tick:1375519268292264012> Successfully deleted the ticket system in <#${channel.id}>.`
+							`Successfully deleted the ticket system in <#${channel.id}>.`
 						)],
 						components: []
 					});
@@ -428,7 +428,7 @@ export default class TicketCommand extends Command {
 			const channel = ctx.options.getChannel("channel", true, 1) as TextChannel;
 			if (!channel) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> Channel not found.",
+					content: "Channel not found.",
 				});
 			}
 
@@ -436,7 +436,7 @@ export default class TicketCommand extends Command {
 
 			if (!ticketConfig) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> No ticket system found in this channel.",
+					content: "No ticket system found in this channel.",
 				});
 			}
 
@@ -444,7 +444,7 @@ export default class TicketCommand extends Command {
 			const ticketChannel = ctx.guild.channels.cache.get(ticketConfig.channelId!) as TextChannel;
 			if (!ticketChannel) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> Ticket channel not found.",
+					content: "Ticket channel not found.",
 				});
 			}
 
@@ -452,7 +452,7 @@ export default class TicketCommand extends Command {
 
 			if (!ticketMessage) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> Ticket message not found.",
+					content: "Ticket message not found.",
 				});
 			}
 
@@ -557,7 +557,7 @@ export default class TicketCommand extends Command {
 			const channel = ctx.options.getChannel("channel", true, 1) as TextChannel;
 			if (!channel) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> Channel not found.",
+					content: "Channel not found.",
 				});
 			}
 
@@ -565,7 +565,7 @@ export default class TicketCommand extends Command {
 
 			if (!ticketConfig) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> No ticket system found in this channel.",
+					content: "No ticket system found in this channel.",
 				});
 			}
 
@@ -641,7 +641,7 @@ export default class TicketCommand extends Command {
 
 			if (!ticketConfigs || ticketConfigs.length === 0) {
 				return ctx.editOrReply({
-					content: "<:Cross:1375519752746958858> No ticket systems found in this server.",
+					content: "No ticket systems found in this server.",
 				});
 			}
 
@@ -710,7 +710,7 @@ export default class TicketCommand extends Command {
 
 		if (!message) {
 			return interaction.editReply({
-				content: "<:Cross:1375519752746958858> Failed to send the message.",
+				content: "Failed to send the message.",
 			});
 		}
 
@@ -728,7 +728,7 @@ export default class TicketCommand extends Command {
 		const successEmbed = this.createStyledPanel(
 			"Ticket System Created",
 			[
-				"<:Tick:1375519268292264012> Successfully created the ticket system!",
+				"Successfully created the ticket system!",
 				"",
 				`**Panel Channel:** <#${channel.id}>`,
 				`**Category:** <#${category.id}>`,
@@ -963,7 +963,7 @@ export default class TicketCommand extends Command {
 						"",
 						"📁 Choose an existing category or we'll create a new one if none selected.",
 						"",
-						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n") || "Getting started..."}`,
+						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `${s}`).join("\n") || "Getting started..."}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
 					].join("\n")
@@ -997,9 +997,9 @@ export default class TicketCommand extends Command {
 						"**Select a channel for the ticket panel**",
 						"",
 						"📝 Choose where users will see the ticket creation button.",
-						setupData.category ? `**Selected Category:** <#${setupData.category}> <:Tick:1375519268292264012>` : "**Category:** Will create new category <:Tick:1375519268292264012>",
+						setupData.category ? `**Selected Category:** <#${setupData.category}> [OK]` : "**Category:** Will create new category [OK]",
 						"",
-						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
+						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
 					].join("\n")
@@ -1033,14 +1033,14 @@ export default class TicketCommand extends Command {
 						"**Customize the ticket panel embed**",
 						"",
 						"🎨 Set the title and description for your ticket panel.",
-						setupData.category ? `**Category:** <#${setupData.category}> <:Tick:1375519268292264012>` : "**Category:** New category will be created <:Tick:1375519268292264012>",
-						`**Channel:** <#${setupData.channel}> <:Tick:1375519268292264012>`,
+						setupData.category ? `**Category:** <#${setupData.category}> [OK]` : "**Category:** New category will be created [OK]",
+						`**Channel:** <#${setupData.channel}> [OK]`,
 						"",
 						"**Current Settings:**",
 						`**Title:** ${setupData.title}`,
 						`**Description:** ${setupData.description}`,
 						"",
-						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
+						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
 					].join("\n")
@@ -1078,16 +1078,16 @@ export default class TicketCommand extends Command {
 						"**Customize the ticket creation button**",
 						"",
 						"🔘 Set the button text, emoji, and color.",
-						setupData.category ? `**Category:** <#${setupData.category}> <:Tick:1375519268292264012>` : "**Category:** New category will be created <:Tick:1375519268292264012>",
-						`**Channel:** <#${setupData.channel}> <:Tick:1375519268292264012>`,
-						"**Embed:** Title & Description set <:Tick:1375519268292264012>",
+						setupData.category ? `**Category:** <#${setupData.category}> [OK]` : "**Category:** New category will be created [OK]",
+						`**Channel:** <#${setupData.channel}> [OK]`,
+						"**Embed:** Title & Description set [OK]",
 						"",
 						"**Current Button Settings:**",
 						`**Label:** ${setupData.buttonLabel}`,
 						`**Emoji:** ${setupData.buttonEmoji}`,
 						`**Style:** ${ButtonStyle[setupData.buttonStyle]}`,
 						"",
-						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
+						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps.slice(setupData.step).join(" → ")}`
 					].join("\n")
@@ -1125,17 +1125,17 @@ export default class TicketCommand extends Command {
 						"**Additional settings (Optional)**",
 						"",
 						"⚙️ Configure support roles, open limits, and logging.",
-						setupData.category ? `**Category:** <#${setupData.category}> <:Tick:1375519268292264012>` : "**Category:** New category will be created <:Tick:1375519268292264012>",
-						`**Channel:** <#${setupData.channel}> <:Tick:1375519268292264012>`,
-						"**Embed:** Customized <:Tick:1375519268292264012>",
-						"**Button:** Customized <:Tick:1375519268292264012>",
+						setupData.category ? `**Category:** <#${setupData.category}> [OK]` : "**Category:** New category will be created [OK]",
+						`**Channel:** <#${setupData.channel}> [OK]`,
+						"**Embed:** Customized [OK]",
+						"**Button:** Customized [OK]",
 						"",
 						"**Current Additional Settings:**",
 						`**Support Roles:** ${setupData.supportRoles.length ? setupData.supportRoles.map((r: string) => `<@&${r}>`).join(", ") : "None"}`,
 						`**Open Limit:** ${setupData.openLimit}`,
 						`**Logger Channel:** ${setupData.loggerChannel ? `<#${setupData.loggerChannel}>` : "None"}`,
 						"",
-						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `<:Tick:1375519268292264012> ${s}`).join("\n")}`,
+						`**Progress:** ${steps.slice(0, setupData.step - 1).map(s => `${s}`).join("\n")}`,
 						`**Current:** 🔄 ${steps[setupData.step - 1]}`,
 						`**Next:** ⏭️ ${steps[setupData.step]}`
 					].join("\n")
@@ -1191,7 +1191,7 @@ export default class TicketCommand extends Command {
 					[
 						"**Review and confirm your ticket system**",
 						"",
-						"<:Tick:1375519268292264012> **All Steps Completed!**",
+						"**All Steps Completed!**",
 						"",
 						"**📋 Summary:**",
 						setupData.category ? `**Category:** <#${setupData.category}>` : "**Category:** Will create new category",
@@ -1211,7 +1211,7 @@ export default class TicketCommand extends Command {
 					.setCustomId("create_system")
 					.setLabel("Create Ticket System")
 					.setStyle(ButtonStyle.Success)
-					.setEmoji("<:Tick:1375519268292264012>");
+					.setEmoji("[OK]");
 
 				const backBtn5 = new ButtonBuilder()
 					.setCustomId("setup_back")
@@ -1223,7 +1223,7 @@ export default class TicketCommand extends Command {
 					.setCustomId("cancel_setup")
 					.setLabel("Cancel")
 					.setStyle(ButtonStyle.Danger)
-					.setEmoji("<:Cross:1375519752746958858>");
+					.setEmoji("[X]");
 
 				components = [
 					new ActionRowBuilder<ButtonBuilder>().addComponents(createBtn, backBtn5, cancelBtn)
@@ -1245,7 +1245,7 @@ export default class TicketCommand extends Command {
 				filter: (i: any) => {
 					if (i.user.id !== ctx.author?.id) {
 						i.reply({
-							content: "<:Cross:1375519752746958858> This setup is not for you.",
+							content: "This setup is not for you.",
 							ephemeral: true
 						});
 						return false;
@@ -1282,7 +1282,7 @@ export default class TicketCommand extends Command {
 		} catch (error) {
 			console.error("Error in showSetupStep:", error);
 			await interaction.reply({
-				content: "<:Cross:1375519752746958858> An error occurred while setting up the ticket system.",
+				content: "An error occurred while setting up the ticket system.",
 				ephemeral: true
 			});
 		}
@@ -1447,7 +1447,7 @@ export default class TicketCommand extends Command {
 			case "cancel_setup": {
 				this.setupSessions.delete(ctx.author?.id);
 				await interaction.update({
-					content: "<:Cross:1375519752746958858> Ticket system setup cancelled.",
+					content: "Ticket system setup cancelled.",
 					embeds: [],
 					components: []
 				});
@@ -1650,7 +1650,7 @@ export default class TicketCommand extends Command {
 
 			// Success message
 			const successEmbed = this.createStyledPanel(
-				"<:Tick:1375519268292264012> Ticket System Created Successfully!",
+				"Ticket System Created Successfully!",
 				[
 					`**Ticket panel sent to:** <#${setupData.channel}>`,
 					categoryId ? `**Category:** <#${categoryId}>` : "",
@@ -1890,7 +1890,7 @@ export default class TicketCommand extends Command {
 					`**Open Limit:** ${setupData.openLimit}`,
 					`**Logger Channel:** ${setupData.loggerChannel ? `<#${setupData.loggerChannel}>` : "None"}`,
 					"",
-					"<:Tick:1375519268292264012> Users can now create tickets by clicking the button in the panel channel!",
+					"Users can now create tickets by clicking the button in the panel channel!",
 					"",
 					"**Need to make changes?** Use `/ticket edit` command."
 				].join("\n")
@@ -1913,7 +1913,7 @@ export default class TicketCommand extends Command {
 
 			const errorEmbed = this.createStyledPanel(
 				"Error Creating Ticket System",
-				"<:Cross:1375519752746958858> An error occurred while creating your ticket system. Please try again or contact support."
+				"An error occurred while creating your ticket system. Please try again or contact support."
 			);
 
 			await interaction.editReply({
@@ -2028,7 +2028,7 @@ export default class TicketCommand extends Command {
 			await modalSubmit.editReply({
 				components: [this.createStyledPanel(
 					"Embed Updated",
-					"<:Tick:1375519268292264012> Successfully updated the ticket embed!"
+					"Successfully updated the ticket embed!"
 				)],
 				flags: MessageFlags.IsComponentsV2,
 				embeds: [],
@@ -2038,7 +2038,7 @@ export default class TicketCommand extends Command {
 			await interaction.editReply({
 				embeds: [this.createStyledPanel(
 					"Error",
-					"<:Cross:1375519752746958858> There was an error updating the embed. Please try again."
+					"There was an error updating the embed. Please try again."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2104,7 +2104,7 @@ export default class TicketCommand extends Command {
 				return modalSubmit.editReply({
 					embeds: [this.createStyledPanel(
 						"Invalid Emoji",
-						"<:Cross:1375519752746958858> The emoji you entered is invalid. Please use a valid emoji."
+						"The emoji you entered is invalid. Please use a valid emoji."
 					)],
 					components: []
 				});
@@ -2195,7 +2195,7 @@ export default class TicketCommand extends Command {
 				await i.editReply({
 					embeds: [this.createStyledPanel(
 						"Button Updated",
-						"<:Tick:1375519268292264012> Successfully updated the ticket button!"
+						"Successfully updated the ticket button!"
 					)],
 					components: []
 				});
@@ -2217,7 +2217,7 @@ export default class TicketCommand extends Command {
 			await interaction.editReply({
 				embeds: [this.createStyledPanel(
 					"Error",
-					"<:Cross:1375519752746958858> There was an error updating the button. Please try again."
+					"There was an error updating the button. Please try again."
 				)],
 				components: []
 			}).catch(() => null);
@@ -2274,7 +2274,7 @@ export default class TicketCommand extends Command {
 			await roleInteraction.editReply({
 				embeds: [this.createStyledPanel(
 					"Support Roles Added",
-					`<:Tick:1375519268292264012> Successfully added ${selectedRoles.length} support role${selectedRoles.length > 1 ? 's' : ''}!`
+					`Successfully added ${selectedRoles.length} support role${selectedRoles.length > 1 ? 's' : ''}!`
 				)],
 				components: []
 			});
@@ -2339,7 +2339,7 @@ export default class TicketCommand extends Command {
 			await channelInteraction.editReply({
 				embeds: [this.createStyledPanel(
 					"Logger Channel Added",
-					`<:Tick:1375519268292264012> Successfully set <#${selectedChannel}> as the logger channel!`
+					`Successfully set <#${selectedChannel}> as the logger channel!`
 				)],
 				components: []
 			});
@@ -2400,7 +2400,7 @@ export default class TicketCommand extends Command {
 				return modalSubmit.editReply({
 					embeds: [this.createStyledPanel(
 						"Invalid Limit",
-						"<:Cross:1375519752746958858> Please enter a valid number between 1 and 10."
+						"Please enter a valid number between 1 and 10."
 					)],
 					components: []
 				});
@@ -2414,7 +2414,7 @@ export default class TicketCommand extends Command {
 			await modalSubmit.editReply({
 				embeds: [this.createStyledPanel(
 					"Open Limit Set",
-					`<:Tick:1375519268292264012> Successfully set the open ticket limit to ${limit} per user!`
+					`Successfully set the open ticket limit to ${limit} per user!`
 				)],
 				components: []
 			});
@@ -2532,7 +2532,7 @@ export default class TicketCommand extends Command {
 				await categoryInteraction.editReply({
 					embeds: [this.createStyledPanel(
 						"Category Updated",
-						`<:Tick:1375519268292264012> Successfully updated the category to <#${selectedCategory}>!`
+						`Successfully updated the category to <#${selectedCategory}>!`
 					)],
 					components: []
 				});

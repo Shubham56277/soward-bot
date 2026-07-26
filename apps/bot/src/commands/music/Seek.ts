@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import ms from "@lukeed/ms";
@@ -37,71 +37,39 @@ export default class Seek extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context, args: string[]): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("Player is not connected"));
         }
 
         const currentTrack = player.queue.current?.info;
         if (!currentTrack) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "There is no track currently playing",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("There is no track currently playing"));
         }
 
         const duration = ms.parse(args.join(' '));
         if (!duration) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Invalid time format. Please use formats like: 1m, 1h 30m, or 1h 30m 30s",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("Invalid time format. Please use formats like: 1m, 1h 30m, or 1h 30m 30s"));
         }
 
         if (!currentTrack.isSeekable || currentTrack.isStream) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "This track is not seekable",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("This track is not seekable"));
         }
 
         if (duration > currentTrack.duration) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: `The duration exceeds the track length (${ms.format(currentTrack.duration)})`,
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg(`The duration exceeds the track length (${ms.format(currentTrack.duration)})`));
         }
 
         player.seek(duration);
 
-        const embed = new EmbedBuilder()
-            .setDescription(`Seeked to ${ms.format(duration)}`)
-            .setColor(ctx.client.config.colors.main);
-
-        await ctx.sendMessage({ embeds: [embed] });
+        await ctx.sendMessage(this.msg(`Seeked to ${ms.format(duration)}`));
     }
 }

@@ -56,25 +56,29 @@ export function createMusicPanel(player: Player, track: Track, accentColor: numb
 
 	const primaryControls = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder()
+			.setCustomId("music_previous")
+			.setLabel("⏮")
+			.setStyle(ButtonStyle.Secondary)
+			.setDisabled(!player.queue.previous.length),
+		new ButtonBuilder()
 			.setCustomId("music_resume")
-			.setLabel(player.paused ? "Resume" : "Pause")
+			.setLabel(player.paused ? "▶" : "⏸")
 			.setStyle(player.paused ? ButtonStyle.Success : ButtonStyle.Primary),
-		new ButtonBuilder().setCustomId("music_skip").setLabel("Skip").setStyle(ButtonStyle.Primary),
-		new ButtonBuilder().setCustomId("music_stop").setLabel("Stop").setStyle(ButtonStyle.Danger),
+		new ButtonBuilder().setCustomId("music_skip").setLabel("⏭").setStyle(ButtonStyle.Primary),
 		new ButtonBuilder()
 			.setCustomId("music_loop")
-			.setLabel(player.repeatMode === "off" ? "Loop" : `Loop: ${repeat}`)
-			.setStyle(player.repeatMode === "off" ? ButtonStyle.Primary : ButtonStyle.Success),
+			.setLabel(player.repeatMode === "off" ? "🔁" : `🔁 ${repeat}`)
+			.setStyle(player.repeatMode === "off" ? ButtonStyle.Secondary : ButtonStyle.Success),
 	);
 
 	const extraControls = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder()
 			.setCustomId("music_shuffle")
-			.setLabel("Shuffle")
-			.setStyle(ButtonStyle.Primary)
+			.setLabel("🔀")
+			.setStyle(ButtonStyle.Secondary)
 			.setDisabled(player.queue.tracks.length < 2),
-		new ButtonBuilder().setCustomId("music_save").setLabel("Save").setStyle(ButtonStyle.Secondary),
-		new ButtonBuilder().setCustomId("music_lyrics").setLabel("Lyrics").setStyle(ButtonStyle.Secondary),
+		new ButtonBuilder().setCustomId("music_save").setLabel("💾").setStyle(ButtonStyle.Secondary),
+		new ButtonBuilder().setCustomId("music_lyrics").setLabel("📜").setStyle(ButtonStyle.Secondary),
 	);
 	const recommendationMenu = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 		new StringSelectMenuBuilder()
@@ -109,17 +113,16 @@ export function createQueueAddedPanel(track: Track): ContainerBuilder {
 	const name = requesterName(track);
 	const uri = track.info.uri || "";
 
-	// Source emoji — YouTube gets the red play icon look via text
-	const sourceEmoji = track.info.sourceName === "youtube" || track.info.sourceName === "youtubemusic"
-		? "🔴 "
-		: track.info.sourceName === "spotify" ? "🟢 "
-		: track.info.sourceName === "applemusic" ? "🍎 "
+	// Source label — plain text tag matching the style used elsewhere in the music UI
+	const sourceLabel = track.info.sourceName === "youtube" || track.info.sourceName === "youtubemusic"
+		? "[YouTube] "
+		: track.info.sourceName === "spotify" ? "[Spotify] "
 		: "";
 
 	// Clickable title if URI available, plain bold otherwise
 	const titleLine = uri
-		? `${sourceEmoji}[**${title}**](${uri}) – ${author}`
-		: `${sourceEmoji}**${title}** – ${author}`;
+		? `${sourceLabel}[**${title}**](${uri}) – ${author}`
+		: `${sourceLabel}**${title}** – ${author}`;
 
 	const details = new SectionBuilder()
 		.addTextDisplayComponents(

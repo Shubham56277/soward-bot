@@ -54,11 +54,11 @@ export default class Lock extends Command {
             });
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔒 Channel Locked**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Channel Locked**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `${channel} has been locked\n\n` +
-                    `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+                    `**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ));
 

@@ -35,11 +35,11 @@ export default class Gay extends Command {
         
         // Different messages based on percentage
         let message: string;
-        if (gayPercentage < 20) message = "Just a little bit fruity 🍇";
-        else if (gayPercentage < 40) message = "Exploring their options 🧐";
-        else if (gayPercentage < 60) message = "Definitely not straight 🏳️‍🌈";
-        else if (gayPercentage < 80) message = "Super gay! 🌈✨";
-        else message = "ULTRA GAY POWER! 💥🏳️‍⚧️";
+        if (gayPercentage < 20) message = "Just a little bit fruity";
+        else if (gayPercentage < 40) message = "Exploring their options";
+        else if (gayPercentage < 60) message = "Definitely not straight";
+        else if (gayPercentage < 80) message = "Super gay!";
+        else message = "ULTRA GAY POWER!";
 
         const embed = new EmbedBuilder()
             .setColor(0x000000)

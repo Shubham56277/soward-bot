@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -30,18 +30,24 @@ export default class Stop extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) return await ctx.sendMessage("Player is not connected");
 
         player.stopPlaying(true, false);
 
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Music Stopped")
-            .setDescription("The music has been stopped and the queue has been cleared.")
-            .setTimestamp();
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent("**Music Stopped**"))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent("The music has been stopped and the queue has been cleared."));
 
-        return await ctx.sendMessage({ embeds: [embed] });
+        return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 }

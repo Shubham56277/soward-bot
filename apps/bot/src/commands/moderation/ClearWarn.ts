@@ -46,7 +46,7 @@ export default class ClearWarn extends Command {
 
         if (count === 0) {
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${targetUser.toString()} has no warnings to clear.`));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${targetUser.username} has no warnings to clear.`));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
@@ -56,7 +56,7 @@ export default class ClearWarn extends Command {
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Warnings Cleared**`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                `Cleared **${count}** warning${count !== 1 ? "s" : ""} for ${targetUser.toString()}.`
+                `Cleared **${count}** warning${count !== 1 ? "s" : ""} for ${targetUser.username}.`
             ));
 
         return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });

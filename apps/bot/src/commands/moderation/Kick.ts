@@ -99,7 +99,7 @@ export default class Kick extends Command {
                     const dmEmbed = new EmbedBuilder()
                         .setColor(0x000000)
                         .setTitle(`You've been removed from ${ctx.guild.name}`)
-                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.toString() ?? "Unknown"}`)
+                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.username ?? "Unknown"}`)
                         .setTimestamp();
                     await target.send({ embeds: [dmEmbed] });
                 } catch {
@@ -110,20 +110,22 @@ export default class Kick extends Command {
             await ctx.guild.members.kick(targetUser, reason);
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**👢 Member Removed**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Removed**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**User:** ${targetUser.toString()}\n` +
-                    `**Moderator:** ${ctx.author?.toString() ?? "Unknown"}\n` +
+                    `**User:** ${targetUser.username}\n` +
+                    `**Moderator:** ${ctx.author?.username ?? "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${targetUser.id}`));
 
-            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+            return msg;
         } catch (error) {
             console.error("Kick Error:", error);
-            return await ctx.sendMessage(this.msg("<:Cross:1375519752746958858> An error occurred while trying to remove this user."));
+            return await ctx.sendMessage(this.msg("An error occurred while trying to remove this user."));
         }
     }
 }

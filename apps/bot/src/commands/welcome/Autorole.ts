@@ -206,7 +206,7 @@ export default class AutoroleCommand extends Command {
 			}
 
 			const embed = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Added ${role.toString()} as auto role for ${type === "bot" ? "bots" : "members"}\n-# Configuration ID: ${autoRole.id}`));
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Added ${role.toString()} as auto role for ${type === "bot" ? "bots" : "members"}\n-# Configuration ID: ${autoRole.id}`));
 
 			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
@@ -237,7 +237,7 @@ export default class AutoroleCommand extends Command {
 			await AutoRole.delete(config.id);
 
 			const embed = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Removed auto role configuration for ${roleName}\n-# Was for: ${config.isBot ? "bots" : "members"}`));
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Removed auto role configuration for ${roleName}\n-# Was for: ${config.isBot ? "bots" : "members"}`));
 
 			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
@@ -263,12 +263,12 @@ export default class AutoroleCommand extends Command {
 			}
 
 			let configsToDelete = allConfigs;
-			let description = "<:Tick:1375519268292264012> Cleared all auto roles";
+			let description = "Cleared all auto roles";
 
 			if (type !== "all") {
 				const isBot = type === "bot";
 				configsToDelete = allConfigs.filter((c) => c.isBot === isBot);
-				description = `<:Tick:1375519268292264012> Cleared all auto roles for ${type === "bot" ? "bots" : "members"}`;
+				description = `Cleared all auto roles for ${type === "bot" ? "bots" : "members"}`;
 
 				if (configsToDelete.length === 0) {
 					return this.sendError(ctx, `There are no auto roles configured for ${type === "bot" ? "bots" : "members"}`);
@@ -330,7 +330,7 @@ export default class AutoroleCommand extends Command {
 				configsToShow.map(async (config) => {
 					const role = await ctx.guild!.roles.fetch(config.roleId).catch(() => null);
 					const roleName = role?.toString() || `Unknown Role (${config.roleId})`;
-					return `• ${roleName}\n` + `  **Type:** ${config.isBot ? "Bot" : "Member"}\n` + `  **Status:** ${config.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}\n` + `  **Config ID:** \`${config.id}\``;
+					return `• ${roleName}\n` + `  **Type:** ${config.isBot ? "Bot" : "Member"}\n` + `  **Status:** ${config.enabled ? "Enabled" : "Disabled"}\n` + `  **Config ID:** \`${config.id}\``;
 				}),
 			);
 
@@ -361,7 +361,7 @@ export default class AutoroleCommand extends Command {
 			await Promise.all(configsToUpdate.map((c) => AutoRole.update(c.id, { enabled: state })));
 
 			const embed = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Auto roles for ${type === "bot" ? "bots" : "members"} are now ${state ? "enabled" : "disabled"}`));
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Auto roles for ${type === "bot" ? "bots" : "members"} are now ${state ? "enabled" : "disabled"}`));
 
 			return ctx.sendMessage({ components: [embed], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
@@ -387,7 +387,7 @@ export default class AutoroleCommand extends Command {
 
 	private async sendError(ctx: Context, message: string) {
 		return ctx.sendMessage({
-			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`<:Cross:1375519752746958858> ${message}`))],
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`${message}`))],
 			flags: MessageFlags.IsComponentsV2,
 		});
 	}

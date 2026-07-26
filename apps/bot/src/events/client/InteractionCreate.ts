@@ -6,6 +6,8 @@ import { env } from "@repo/env";
 import { IgnoredChannel, Premium } from "@repo/db";
 import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../utils/musicCommandSafety";
 import { compactReply } from "../../utils/compactReply";
+import { handleInteractionError, ensureAcknowledged } from "../../utils/errorHandler";
+import { checkPremium } from "../../utils/premiumCheck";
 
 export default class InteractionCreate extends Event {
 	constructor(client: BaseClient) {
@@ -26,8 +28,7 @@ export default class InteractionCreate extends Event {
 					if (!button) return;
 					await button.execute?.(interaction);
 				} catch (error) {
-					this.client.logger.error(error);
-					return safeInteractionReply(interaction, { content: "I couldn't complete that action. Please try again.", flags: MessageFlags.Ephemeral }).catch(() => undefined);
+					await handleInteractionError(this.client, interaction, error, { source: "button", command: interaction.customId });
 				}
 				return;
 			}
@@ -39,8 +40,7 @@ export default class InteractionCreate extends Event {
 				try {
 					await selectMenu.execute?.(interaction);
 				} catch (error) {
-					this.client.logger.error(error);
-					return safeInteractionReply(interaction, { content: "I couldn't complete that selection. Please try again.", flags: MessageFlags.Ephemeral }).catch(() => undefined);
+					await handleInteractionError(this.client, interaction, error, { source: "menu", command: interaction.customId });
 				}
 				return;
 			}
@@ -129,54 +129,59 @@ export default class InteractionCreate extends Event {
 									? `${query} hindi song`   // help SC/AM find Hindi romanised queries
 									: query;
 
-								const [scRes, amRes] = await Promise.allSettled([
+								const [scRes] = await Promise.allSettled([
 									this.client.manager.search(`scsearch:${searchQuery}`, interaction.user),
-									this.client.manager.search(`amsearch:${searchQuery}`, interaction.user),
 								]);
 
-								const scTracks = scRes.status === "fulfilled" ? (scRes.value?.tracks ?? []).slice(0, 5) : [];
-								const amTracks = amRes.status === "fulfilled" ? (amRes.value?.tracks ?? []).slice(0, 5) : [];
+								const scTracks = scRes.status === "fulfilled" ? (scRes.value?.tracks ?? []).slice(0, 15) : [];
 
-								// ── Deduplicate by normalised core title ─────────────────────
-								// Strip noise: "(official)", "(audio)", "(lyrics)", feat., ft., etc.
+								// ── Relevance scoring + deduplication ────────────────────────
+								const queryLower = searchQuery.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+								const queryWords = queryLower.split(/\s+/).filter(w => w.length > 1);
+
 								function coreTitle(raw: string): string {
 									return raw
 										.toLowerCase()
-										.replace(/\(.*?\)/g, "")           // remove parenthetical
-										.replace(/\[.*?\]/g, "")            // remove bracketed
-										.replace(/\bfeat\.?\b.*$/i, "")     // remove feat.
-										.replace(/\bft\.?\b.*$/i, "")       // remove ft.
-										.replace(/[-–—|]/g, " ")            // remove separators
+										.replace(/\(.*?\)/g, "")
+										.replace(/\[.*?\]/g, "")
+										.replace(/\bfeat\.?\b.*$/i, "")
+										.replace(/\bft\.?\b.*$/i, "")
+										.replace(/[-–—|]/g, " ")
+										.replace(/\.(mp3|wav|m4a|flac)$/i, "")
 										.replace(/\s+/g, " ")
 										.trim();
 								}
 
+								function relevance(track: any): number {
+									const title = (track.info.title ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, "");
+									const author = (track.info.author ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, "");
+									let score = 0;
+									for (const word of queryWords) {
+										if (title.includes(word)) score += 3;
+										else if (author.includes(word)) score += 1;
+									}
+									if (title.includes(queryLower)) score += 5;
+									if (track.info.duration < 30_000) score -= 2;
+									if (/\.(mp3|wav|m4a|flac)$/i.test(track.info.title ?? "")) score -= 3;
+									return score;
+								}
+
+								const scored = scTracks
+									.map(t => ({ track: t, score: relevance(t) }))
+									.filter(s => s.score >= 1)
+									.sort((a, b) => b.score - a.score);
+
 								const seenCore = new Set<string>();
 								const suggestions: { name: string; value: string }[] = [];
 
-								// Interleave SC and AM so both sources get represented
-								const interleaved: (typeof scTracks[number] | typeof amTracks[number])[] = [];
-								const maxLen = Math.max(scTracks.length, amTracks.length);
-								for (let i = 0; i < maxLen; i++) {
-									if (i < scTracks.length) interleaved.push(scTracks[i]!);
-									if (i < amTracks.length) interleaved.push(amTracks[i]!);
-								}
-
-								for (const track of interleaved) {
-									if (!track) continue;
-									const src = track.info.sourceName ?? "";
-									if (src === "youtube" || src === "youtubemusic") continue;
-
+								for (const { track } of scored) {
 									const title  = track.info.title ?? "";
 									const author = track.info.author ?? "";
 									const core   = coreTitle(title);
 
-									// One unique core title across ALL sources — if "Amplifier" was
-									// already added from SC, skip the AM "Amplifier" entirely.
 									if (seenCore.has(core)) continue;
 									seenCore.add(core);
 
-									// Format: "Title — Artist" (no source tag needed, song is unique)
 									const label  = `${title} — ${author}`.slice(0, 100);
 									const value  = title.slice(0, 100);
 
@@ -184,8 +189,21 @@ export default class InteractionCreate extends Event {
 									if (suggestions.length >= 8) break;
 								}
 
+								// Fallback: if strict scoring yielded nothing, show raw top results
+								if (suggestions.length === 0) {
+									for (const t of scTracks.slice(0, 5)) {
+										const title = t.info.title ?? "";
+										const author = t.info.author ?? "";
+										const core = coreTitle(title);
+										if (seenCore.has(core)) continue;
+										seenCore.add(core);
+										suggestions.push({ name: `${title} — ${author}`.slice(0, 100), value: title.slice(0, 100) });
+									}
+								}
+
 								return interaction.respond(suggestions).catch(() => undefined);
-							} catch {
+							} catch (error) {
+								this.client.logger.warn(`[autocomplete:${interaction.commandName}] search failed, falling back to empty results`, error);
 								return interaction.respond([]).catch(() => undefined);
 							}
 						}
@@ -196,7 +214,9 @@ export default class InteractionCreate extends Event {
 						try {
 							await interaction.deferReply({ flags: privateResponse ? MessageFlags.Ephemeral : undefined });
 						} catch (error) {
-							this.client.logger.error(`[command:${command.name}] Failed to acknowledge interaction`, error);
+							// The interaction token is likely already dead (client-side latency > 3s).
+							// Nothing more we can do to acknowledge it — just log with full context.
+							await handleInteractionError(this.client, interaction, error, { source: "slash", command: command.name }).catch(() => undefined);
 							return;
 						}
 
@@ -256,7 +276,7 @@ export default class InteractionCreate extends Event {
 								});
 							}
 						}
-						if (command.premium && !isDev && !(await Premium.hasPremium(interaction.user.id))) {
+						if (command.premium && !isDev && !(await checkPremium(this.client.redis, interaction.user.id, interaction.guild!))) {
 							return await safeInteractionReply(interaction, {
 								content: "This is a premium command. Use `/premium redeem` with an activation code to unlock it.",
 								flags: MessageFlags.Ephemeral,
@@ -321,14 +341,7 @@ export default class InteractionCreate extends Event {
 							if (!ctx.msg) await safeInteractionReply(interaction, { content: "The command completed without a response." });
 							return result;
 						} catch (error) {
-							this.client.logger.error(`[command:${command.name}] Execution failed`, error);
-							const content = "I couldn't complete that command. The error was contained; please try again in a moment.";
-							if (interaction.deferred || interaction.replied) {
-								return await interaction.editReply(compactReply({ content, embeds: [], components: [] })).catch(() =>
-									interaction.followUp(compactReply({ content, flags: MessageFlags.Ephemeral })).catch(() => undefined),
-								);
-							}
-							return await interaction.reply(compactReply({ content, flags: MessageFlags.Ephemeral })).catch(() => undefined);
+							await handleInteractionError(this.client, interaction, error, { source: "slash", command: command.name });
 						} finally {
 							await releaseMusicLock?.();
 							const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
@@ -386,21 +399,19 @@ export default class InteractionCreate extends Event {
 				try {
 					await command.contextRun?.(interaction);
 				} catch (error) {
-					this.client.logger.error(`[context-command:${command.name}] Execution failed`, error);
-					return safeInteractionReply(interaction, {
-						content: "I couldn't complete that command. Please try again in a moment.",
-						flags: MessageFlags.Ephemeral,
-					}).catch(() => undefined);
+					await handleInteractionError(this.client, interaction, error, { source: "slash", command: command.name });
 				}
 			}
 			} catch (error) {
-				this.client.logger.error(`[interaction:${interaction.id}] Unhandled interaction failure`, error);
-				if (interaction.isAutocomplete()) return interaction.respond([]).catch(() => undefined);
+				// Last-resort net for anything that slipped past every inner handler above.
+				if (interaction.isAutocomplete()) {
+					this.client.logger.error(`[interaction:${interaction.id}] Unhandled autocomplete failure`, error);
+					return interaction.respond([]).catch(() => undefined);
+				}
 				if (interaction.isRepliable()) {
-					return safeInteractionReply(interaction, {
-						content: "I couldn't complete that action. The error was contained; please try again.",
-						flags: MessageFlags.Ephemeral,
-					}).catch(() => undefined);
+					await handleInteractionError(this.client, interaction as any, error, { source: "event" });
+				} else {
+					this.client.logger.error(`[interaction:${interaction.id}] Unhandled non-repliable interaction failure`, error);
 				}
 			}
 		});

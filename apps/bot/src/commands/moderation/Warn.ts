@@ -131,11 +131,11 @@ export default class Warn extends Command {
 			const warningsCount = await Warning.getUserWarningCount(ctx.guild.id, target.id);
 
 			const container = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**⚠️ User Warned**`))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**User Warned**`))
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`**User:** ${target.toString()}\n` +
-					`**Moderator:** ${ctx.author.toString()}\n` +
+					`**User:** ${target.user?.username ?? target.username ?? "Unknown"}\n` +
+					`**Moderator:** ${ctx.author.username}\n` +
 					`**Reason:** ${reason}\n` +
 					`**Total Warnings:** ${warningsCount}`
 				))
@@ -146,8 +146,8 @@ export default class Warn extends Command {
 			await target.send({
 				embeds: [{
 					color: 0x000000,
-					title: "⚠️ You have been warned",
-					description: `**Server:** ${ctx.guild.name}\n**Reason:** ${reason}\n**Moderator:** ${ctx.author.toString()}\n**Warning ID:** \`${warning.id}\``,
+					title: "You have been warned",
+					description: `**Server:** ${ctx.guild.name}\n**Reason:** ${reason}\n**Moderator:** ${ctx.author.username}\n**Warning ID:** \`${warning.id}\``,
 				}]
 			}).catch(() => {});
 
@@ -169,7 +169,7 @@ export default class Warn extends Command {
 		const warningsCount = warnings.length;
 
 		if (warningsCount === 0) {
-			return reply.info(ctx, `${target.toString()} has no warnings`);
+			return reply.info(ctx, `${target.user?.username ?? "User"} has no warnings`);
 		}
 
 		const formattedWarnings = warnings.map((warn, index) =>
@@ -207,7 +207,7 @@ export default class Warn extends Command {
 
 			const container = new ContainerBuilder()
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`<:Tick:1375519268292264012> Successfully removed warning \`${warningId}\``
+					`Successfully removed warning \`${warningId}\``
 				));
 
 			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -235,7 +235,7 @@ export default class Warn extends Command {
 
 			const container = new ContainerBuilder()
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`<:Tick:1375519268292264012> Cleared **${countBefore}** warning${countBefore !== 1 ? "s" : ""} for ${target.toString()}`
+					`Cleared **${countBefore}** warning${countBefore !== 1 ? "s" : ""} for ${target.user?.username ?? "user"}`
 				));
 
 			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });

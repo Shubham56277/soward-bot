@@ -69,7 +69,7 @@ export default class Snipe extends Command {
 		} catch (error) {
 			console.error("Snipe Error:", error);
 			await ctx.sendMessage({
-				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> An error occurred while trying to snipe messages"))],
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("An error occurred while trying to snipe messages"))],
 				flags: MessageFlags.IsComponentsV2,
 			});
 		}

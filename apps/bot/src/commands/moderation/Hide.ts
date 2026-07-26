@@ -1,4 +1,4 @@
-import { EmbedBuilder, ApplicationCommandOptionType, ChannelType, GuildChannel, Role } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ApplicationCommandOptionType, ChannelType, GuildChannel, Role } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -38,13 +38,19 @@ export default class Hide extends Command {
 		});
 	}
 
+	private msg(text: string): any {
+		return {
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+			flags: MessageFlags.IsComponentsV2,
+		};
+	}
+
 	public async run(ctx: Context): Promise<any> {
 		const channel: GuildChannel = ctx.options?.getChannel("channel", false) as GuildChannel || ctx.channel;
 		const role = ctx.options?.getRole("role", false) || ctx.guild.roles.everyone;
 
 		if (![ChannelType.GuildText, ChannelType.GuildVoice].includes(channel.type)) {
-			const embed = new EmbedBuilder().setColor(0x000000).setDescription("This command only works for text and voice channels");
-			return await ctx.sendMessage({ embeds: [embed] });
+			return await ctx.sendMessage(this.msg("This command only works for text and voice channels"));
 		}
 
 		try {
@@ -56,20 +62,19 @@ export default class Hide extends Command {
 				{ reason: `Hidden by ${ctx.author?.tag}` },
 			);
 
-			const embed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("👁️ Channel Hidden")
-				.setDescription(
-					`**Channel:** ${channel.toString()}\n` +
-					`**Hidden From:** ${role.toString()}\n` +
-					`**Moderator:** ${ctx.author?.toString() || "Unknown"}`
-				);
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Channel Hidden**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`**Channel:** #${channel.name}\n` +
+					`**Hidden From:** ${role.name}\n` +
+					`**Moderator:** ${ctx.author?.username || "Unknown"}`
+				));
 
-			await ctx.sendMessage({ embeds: [embed] });
+			await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("Hide Error:", error);
-			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Failed to hide channel");
-			await ctx.sendMessage({ embeds: [embed] });
+			await ctx.sendMessage(this.msg("Failed to hide channel"));
 		}
 	}
 }

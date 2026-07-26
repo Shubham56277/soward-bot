@@ -106,14 +106,16 @@ export default class Tempban extends Command {
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Temporary Ban Issued**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**User:** ${targetUser.toString()}\n` +
+                    `**User:** ${targetUser.username}\n` +
                     `**Duration:** ${durationStr}\n` +
                     `**Expires:** <t:${unbanAt}:R>\n` +
                     `**Reason:** ${reason}\n` +
-                    `**Moderator:** ${ctx.author?.toString() ?? "Unknown"}`
+                    `**Moderator:** ${ctx.author?.username ?? "Unknown"}`
                 ));
 
-            return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+            return msg;
         } catch (error) {
             console.error("Tempban Error:", error);
             const container = new ContainerBuilder()

@@ -37,9 +37,9 @@ export default class Kiss extends Command {
         const data = await body.json() as { link: string };
 
         let message: string;
-        if (lovePercentage < 30) message = "A shy little peck 💋";
-        else if (lovePercentage < 70) message = "Passionate kiss 😘";
-        else message = "SOULMATES! 💞";
+        if (lovePercentage < 30) message = "A shy little peck";
+        else if (lovePercentage < 70) message = "Passionate kiss";
+        else message = "SOULMATES!";
 
         const embed = new EmbedBuilder()
             .setColor(0x000000)

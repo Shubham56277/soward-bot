@@ -16,10 +16,16 @@ import { MenuOptions } from "../abstract/Menu";
 import { installUiPolicy } from "../utils/uiPolicy";
 import { createHash } from "node:crypto";
 import { AiService } from "../service/aiService";
+import { KnowledgeBase } from "../service/knowledgeBase";
+import { RagService } from "../service/ragService";
+import { AnalyticsRecorder } from "../service/analyticsRecorder";
+import { ResponseFormatter } from "../service/responseFormatter";
+import { HELP_CATEGORIES } from "../config/helpArchitecture";
 import { CommandCooldownService } from "../service/commandCooldownService";
 import { CommandDeprecationService } from "../service/commandDeprecationService";
 import { validateCommandRegistry, getRootCommandCount, printRegistrySummary } from "../config/commandRegistry";
 import { validateLegacyCommandMap } from "../config/legacyCommandMap";
+import { initQueues } from "../queues";
 
 const backoffDelays = new Map();
 
@@ -42,6 +48,7 @@ export default class BaseClient extends FrameWorkClient {
 	public redis!: Redis;
 	public services!: Services;
 	public ai!: AiService;
+	public rag!: RagService;
 	public commandCooldowns!: CommandCooldownService;
 	public commandDeprecations!: CommandDeprecationService;
 	private body: ApplicationCommandDataResolvable[] = [];
@@ -60,7 +67,7 @@ export default class BaseClient extends FrameWorkClient {
 					{
 						type: ActivityType.Custom,
 						name: "Custom Status",
-						state: "🚀 Initializing systems...",
+						state: "Initializing systems...",
 					},
 				],
 			},
@@ -99,12 +106,25 @@ export default class BaseClient extends FrameWorkClient {
 		this.logger.start("[startup] client.login begin");
 		await this.login(token);
 		this.logger.success("[startup] client.login complete");
-		this.on('ready', () => {
+		this.on('clientReady', () => {
 			this.logger.success('[startup] client ready');
+			// Rebuild KB now that all commands are loaded
+			const kb = this.rag ? (this.rag as any).kb : null;
+			if (kb) {
+				kb.rebuild(this.commands, HELP_CATEGORIES);
+				this.logger.success(`[startup] Knowledge Base rebuilt: ${kb.size} documents indexed`);
+			}
 		});
 		this.logger.start("[startup] Services init begin");
 		this.services = new Services(this);
 		this.logger.success("[startup] Services init complete");
+
+		this.logger.start("[startup] KnowledgeBase + RagService init begin");
+		const analyticsRecorder = new AnalyticsRecorder(this.redis);
+		const kb = new KnowledgeBase(this.redis);
+		const formatter = new ResponseFormatter();
+		this.rag = new RagService(this.ai, kb, this.redis, analyticsRecorder, formatter);
+		this.logger.success("[startup] KnowledgeBase + RagService init complete");
 		
 		this.logger.start("[startup] rateLimit listener registration begin");
 		this.rest.on('rateLimited', async (info) => {
@@ -125,6 +145,10 @@ export default class BaseClient extends FrameWorkClient {
 			setTimeout(() => backoffDelays.delete(key), 60_000);
 		});
 		this.logger.success("[startup] rateLimit listener registration complete");
+
+		this.logger.start("[startup] Queue system init begin");
+		await initQueues(this);
+		this.logger.success("[startup] Queue system init complete");
 	}
 
 	private async loadCommands(): Promise<void> {

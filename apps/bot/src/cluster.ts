@@ -14,15 +14,15 @@ export async function shardStart(logger: Logger) {
 
 
 	manager.on("clusterCreate", (cluster) => {
-		logger.start(`🟢 Launched Cluster ${cluster.id} with shards: [${cluster.shardList.join(", ")}]`);
+		logger.start(`Launched Cluster ${cluster.id} with shards: [${cluster.shardList.join(", ")}]`);
 	});
 
 	manager.on("shardCreate", (shard) => {
-		logger.info(`🟢 Shard ${shard.id} has been created.`);
+		logger.info(`Shard ${shard.id} has been created.`);
 	});
 
 	manager.on("spawn", (cluster) => {
-		logger.info(`🔄 Spawning Cluster ${cluster.id} with shards: ${cluster.shardList.join(", ")}`);
+		logger.info(`Spawning Cluster ${cluster.id} with shards: ${cluster.shardList.join(", ")}`);
 	});
 
 	//manager.on("debug", console.log);

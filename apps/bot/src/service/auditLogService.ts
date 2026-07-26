@@ -63,11 +63,11 @@ export class AuditLogService {
 					const { executor, target, createdTimestamp } = auditLog;
 					if (!executor || !target) return;
 					const channel = target as GuildChannel;
-					const regEx = /^🟢｜ticket([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*))(?:[eE]([+-]?\d+))?$/i;
+					const regEx = /^ticket([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*))(?:[eE]([+-]?\d+))?$/i;
 					if (regEx.test(channel.name)) return;
 
 					embed
-						.setDescription("🗑️ A channel has been deleted")
+						.setDescription("A channel has been deleted")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -98,11 +98,11 @@ export class AuditLogService {
 					const { executor, target, createdTimestamp } = auditLog;
 					if (!executor || !target) return;
 					const channel = target as GuildChannel;
-					const regEx = /^🟢｜ticket([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*))(?:[eE]([+-]?\d+))?$/i;
+					const regEx = /^ticket([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*))(?:[eE]([+-]?\d+))?$/i;
 					if (regEx.test(channel.name)) return;
 
 					embed
-						.setDescription("🌱 A channel has been created")
+						.setDescription("A channel has been created")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -224,14 +224,14 @@ export class AuditLogService {
 							value: `${permString}`,
 						});
 					}
-					embed.setDescription(`🔄 ${ChannelType[user?.type]} ${targetType} (\`${user?.id}\`) was updated`).setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` });
+					embed.setDescription(`${ChannelType[user?.type]} ${targetType} (\`${user?.id}\`) was updated`).setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` });
 					this.sendToLogChannel(guild, logChannel, logType, { embeds: [embed] }).catch(() => {});
 				}
 				case AuditLogEvent.ChannelUpdate: {
 					const { executor, target, changes } = auditLog;
 					if (!executor || !target) return;
 					const channel = target as GuildChannel;
-					const regEx = /^🟢｜ticket([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*))(?:[eE]([+-]?\d+))?$/i;
+					const regEx = /^ticket([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*))(?:[eE]([+-]?\d+))?$/i;
 					if (regEx.test(channel.name)) return;
 					for (const [, value] of Object.entries(changes)) {
 						switch (value.key) {
@@ -368,7 +368,7 @@ export class AuditLogService {
 							}
 						}
 						embed
-							.setDescription(`🔄 ${ChannelType[channel?.type]} ${channel?.name} (\`${channel?.id}\`) was updated`)
+							.setDescription(`${ChannelType[channel?.type]} ${channel?.name} (\`${channel?.id}\`) was updated`)
 							.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` });
 
 						this.sendToLogChannel(guild, logChannel, logType, { embeds: [embed] }).catch(() => {});
@@ -538,7 +538,7 @@ export class AuditLogService {
 								break;
 						}
 						embed
-							.setDescription("🔄 Server settings have been updated")
+							.setDescription("Server settings have been updated")
 							.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` })
 							.addFields({
 								name: "**IDs**",
@@ -556,7 +556,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const role = target as any;
 					embed
-						.setDescription("🌱 A role has been created")
+						.setDescription("A role has been created")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -583,7 +583,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const role = target as any;
 					embed
-						.setDescription("🗑️ A role has been deleted")
+						.setDescription("A role has been deleted")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -671,7 +671,7 @@ export class AuditLogService {
 							}
 						}
 						embed
-							.setDescription(`🔄 Role ${role?.name} (\`${role?.id}\`) was updated`)
+							.setDescription(`Role ${role?.name} (\`${role?.id}\`) was updated`)
 							.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` })
 							.addFields({
 								name: "**IDs**",
@@ -688,7 +688,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const emoji = target as any;
 					embed
-						.setDescription("🌱 A custom emoji has been created")
+						.setDescription("A custom emoji has been created")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -715,7 +715,7 @@ export class AuditLogService {
 					const { executor, target, createdTimestamp, changes } = auditLog;
 					if (!executor || !target) return;
 					embed
-						.setDescription("🗑️ A custom emoji has been deleted")
+						.setDescription("A custom emoji has been deleted")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -754,7 +754,7 @@ export class AuditLogService {
 						},
 					);
 					embed
-						.setDescription(`🔄 Custom emoji ${emoji?.name} (\`${emoji?.id}\`) was updated`)
+						.setDescription(`Custom emoji ${emoji?.name} (\`${emoji?.id}\`) was updated`)
 						.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` })
 						.setThumbnail(emoji.imageURL());
 					this.sendToLogChannel(guild, logChannel, logType, { embeds: [embed] }).catch(() => {});
@@ -767,7 +767,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const sticker = target as any;
 					embed
-						.setDescription("🌱 A sticker has been created")
+						.setDescription("A sticker has been created")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -795,7 +795,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const sticker = target as any;
 					embed
-						.setDescription("🗑️ A sticker has been deleted")
+						.setDescription("A sticker has been deleted")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -834,7 +834,7 @@ export class AuditLogService {
 						},
 					);
 					embed
-						.setDescription(`🔄 Sticker ${sticker?.name} (\`${sticker?.id}\`) was updated`)
+						.setDescription(`Sticker ${sticker?.name} (\`${sticker?.id}\`) was updated`)
 						.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` })
 						.setThumbnail(sticker.imageURL());
 					this.sendToLogChannel(guild, logChannel, logType, { embeds: [embed] }).catch(() => {});
@@ -846,7 +846,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const webhook = target as any;
 					embed
-						.setDescription("🌱 A webhook has been created")
+						.setDescription("A webhook has been created")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -873,7 +873,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const webhook = target as any;
 					embed
-						.setDescription("🗑️ A webhook has been deleted")
+						.setDescription("A webhook has been deleted")
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -935,7 +935,7 @@ export class AuditLogService {
 								break;
 						}
 						embed
-							.setDescription(`🔄 Webhook ${webhook?.name} (\`${webhook?.id}\`) was updated`)
+							.setDescription(`Webhook ${webhook?.name} (\`${webhook?.id}\`) was updated`)
 							.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` })
 							.addFields({
 								name: "**IDs**",
@@ -953,7 +953,7 @@ export class AuditLogService {
 					const member = target as GuildMember;
 					embed
 						.setAuthor({ name: `${member.user.username}`, iconURL: `${member.displayAvatarURL()}` })
-						.setDescription(`🥾 <@${member.id}> was kicked by <@${executor.id}>`)
+						.setDescription(`<@${member.id}> was kicked by <@${executor.id}>`)
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -986,7 +986,7 @@ export class AuditLogService {
 					const member = target as GuildMember;
 					embed
 						.setAuthor({ name: `${member.user.username}`, iconURL: `${member.displayAvatarURL()}` })
-						.setDescription(`🔨 <@${member.id}> was banned by <@${executor.id}>`)
+						.setDescription(`<@${member.id}> was banned by <@${executor.id}>`)
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -1019,7 +1019,7 @@ export class AuditLogService {
 					const member = target as GuildMember;
 					embed
 						.setAuthor({ name: `${member.user.username}`, iconURL: `${member.displayAvatarURL()}` })
-						.setDescription(`🪄 <@${member.id}> was unbanned by <@${executor.id}>`)
+						.setDescription(`<@${member.id}> was unbanned by <@${executor.id}>`)
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -1052,7 +1052,7 @@ export class AuditLogService {
 					if (!executor || !target) return;
 					const member = target as GuildMember;
 					embed
-						.setDescription(`👥 <@${executor.id}> pruned ${target} members`)
+						.setDescription(`<@${executor.id}> pruned ${target} members`)
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -1076,7 +1076,7 @@ export class AuditLogService {
 					const member = target as any;
 					embed
 						.setAuthor({ name: `${member.username}`, iconURL: `${member.displayAvatarURL()}` })
-						.setDescription(`👤 <@${member.id}> role updated by <@${executor.id}>`)
+						.setDescription(`<@${member.id}> role updated by <@${executor.id}>`)
 						.setFooter({ text: `${executor.username}`, iconURL: `${executor.displayAvatarURL()}` })
 						.addFields(
 							{
@@ -1126,7 +1126,7 @@ export class AuditLogService {
 			const section = new SectionBuilder()
 				.addTextDisplayComponents(
 					new TextDisplayBuilder().setContent(
-						`🗑️ **A message was deleted in <#${message.channel.id}>**\n\n-# Author: <@${message.author?.id}>\n-# Created: <t:${Math.floor(message.createdTimestamp / 1000)}:F>`,
+						`**A message was deleted in <#${message.channel.id}>**\n\n-# Author: <@${message.author?.id}>\n-# Created: <t:${Math.floor(message.createdTimestamp / 1000)}:F>`,
 					),
 				)
 				.setThumbnailAccessory(new ThumbnailBuilder().setURL(`${message.author?.displayAvatarURL()}`));
@@ -1215,7 +1215,7 @@ export class AuditLogService {
 						const embed = new EmbedBuilder();
 						embed.setColor(this.client.config.colors.main);
 						embed.setAuthor({ name: `${oldMessage.author?.tag}`, iconURL: `${oldMessage.author?.displayAvatarURL()}` });
-						embed.setDescription(`📝 **${oldMessage.author?.tag}** edited a message in <#${oldMessage.channel.id}>`);
+						embed.setDescription(`**${oldMessage.author?.tag}** edited a message in <#${oldMessage.channel.id}>`);
 						embed.addFields(
 							{
 								name: "**Channel**",
@@ -1258,7 +1258,7 @@ export class AuditLogService {
 			if (!logChannel) return;
 			const embed = new EmbedBuilder()
 				.setColor(this.client.config.colors.main)
-				.setDescription(`👋 <@${member.user.id}> joined`)
+				.setDescription(`<@${member.user.id}> joined`)
 				.setAuthor({ name: `${member.user.tag}`, iconURL: `${member.displayAvatarURL()}` })
 				.addFields(
 					{
@@ -1331,7 +1331,7 @@ export class AuditLogService {
 				const embed = new EmbedBuilder()
 					.setColor(this.client.config.colors.main)
 					.setAuthor({ name: `${newMember.user.tag}`, iconURL: `${newMember.user.displayAvatarURL()}` })
-					.setDescription(`🎉 <@${newMember.user.id}> Cleared Onboarding`)
+					.setDescription(`<@${newMember.user.id}> Cleared Onboarding`)
 					.setFooter({ text: `${this.client.user?.username}`, iconURL: `${this.client.user?.displayAvatarURL()}` })
 					.addFields(
 						{
@@ -1349,7 +1349,7 @@ export class AuditLogService {
 				const embed = new EmbedBuilder()
 					.setColor(this.client.config.colors.main)
 					.setAuthor({ name: `${newMember.user.tag}`, iconURL: `${newMember.user.displayAvatarURL()}` })
-					.setDescription(`🎉 <@${newMember.user.id}> Nickname Changed`)
+					.setDescription(`<@${newMember.user.id}> Nickname Changed`)
 					.setFooter({ text: `${this.client.user?.username}`, iconURL: `${this.client.user?.displayAvatarURL()}` })
 					.addFields(
 						{
@@ -1370,7 +1370,7 @@ export class AuditLogService {
 				const embed = new EmbedBuilder()
 					.setColor(this.client.config.colors.orange)
 					.setAuthor({ name: `${newMember.user.tag}`, iconURL: `${newMember.user.displayAvatarURL()}` })
-					.setDescription(`🔇 <@${newMember.user.id}> has been timed out.`)
+					.setDescription(`<@${newMember.user.id}> has been timed out.`)
 					.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` })
 					.addFields(
 						{
@@ -1392,7 +1392,7 @@ export class AuditLogService {
 				const embed = new EmbedBuilder()
 					.setColor(this.client.config.colors.main)
 					.setAuthor({ name: `${newMember.user.tag}`, iconURL: `${newMember.user.displayAvatarURL()}` })
-					.setDescription(`🎭 <@${newMember.user.id}> role updated`)
+					.setDescription(`<@${newMember.user.id}> role updated`)
 					.setFooter({ text: `${executor?.username}`, iconURL: `${executor?.displayAvatarURL()}` });
 
 				if (newMember.roles.cache.has(diff.first()?.id!)) {
@@ -1440,7 +1440,7 @@ export class AuditLogService {
 			if (!checkLog(kickLog, AuditLogEvent.MemberKick) && !checkLog(banLog, AuditLogEvent.MemberBanAdd)) {
 				const embed = new EmbedBuilder()
 					.setColor(this.client.config.colors.main)
-					.setDescription(`👋 <@${member.user.id}> left the server`)
+					.setDescription(`<@${member.user.id}> left the server`)
 					.setAuthor({ name: `${member.user.username}`, iconURL: `${member.displayAvatarURL()}` })
 					.addFields(
 						{

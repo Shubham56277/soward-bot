@@ -47,6 +47,6 @@ export default class VcRejectCommand extends Command {
             await targetUser.voice.disconnect(`Rejected by ${ctx.author!.tag}`);
         }
 
-        return ctx.sendMessage(`<:Cross:1375519752746958858> ${targetUser} can no longer join this channel`);
+        return ctx.sendMessage(`${targetUser} can no longer join this channel`);
     }
 }

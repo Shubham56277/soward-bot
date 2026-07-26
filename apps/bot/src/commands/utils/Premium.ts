@@ -14,6 +14,7 @@ import {
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import { invalidateGuildPremium } from "../../utils/premiumCheck";
 
 export default class Premium extends Command {
 	public constructor() {
@@ -113,6 +114,9 @@ export default class Premium extends Command {
 					flags: this.privateV2Flags(ctx),
 				});
 			}
+
+			// Refresh the guild's premium verdict so the whole server unlocks immediately.
+			if (ctx.guild?.id) await invalidateGuildPremium(ctx.client.redis, ctx.guild.id);
 
 			return ctx.sendMessage({
 				components: [this.activatedView(ctx, result.premiumUntil)],

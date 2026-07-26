@@ -74,22 +74,30 @@ export class Pagination {
 		});
 
 		collector?.on("collect", async (interaction) => {
-			if (interaction.customId === "pagination_first") {
-				this.currentPage = 0;
-			} else if (interaction.customId === "pagination_previous") {
-				this.currentPage--;
-			} else if (interaction.customId === "pagination_next") {
-				this.currentPage++;
-			} else if (interaction.customId === "pagination_last") {
-				this.currentPage = this.embeds.length - 1;
+			try {
+				if (interaction.customId === "pagination_first") {
+					this.currentPage = 0;
+				} else if (interaction.customId === "pagination_previous") {
+					this.currentPage--;
+				} else if (interaction.customId === "pagination_next") {
+					this.currentPage++;
+				} else if (interaction.customId === "pagination_last") {
+					this.currentPage = this.embeds.length - 1;
+				}
+
+				await interaction.update({
+					embeds: [this.embeds[this.currentPage]!],
+					components: [this.createComponents()],
+				});
+			} catch {
+				// Guarantee acknowledgement even if the update above failed, otherwise
+				// Discord shows "didn't respond in time" to the user.
+				if (!interaction.deferred && !interaction.replied) {
+					await interaction.deferUpdate().catch(() => undefined);
+				}
+			} finally {
+				this.resetTimeout();
 			}
-
-			await interaction.update({
-				embeds: [this.embeds[this.currentPage]!],
-				components: [this.createComponents()],
-			});
-
-			this.resetTimeout();
 		});
 
 		collector?.on("end", () => {
@@ -174,13 +182,20 @@ export class ContainerPagination {
 		});
 
 		collector?.on("collect", async (interaction) => {
-			if (interaction.customId === "cpg_first") this.currentPage = 0;
-			else if (interaction.customId === "cpg_prev") this.currentPage--;
-			else if (interaction.customId === "cpg_next") this.currentPage++;
-			else if (interaction.customId === "cpg_last") this.currentPage = this.pages.length - 1;
+			try {
+				if (interaction.customId === "cpg_first") this.currentPage = 0;
+				else if (interaction.customId === "cpg_prev") this.currentPage--;
+				else if (interaction.customId === "cpg_next") this.currentPage++;
+				else if (interaction.customId === "cpg_last") this.currentPage = this.pages.length - 1;
 
-			await interaction.update({ components: [this.pages[this.currentPage]!, this.createNav()] });
-			this.resetTimeout();
+				await interaction.update({ components: [this.pages[this.currentPage]!, this.createNav()] });
+			} catch {
+				if (!interaction.deferred && !interaction.replied) {
+					await interaction.deferUpdate().catch(() => undefined);
+				}
+			} finally {
+				this.resetTimeout();
+			}
 		});
 
 		collector?.on("end", () => { this.cleanup(); });

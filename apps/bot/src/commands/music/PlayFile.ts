@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, EmbedBuilder, VoiceChannel } from "discord.js";
+import { ApplicationCommandOptionType, ContainerBuilder, TextDisplayBuilder, MessageFlags, VoiceChannel } from "discord.js";
 import type { SearchResult } from "lavalink-client";
 import { createHmac } from "node:crypto";
 import { env } from "@repo/env";
@@ -94,9 +94,10 @@ export default class PlayFile extends Command {
 		if (!locked) return ctx.sendMessage("Another uploaded file is already being processed in this server. Try again shortly.");
 
 		await ctx.sendDeferMessage("Loading the uploaded audio...");
-		const embed = new EmbedBuilder()
-			.setTimestamp()
-			.setFooter({ text: `Requested by ${ctx.author?.username}`, iconURL: ctx.author?.displayAvatarURL() });
+		const footerLine = `-# Requested by ${ctx.author?.username}`;
+		const errorContainer = (text: string) => new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(footerLine));
 
 		try {
 			const voiceChannel = ctx.member?.voice.channel as VoiceChannel | null;
@@ -122,7 +123,7 @@ export default class PlayFile extends Command {
 			const response = searchResult as SearchResult;
 			const track = response.tracks?.[0];
 			if (!track) {
-				return ctx.editMessage({ content: "", embeds: [embed.setColor(ctx.client.config.colors.red).setDescription("Lavalink could not read audio from that file.")] });
+				return ctx.editMessage({ content: "", components: [errorContainer("Lavalink could not read audio from that file.")], flags: MessageFlags.IsComponentsV2 });
 			}
 			track.info.title = attachment.name.replace(/\.[^.]+$/, "");
 			track.info.author = ctx.author?.username || "Discord upload";
@@ -133,20 +134,23 @@ export default class PlayFile extends Command {
 				300,
 				JSON.stringify({ userId: ctx.author?.id, name: attachment.name, size: attachment.size, queuedAt: Date.now() }),
 			);
+			const successContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Uploaded Audio Added**"))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`**${attachment.name}** was added to the queue.\nSize: **${(attachment.size / 1_024 / 1_024).toFixed(2)} MB**\nThe bot streams it directly from Discord and does not save the file.`
+				))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(footerLine));
+
 			await ctx.editMessage({
 				content: "",
-				embeds: [
-					embed
-						.setColor(ctx.client.config.colors.main)
-						.setTitle("Uploaded Audio Added")
-						.setDescription(`**${attachment.name}** was added to the queue.\nSize: **${(attachment.size / 1_024 / 1_024).toFixed(2)} MB**\nThe bot streams it directly from Discord and does not save the file.`),
-				],
+				components: [successContainer],
+				flags: MessageFlags.IsComponentsV2,
 			});
 
 			if (!player.playing && player.queue.tracks.length > 0) await player.play({ paused: false });
 		} catch (error) {
 			ctx.client.logger.error("[playfile] Failed to stream attachment", error);
-			return ctx.editMessage({ content: "", embeds: [embed.setColor(ctx.client.config.colors.red).setDescription("I couldn't load that file. Check the format and try again.")] });
+			return ctx.editMessage({ content: "", components: [errorContainer("I couldn't load that file. Check the format and try again.")], flags: MessageFlags.IsComponentsV2 });
 		} finally {
 			await ctx.client.redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken).catch(() => undefined);
 		}

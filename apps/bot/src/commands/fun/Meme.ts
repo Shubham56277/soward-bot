@@ -49,7 +49,7 @@ export default class Meme extends Command {
             const embed = new EmbedBuilder()
                 .setTitle(data.title)
                 .setImage(data.url)
-                .setFooter({ text: `r/${data.subreddit} • 👍 ${data.ups}` });
+                .setFooter({ text: `r/${data.subreddit} • ${data.ups}` });
 
             return ctx.sendMessage({ embeds: [embed] });
         } catch (error) {

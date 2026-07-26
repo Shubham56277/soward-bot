@@ -34,10 +34,9 @@ async function retryWithFallback(
     client.logger.warn(`[trackError] "${title}" (${id}) failed — ${reason}`);
     markFailed(id);
 
-    // Decide fallback source: if it came from SoundCloud try Apple Music, otherwise try SoundCloud
-    const failedSource = track.info.sourceName;
-    const fallbackSource = failedSource === "soundcloud" ? "amsearch" : "scsearch";
-    const fallbackLabel  = fallbackSource === "scsearch" ? "SoundCloud" : "Apple Music";
+    // Decide fallback source: always use SoundCloud (only source)
+    const fallbackSource = "scsearch";
+    const fallbackLabel  = "SoundCloud";
 
     client.logger.debug(`[trackError] Trying fallback "${fallbackSource}" for "${title} ${author}"`);
 

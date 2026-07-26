@@ -91,7 +91,6 @@ export default class Animal extends Command {
 
             // Fun rating system
             const funRating = Math.floor(Math.random() * 5) + 1;
-            const funStars = "⭐".repeat(funRating) + "☆".repeat(5 - funRating);
 
             const embed = new EmbedBuilder()
                 .setColor(0x000000)
@@ -103,7 +102,7 @@ export default class Animal extends Command {
                 .addFields(
                     {
                         name: "Fun Rating",
-                        value: `${funRating}/5 ${funStars}`,
+                        value: `${funRating}/5`,
                         inline: true,
                     },
                     {

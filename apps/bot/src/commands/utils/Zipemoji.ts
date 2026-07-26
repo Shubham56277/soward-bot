@@ -95,7 +95,7 @@ export default class ZipEmoji extends Command {
 
             if (successCount === 0) {
                 return loadingMsg.edit({
-                    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> Failed to process any emojis. Please try again later."))],
+                    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("Failed to process any emojis. Please try again later."))],
                     embeds: [],
                 });
             }
@@ -112,7 +112,7 @@ export default class ZipEmoji extends Command {
                     name: `${ctx.guild.name}_emojis.zip`,
                 });
 
-                const resultLines = [`<:Tick:1375519268292264012> Successfully packaged ${successCount} emojis`];
+                const resultLines = [`Successfully packaged ${successCount} emojis`];
                 if (failedCount > 0) {
                     resultLines.push(`⚠️ Failed to package ${failedCount} emojis`);
                 }
@@ -126,14 +126,14 @@ export default class ZipEmoji extends Command {
             stream.on("error", async (error) => {
                 console.error("Stream error:", error);
                 await loadingMsg.edit({
-                    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> An error occurred while creating the archive. Please try again later."))],
+                    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("An error occurred while creating the archive. Please try again later."))],
                     embeds: [],
                 });
             });
         } catch (error) {
             console.error("ZipEmoji error:", error);
             await loadingMsg.edit({
-                components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> An error occurred while processing emojis. Please try again later."))],
+                components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("An error occurred while processing emojis. Please try again later."))],
                 embeds: [],
             });
         }

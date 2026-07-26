@@ -9,7 +9,7 @@ export default class ShardEvent extends Event {
 
     constructor(client: BaseClient) {
         super(client, {
-            event: "ready",
+            event: "clientReady",
         });
 
         if (env.SHARD_WEBHOOK_URL) this.webhook = new WebhookClient({ url: env.SHARD_WEBHOOK_URL });
@@ -76,6 +76,14 @@ export default class ShardEvent extends Event {
                 error.stack,
             );
         });
+
+        // Client-level error (e.g. WebSocket manager failures) — this event has no
+        // dedicated handler anywhere else in the codebase, so without this listener
+        // Node treats it as an unhandled "error" event and can crash the process.
+        this.client.on(Events.Error, (error: Error) => {
+            this.client.logger.error("[client] Discord.js client error:", error);
+        });
+
         this.client.logger.success("[startup] shard diagnostics registered");
     }
 

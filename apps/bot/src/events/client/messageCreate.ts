@@ -10,7 +10,10 @@ import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../uti
 import { compactReplyText } from "../../utils/compactReply";
 import { getCachedNoPrefix, getCachedPrefix } from "../../utils/commandStateCache";
 import { splitDiscordMessage, type AiRequestResult, type AiScope } from "../../service/aiService";
+import type { RagResult } from "../../service/ragService";
 import { LEGACY_COMMANDS_BY_NAME, replacementArguments, replacementRoot, type LegacyCommandMapping } from "../../config/legacyCommandMap";
+import { handleMessageError } from "../../utils/errorHandler";
+import { checkPremium } from "../../utils/premiumCheck";
 
 export default class MessageCreate extends Event {
 	constructor(client: BaseClient) {
@@ -29,7 +32,7 @@ export default class MessageCreate extends Event {
 					aliases: ["dokdo", "dok"],
 					owners: env.DEVELOPER_IDS,
 					prefix: ".",
-					noPerm: (message) => message.reply("🚫 You have no permission to use dokdo."),
+					noPerm: (message) => message.reply("You have no permission to use dokdo."),
 					globalVariable: { WONDER_IS_COOL: true },
 				});
 				this.client.logger.info("Dokdo developer tooling enabled (development mode).");
@@ -114,7 +117,7 @@ export default class MessageCreate extends Event {
 			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession) {
 				if (await isCommandIgnored(message)) return;
 				const isDev = env.DEVELOPER_IDS.includes(message.author.id);
-				if (!isDev && !(await Premium.hasPremium(message.author.id))) {
+				if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
 					return message.reply({
 						content: "AI conversations are a premium feature. Use `/premium redeem` with an activation code to unlock them.",
 						allowedMentions: { parse: [], repliedUser: false },
@@ -138,7 +141,7 @@ export default class MessageCreate extends Event {
 				if (question) {
 					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
 					const useHistory = activeAiSession || (wasMentioned && await this.client.ai.isSessionActive(aiScope));
-					const result = await this.client.ai.ask(aiScope, question, useHistory);
+					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory });
 					return sendAiMessageResult(message, result);
 				}
 			}
@@ -198,31 +201,23 @@ export default class MessageCreate extends Event {
 					}
 
 					const now = Date.now();
-					const cooldownKey = `cooldown:${command.name}:${message.author.id}`;
-					const notifiedKey = `cooldown:notify:${command.name}:${message.author.id}`;
-					const cooldownAmount = (command.cooldown || 5) * 1000;
+					const cooldownAmount = command.cooldown || 5;
 
-					const lastUsed = await this.client.redis.get(cooldownKey);
-
-					if (lastUsed && !isDev) {
-						const expirationTime = Number.parseInt(lastUsed) + cooldownAmount;
-						const timeLeft = (expirationTime - now) / 1000;
-
-						if (now < expirationTime && timeLeft > 0.9) {
-							const alreadyNotified = await this.client.redis.get(notifiedKey);
+					if (!isDev) {
+						const cooldown = await this.client.commandCooldowns.take(command.name, message.author.id, cooldownAmount);
+						if (!cooldown.allowed) {
+							// Only notify once per cooldown window — silently drop all subsequent spam
+							const notifiedKey = `cooldown:notify:${command.name}:${message.author.id}`;
+							const alreadyNotified = await this.client.redis.get(notifiedKey).catch(() => null);
 							if (!alreadyNotified) {
-								await this.client.redis.set(notifiedKey, "1", "EX", Math.ceil(timeLeft)); // Set a short TTL
-								return await message.reply({
-									content: `⏳ Please wait \`${timeLeft.toFixed(1)}s\` more seconds before reusing the \`${matchedPrefix}${command.name}\` command.`,
-								});
+								await this.client.redis.set(notifiedKey, "1", "PX", cooldown.retryAfterMs).catch(() => undefined);
+								await message.reply({
+									content: `Please wait \`${(cooldown.retryAfterMs / 1_000).toFixed(1)}s\` before reusing \`${matchedPrefix}${command.name}\`.`,
+								}).catch(() => undefined);
 							}
-							// Do nothing if already notified
 							return;
 						}
 					}
-
-					// Set new cooldown timestamp and expiration
-					await this.client.redis.set(cooldownKey, now.toString(), "PX", cooldownAmount);
 
 					if (command.permissions) {
 						if (command.permissions?.client) {
@@ -248,7 +243,7 @@ export default class MessageCreate extends Event {
 						}
 					}
 
-					if (command.premium && !isDev && !(await Premium.hasPremium(message.author.id))) {
+					if (command.premium && !isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
 						return await message.reply({
 							content: `This is a premium command. Use \`${matchedPrefix}premium redeem <code>\` to activate access.`,
 						});
@@ -315,8 +310,7 @@ export default class MessageCreate extends Event {
 						if (legacyMapping) await this.client.commandDeprecations.notifyMessage(message, legacyMapping);
 						return result;
 					} catch (error: any) {
-						this.client.logger.error(`[command:${command.name}] Execution failed`, error);
-						return await message.reply(compactReplyText("I couldn't complete that command. The error was contained; please try again in a moment.")).catch(() => undefined);
+						await handleMessageError(this.client, message, error, { source: "prefix", command: command.name });
 					} finally {
 						await releaseMusicLock?.();
 						const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
@@ -340,16 +334,13 @@ export default class MessageCreate extends Event {
 			}
 			if (DokdoHandler && message.content.startsWith(".")) await DokdoHandler.run(message);
 			} catch (error) {
-				this.client.logger.error(`[message:${message.id}] Unhandled message-command failure`, error);
-				if (message.channel.isSendable()) {
-					await message.reply(compactReplyText("I couldn't complete that action. The error was contained; please try again.")).catch(() => undefined);
-				}
+				await handleMessageError(this.client, message, error, { source: "event" });
 			}
 		});
 	}
 }
 
-async function sendAiMessageResult(message: Message, result: AiRequestResult): Promise<any> {
+async function sendAiMessageResult(message: Message, result: AiRequestResult | RagResult): Promise<any> {
 	if (!result.ok) {
 		const errors = {
 			busy: "Another AI request is already running. Try again in a moment.",

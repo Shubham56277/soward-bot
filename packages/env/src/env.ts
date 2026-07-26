@@ -28,6 +28,11 @@ const optionalSecret = z.preprocess(
 	z.string().optional(),
 );
 
+const optionalUrl = z.preprocess(
+	(value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+	z.url().optional(),
+);
+
 const integerFromEnv = (fallback: number, min: number, max: number) =>
 	z.preprocess(
 		(value) => (value === undefined || value === "" ? fallback : Number(value)),
@@ -49,12 +54,15 @@ const envSchema = z.object({
 	DISCORD_APP_CLIENT_SECRET: z.string().optional(),
 
 	SENTRY_DSN: z.string().optional(),
-	COMMAND_LOG_WEBHOOK_URL: z.url().optional(),
-	GUILD_CREATE_WEBHOOK_URL: z.url().optional(),
-	GUILD_DELETE_WEBHOOK_URL: z.url().optional(),
-	NO_PREFIX_WEBHOOK_URL: z.url().optional(),
-	PREMIUM_WEBHOOK_URL: z.url().optional(),
-	SHARD_WEBHOOK_URL: z.url().optional(),
+	COMMAND_LOG_WEBHOOK_URL: optionalUrl,
+	GUILD_CREATE_WEBHOOK_URL: optionalUrl,
+	GUILD_DELETE_WEBHOOK_URL: optionalUrl,
+	NO_PREFIX_WEBHOOK_URL: optionalUrl,
+	PREMIUM_WEBHOOK_URL: optionalUrl,
+	SHARD_WEBHOOK_URL: optionalUrl,
+	/** Receives alerts for high-severity/critical errors (rate-limited). Falls back to no alerting if unset. */
+	// Changed from optionalUrl to optionalSecret to allow non-URL strings without validation errors.
+	ERROR_WEBHOOK_URL: optionalSecret,
 	/** Channel ID in your developer server where song requests are forwarded */
 	SONG_REQUEST_CHANNEL_ID: z.string().optional(),
 
@@ -78,7 +86,7 @@ const envSchema = z.object({
 
 	IMAGIFY_API_URL: z.string().optional(),
 
-	MEDIA_PROXY_URL: z.url().optional(),
+	MEDIA_PROXY_URL: optionalUrl,
 
 	GROQ_API_KEY: optionalSecret,
 	GROQ_MODEL: z.string().default("llama-3.3-70b-versatile"),

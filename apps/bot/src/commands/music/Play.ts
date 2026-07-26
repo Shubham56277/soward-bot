@@ -25,7 +25,6 @@ function isUrl(query: string): boolean {
 function sourceLabel(sourceName: string): string {
     const map: Record<string, string> = {
         soundcloud:    "SoundCloud",
-        applemusic:    "Apple Music",
         spotify:       "Spotify",
         youtubemusic:  "YouTube Music",
         youtube:       "YouTube",
@@ -35,30 +34,15 @@ function sourceLabel(sourceName: string): string {
 }
 
 function buildPickerPanel(
-    scTracks: Track[],
-    amTracks: Track[],
+    tracks: Track[],
     query: string,
 ): ContainerBuilder {
     const lines: string[] = [];
-    let idx = 0;
 
-    if (scTracks.length) {
-        lines.push("**SoundCloud results**");
-        for (const t of scTracks.slice(0, 3)) {
-            const dur = t.info.isStream ? "LIVE" : TimeFormat.toDotted(t.info.duration);
-            lines.push(`**${idx + 1}.** ${t.info.title.slice(0, 70)} — ${(t.info.author ?? "").slice(0, 40)} \`${dur}\``);
-            idx++;
-        }
-    }
-
-    if (amTracks.length) {
-        if (lines.length) lines.push("");
-        lines.push("**Apple Music results**");
-        for (const t of amTracks.slice(0, 3)) {
-            const dur = t.info.isStream ? "LIVE" : TimeFormat.toDotted(t.info.duration);
-            lines.push(`**${idx + 1}.** ${t.info.title.slice(0, 70)} — ${(t.info.author ?? "").slice(0, 40)} \`${dur}\``);
-            idx++;
-        }
+    for (let idx = 0; idx < tracks.length; idx++) {
+        const t = tracks[idx]!;
+        const dur = t.info.isStream ? "LIVE" : TimeFormat.toDotted(t.info.duration);
+        lines.push(`**${idx + 1}.** ${t.info.title.slice(0, 70)} — ${(t.info.author ?? "").slice(0, 40)} \`${dur}\``);
     }
 
     return new ContainerBuilder()
@@ -93,7 +77,7 @@ export default class Play extends Command {
         super({
             name: "play",
             description: {
-                content: "Play a song from SoundCloud or Apple Music",
+                content: "Play a song from SoundCloud",
                 examples: ["play humsafar", "play never gonna give you up"],
                 usage: "play <song name>",
             },
@@ -171,37 +155,85 @@ export default class Play extends Command {
             return this.queue(ctx, player, res);
         }
 
-        // ── Search both sources in parallel ──────────────────────────────────
-        const [scResult, amResult] = await Promise.allSettled([
-            player.search({ query, source: "scsearch" }, ctx.author) as Promise<SearchResult>,
-            player.search({ query, source: "amsearch" }, ctx.author) as Promise<SearchResult>,
-        ]);
+        // ── Search SoundCloud ─────────────────────────────────────────────
+        let scTracks: Track[] = [];
+        try {
+            const scResult = await player.search({ query, source: "scsearch" }, ctx.author) as SearchResult;
+            const raw = scResult?.tracks ?? [];
 
-        const scTracks: Track[] = scResult.status === "fulfilled" ? (scResult.value?.tracks ?? []).slice(0, 3) : [];
-        const amTracks: Track[] = amResult.status === "fulfilled" ? (amResult.value?.tracks ?? []).slice(0, 3) : [];
+            // ── Relevance scoring & deduplication ──────────────────────────────
+            // SoundCloud's search is loose — it matches uploader names, tags, etc.
+            // We filter for tracks whose title actually relates to the query.
+            const queryWords = query.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 1);
 
-        if (scResult.status === "rejected") {
-            client.logger.warn(`[play] SoundCloud search failed: ${(scResult.reason as any)?.message}`);
+            function relevanceScore(track: Track): number {
+                const title = (track.info.title ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, "");
+                const author = (track.info.author ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, "");
+                const combined = `${title} ${author}`;
+                let score = 0;
+                for (const word of queryWords) {
+                    if (title.includes(word)) score += 3;
+                    else if (author.includes(word)) score += 1;
+                }
+                // Bonus for exact phrase match in title
+                if (title.includes(query.toLowerCase().replace(/[^a-z0-9\s]/g, ""))) score += 5;
+                // Penalize very short tracks (likely clips/previews)
+                if (track.info.duration < 30_000) score -= 2;
+                // Penalize .mp3 filename-style titles (raw uploads, not real songs)
+                if (/\.(mp3|wav|m4a|flac)$/i.test(track.info.title ?? "")) score -= 3;
+                return score;
+            }
+
+            function coreTitle(raw: string): string {
+                return raw.toLowerCase()
+                    .replace(/\(.*?\)/g, "").replace(/\[.*?\]/g, "")
+                    .replace(/\bfeat\.?\b.*$/i, "").replace(/\bft\.?\b.*$/i, "")
+                    .replace(/[-–—|]/g, " ").replace(/\.(mp3|wav|m4a|flac)$/i, "")
+                    .replace(/\s+/g, " ").trim();
+            }
+
+            // Score, filter (must have at least 1 query word in title/author), dedupe, sort
+            const scored = raw
+                .map(t => ({ track: t, score: relevanceScore(t) }))
+                .filter(s => s.score >= 1)
+                .sort((a, b) => b.score - a.score);
+
+            const seenCores = new Set<string>();
+            for (const { track } of scored) {
+                const core = coreTitle(track.info.title ?? "");
+                if (seenCores.has(core)) continue;
+                seenCores.add(core);
+                scTracks.push(track);
+                if (scTracks.length >= 5) break;
+            }
+
+            // If strict filtering yielded nothing, fall back to top raw results (user may be searching by artist name)
+            if (scTracks.length === 0) {
+                const fallbackSeen = new Set<string>();
+                for (const t of raw.slice(0, 5)) {
+                    const core = coreTitle(t.info.title ?? "");
+                    if (fallbackSeen.has(core)) continue;
+                    fallbackSeen.add(core);
+                    scTracks.push(t);
+                }
+            }
+        } catch (err: any) {
+            client.logger.warn(`[play] SoundCloud search failed: ${err?.message}`);
         }
-        if (amResult.status === "rejected") {
-            client.logger.warn(`[play] Apple Music search failed: ${(amResult.reason as any)?.message}`);
-        }
 
-        const allTracks = [...scTracks, ...amTracks];
-
-        if (allTracks.length === 0) {
+        if (scTracks.length === 0) {
             return ctx.sendMessage("-# No results found. Try a different song name.");
         }
 
         // One result — queue it directly
-        if (allTracks.length === 1) {
+        if (scTracks.length === 1) {
             client.logger.debug(`[play] Single result for "${query}" — auto-queuing`);
-            return this.queueTrack(ctx, player, allTracks[0]!);
+            return this.queueTrack(ctx, player, scTracks[0]!);
         }
 
         // Multiple results — show picker
-        const panel = buildPickerPanel(scTracks, amTracks, query);
-        const buttons = buildPickerButtons(allTracks.length);
+        const panel = buildPickerPanel(scTracks, query);
+        const buttons = buildPickerButtons(scTracks.length);
 
         const msg = await ctx.sendMessage({
             components: [panel, buttons],
@@ -217,18 +249,18 @@ export default class Play extends Command {
 
         collector.on("collect", async (i: ButtonInteraction) => {
             const idx = Number.parseInt(i.customId.replace("play_pick_", ""), 10);
-            const chosen = allTracks[idx];
+            const chosen = scTracks[idx];
             if (!chosen) return;
 
             collector.stop("selected");
             await i.deferUpdate().catch(() => undefined);
-            await msg.edit({ components: [panel, buildPickerButtons(allTracks.length, true)] }).catch(() => undefined);
+            await msg.edit({ components: [panel, buildPickerButtons(scTracks.length, true)] }).catch(() => undefined);
             await this.queueTrack(ctx, player!, chosen);
         });
 
         collector.on("end", async (_c, reason) => {
             if (reason !== "selected") {
-                await msg.edit({ components: [panel, buildPickerButtons(allTracks.length, true)] }).catch(() => undefined);
+                await msg.edit({ components: [panel, buildPickerButtons(scTracks.length, true)] }).catch(() => undefined);
                 if (reason === "time") {
                     await ctx.sendMessage("-# Selection timed out. Run the command again.").catch(() => undefined);
                 }

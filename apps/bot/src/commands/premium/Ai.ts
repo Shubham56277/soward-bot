@@ -8,7 +8,9 @@ import {
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import type { AiAnswer, AiRequestResult, AiScope } from "../../service/aiService";
+import type { AiRequestResult, AiScope } from "../../service/aiService";
+import type { RagResult } from "../../service/ragService";
+import { ResponseFormatter } from "../../service/responseFormatter";
 
 export default class Ai extends Command {
 	public constructor() {
@@ -80,7 +82,7 @@ export default class Ai extends Command {
 		const question = ctx.isInteraction ? ctx.options.getString("question", true) : ctx.args.slice(1).join(" ");
 		if (!question?.trim()) return this.sendNotice(ctx, "Question Required", "Add a question after the command.");
 		const active = await ctx.client.ai.isSessionActive(scope);
-		const result = await ctx.client.ai.ask(scope, question, active);
+		const result = await ctx.client.rag.ask({ scope, question, useHistory: active });
 		return this.sendResult(ctx, result);
 	}
 
@@ -88,7 +90,7 @@ export default class Ai extends Command {
 		return { guildId: ctx.guild.id, channelId: ctx.channelId, userId: ctx.author!.id };
 	}
 
-	private async sendResult(ctx: Context, result: AiRequestResult): Promise<any> {
+	private async sendResult(ctx: Context, result: AiRequestResult | RagResult): Promise<any> {
 		if (!result.ok) {
 			const messages = {
 				busy: "Another AI request is already running. Try again in a moment.",
@@ -101,12 +103,13 @@ export default class Ai extends Command {
 		return ctx.sendMessage({ components: [this.answerView(ctx, result.answer)], flags: MessageFlags.IsComponentsV2 });
 	}
 
-	private answerView(ctx: Context, answer: AiAnswer): ContainerBuilder {
+	private answerView(ctx: Context, answer: { text: string; cached: boolean; latencyMs: number }): ContainerBuilder {
 		const latency = answer.cached ? "cache" : `${(answer.latencyMs / 1_000).toFixed(2)}s`;
+		const formatter = new ResponseFormatter();
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## AI Answer\n-# **A private premium response.**"))
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
-		for (const part of splitText(answer.text, 3_500)) {
+		for (const part of formatter.splitMessage(answer.text, 3_500)) {
 			container.addTextDisplayComponents(new TextDisplayBuilder().setContent(part));
 		}
 		return container.addTextDisplayComponents(
@@ -121,16 +124,4 @@ export default class Ai extends Command {
 	}
 }
 
-function splitText(text: string, maxLength: number): string[] {
-	const result: string[] = [];
-	let remaining = text.trim();
-	while (remaining.length > maxLength) {
-		let index = remaining.lastIndexOf("\n", maxLength);
-		if (index < maxLength / 2) index = remaining.lastIndexOf(" ", maxLength);
-		if (index < maxLength / 2) index = maxLength;
-		result.push(remaining.slice(0, index).trim());
-		remaining = remaining.slice(index).trim();
-	}
-	if (remaining) result.push(remaining);
-	return result;
-}
+

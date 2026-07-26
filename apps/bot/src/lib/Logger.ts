@@ -23,7 +23,7 @@ const options: SignaleOptions = {
             label: 'error',
         },
         debug: {
-            badge: '🐛',
+            badge: '»',
             color: 'magenta',
             label: 'debug',
         },
@@ -33,7 +33,7 @@ const options: SignaleOptions = {
             label: 'success',
         },
         log: {
-            badge: '📝',
+            badge: '•',
             color: 'white',
             label: 'log',
         },

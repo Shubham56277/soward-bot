@@ -215,12 +215,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.ban(ctx.member!, user, reason, deleteDays);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('🔨 Member Banned')
+			.setTitle('Member Banned')
 			.setColor('Red')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
@@ -251,12 +251,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.kick(ctx.member!, member, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('👢 Member Kicked')
+			.setTitle('Member Kicked')
 			.setColor('Orange')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
@@ -289,12 +289,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.timeout(ctx.member!, member, durationMs, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('⏱️ Member Timed Out')
+			.setTitle('Member Timed Out')
 			.setColor('Yellow')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
@@ -325,12 +325,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.warn(ctx.member!, member, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('⚠️ Member Warned')
+			.setTitle('Member Warned')
 			.setColor('Yellow')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
@@ -355,12 +355,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.softban(ctx.member!, user, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('🔨 Member Softbanned')
+			.setTitle('Member Softbanned')
 			.setColor('Purple')
 			.setDescription('User has been banned and immediately unbanned to purge their messages.')
 			.addFields(
@@ -386,12 +386,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.unban(ctx.member!, userId, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('✅ User Unbanned')
+			.setTitle('User Unbanned')
 			.setColor('Green')
 			.addFields(
 				{ name: 'User ID', value: userId, inline: true },

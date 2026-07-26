@@ -41,10 +41,9 @@ export default class TrackStuck extends Event {
             recentlyStuck.set(id, Date.now());
             setTimeout(() => recentlyStuck.delete(id), STUCK_TTL_MS);
 
-            // Try the other source
-            const failedSource = track.info.sourceName;
-            const fallbackSource = failedSource === "soundcloud" ? "amsearch" : "scsearch";
-            const fallbackLabel  = fallbackSource === "scsearch" ? "SoundCloud" : "Apple Music";
+            // Try SoundCloud fallback (only source available)
+            const fallbackSource = "scsearch";
+            const fallbackLabel  = "SoundCloud";
 
             try {
                 const res = await player.search(

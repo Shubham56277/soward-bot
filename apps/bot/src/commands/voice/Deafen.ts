@@ -2,16 +2,16 @@ import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacin
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
-export default class Undeafen extends Command {
+export default class Deafen extends Command {
     constructor() {
         super({
-            name: "undeafen",
+            name: "deafen",
             description: {
-                content: "Remove server deafen from a member",
-                examples: ["undeafen @user"],
-                usage: "undeafen <user>",
+                content: "Server-deafen a member in voice channels",
+                examples: ["deafen @user Disrupting voice chat"],
+                usage: "deafen <user> [reason]",
             },
-            category: "moderation",
+            category: "voice",
             cooldown: 5,
             args: true,
             permissions: {
@@ -23,9 +23,15 @@ export default class Undeafen extends Command {
             options: [
                 {
                     name: "user",
-                    description: "The member to undeafen",
+                    description: "The member to server-deafen",
                     type: ApplicationCommandOptionType.User,
                     required: true,
+                },
+                {
+                    name: "reason",
+                    description: "Reason for the deafen",
+                    type: ApplicationCommandOptionType.String,
+                    required: false,
                 },
             ],
         });
@@ -33,6 +39,7 @@ export default class Undeafen extends Command {
 
     public async run(ctx: Context): Promise<any> {
         const target = ctx.options.getMember("user") as GuildMember | null;
+        const reason = ctx.options.getString("reason", false, 1) ?? "No reason provided";
 
         if (!target) {
             const container = new ContainerBuilder()
@@ -42,32 +49,33 @@ export default class Undeafen extends Command {
 
         if (!target.voice.channel) {
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${target.toString()} is not in a voice channel.`));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${target.user.username} is not in a voice channel.`));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
-        if (!target.voice.serverDeaf) {
+        if (target.voice.serverDeaf) {
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${target.toString()} is not server-deafened.`));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${target.user.username} is already server-deafened.`));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
         try {
-            await target.voice.setDeaf(false, `Undeafened by ${ctx.author?.username ?? "a moderator"}`);
+            await target.voice.setDeaf(true, reason);
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Undeafened**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Deafened**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**Member:** ${target.toString()}\n` +
-                    `**Undeafened by:** ${ctx.author?.toString() ?? "Unknown"}`
+                    `**Member:** ${target.user.username}\n` +
+                    `**Reason:** ${reason}\n` +
+                    `**Moderator:** ${ctx.author?.username ?? "Unknown"}`
                 ));
 
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         } catch (error) {
-            console.error("Undeafen Error:", error);
+            console.error("Deafen Error:", error);
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent("Failed to undeafen the member."));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent("Failed to deafen the member."));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
     }

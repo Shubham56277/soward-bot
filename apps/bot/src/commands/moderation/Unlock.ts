@@ -56,11 +56,11 @@ export default class Unlock extends Command {
 			);
 
 			const container = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔓 Channel Unlocked**`))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Channel Unlocked**`))
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`**Channel:** ${channel.toString()}\n` +
-					`**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+					`**Channel:** #${channel.name}\n` +
+					`**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
 					`**Reason:** ${reason}`
 				));
 
@@ -69,7 +69,7 @@ export default class Unlock extends Command {
 			if (channel.id !== ctx.channel.id) {
 				const noticeContainer = new ContainerBuilder()
 					.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-						`**🔓 Channel Unlocked**\nThis channel has been unlocked by a moderator.\n**Reason:** ${reason}`
+						`**Channel Unlocked**\nThis channel has been unlocked by a moderator.\n**Reason:** ${reason}`
 					));
 
 				if (channel instanceof TextChannel) {

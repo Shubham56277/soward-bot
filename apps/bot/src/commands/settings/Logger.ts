@@ -116,8 +116,7 @@ export default class Logger extends Command {
         const autoSetupButton = new ButtonBuilder()
             .setCustomId("logger-auto-setup")
             .setLabel("Auto Setup with Channels")
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji("📂");
+            .setStyle(ButtonStyle.Primary);
 
         const row = new ActionRowBuilder<StringSelectMenuBuilder>().setComponents(menu);
         const row2 = new ActionRowBuilder<ChannelSelectMenuBuilder>().setComponents(channelMenu);
@@ -127,7 +126,7 @@ export default class Logger extends Command {
             "**Step 1:** Select which events you want to log",
             "**Step 2:** Choose the channel where logs will be sent",
             "",
-            "✨ **New Features:**",
+            "**New Features:**",
             "- Use **Auto Setup with Channels** for optimized logging setup with dedicated channels:",
             "  • Member events (joins, leaves, updates)",
             "  • Moderation events (bans, kicks)",
@@ -152,7 +151,7 @@ export default class Logger extends Command {
             if (i.customId === "logger-menu" && i.isStringSelectMenu()) {
                 this.selected = i.values;
                 const updatedBody = [
-                    `**Step 1:** <:Tick:1375519268292264012> Selected events: ${this.selected.map(type => loggerTypes[type as keyof typeof loggerTypes]).join(", ")}`,
+                    `**Step 1:** Selected events: ${this.selected.map(type => loggerTypes[type as keyof typeof loggerTypes]).join(", ")}`,
                     "**Step 2:** Select a channel where logs will be sent",
                 ].join("\n");
                 await i.update({
@@ -198,13 +197,8 @@ export default class Logger extends Command {
                     });
 
                     await i.reply({
-                        embeds: [
-                            {
-                                color: ctx.client.config.colors.main,
-                                description: `Logger has been set up successfully for ${this.selected.length} event type(s) in ${channel}.`,
-                            },
-                        ],
-                        flags: MessageFlags.Ephemeral,
+                        components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`Logger has been set up successfully for ${this.selected.length} event type(s) in ${channel}.`))],
+                        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
                     });
                     collector.stop();
                 } catch (_error) {
@@ -345,7 +339,7 @@ export default class Logger extends Command {
 
                     const setupCompleteLines = Object.entries(channelGroups).map(([_key, group]) => {
                         const eventsText = group.events.map(type => `• ${loggerTypes[type as keyof typeof loggerTypes]}`).join("\n");
-                        return `**📋 ${group.name}**\n${eventsText}`;
+                        return `**${group.name}**\n${eventsText}`;
                     }).join("\n\n");
 
                     const autoSetupBody = [
@@ -408,20 +402,17 @@ export default class Logger extends Command {
         const addButton = new ButtonBuilder()
             .setCustomId("logger-add")
             .setLabel("Add Event")
-            .setStyle(ButtonStyle.Success)
-            .setEmoji("➕");
+            .setStyle(ButtonStyle.Success);
 
         const removeButton = new ButtonBuilder()
             .setCustomId("logger-remove")
             .setLabel("Remove Event")
-            .setStyle(ButtonStyle.Danger)
-            .setEmoji("➖");
+            .setStyle(ButtonStyle.Danger);
 
         const resetButton = new ButtonBuilder()
             .setCustomId("logger-reset")
             .setLabel("Reset All")
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji("🔄");
+            .setStyle(ButtonStyle.Secondary);
 
         const row = new ActionRowBuilder<ButtonBuilder>().setComponents(addButton, removeButton, resetButton);
 
@@ -633,7 +624,7 @@ export default class Logger extends Command {
                 const confirmRow = new ActionRowBuilder<ButtonBuilder>().setComponents(confirmButton, cancelButton);
 
                 await i.reply({
-                    components: [buildPanel("Reset Logger Configuration", "⚠️ Are you sure you want to reset all logger settings? This will remove all configured events."), confirmRow],
+                    components: [buildPanel("Reset Logger Configuration", "Are you sure you want to reset all logger settings? This will remove all configured events."), confirmRow],
                     flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
                 });
 

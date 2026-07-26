@@ -10,8 +10,8 @@ export const constants = {
 		red: 0x000000,
 	},
 	emojis: {
-		on: "<:Tick:1375519268292264012>",
-		off: "<:Cross:1375519752746958858>",
+		on: "[OK]",
+		off: "[X]",
 		add: "<:Add:1375520018401595502>",
 		link: "<:Links:1375525202162880532>",
 		lock: "<:Lock:1375520196978151515>",
@@ -47,5 +47,9 @@ export const constants = {
 	links: {
 		invite: "https://discord.gg/discord",
 		supportServer: "https://discord.gg/discord",
+		website: "https://elfaria.in",
+		documentation: "https://discord.gg/discord",
+		premium: "https://discord.gg/discord",
+		vote: "https://top.gg/bot/1013771497157972008/vote",
 	},
 };

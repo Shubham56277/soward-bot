@@ -53,7 +53,7 @@ const implemented = new Set([
 	"help", "ping", "uptime", "botinfo", "serverinfo", "userinfo", "avatar", "banner", "membercount", "boostcount",
 	"joinedat", "roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
 	"timeout", "untimeout", "warn", "warnings", "nickname", "slowmode", "lock", "unlock", "hide", "unhide", "clear",
-	"channel", "role", "quarantine", "security", "antinuke", "mainrole", "trusted", "ignore", "coowner",
+	"channel", "role", "quarantine", "security", "antinuke", "mainrole", "extraowner", "ignore", "coowner",
 	"logging", "automod", "filter", "autorole", "notifier", "autodelete",
 	"autoresponder", "autoreact", "welcome", "customrole", "ticket", "media-only", "sticky",
 	"reaction-role", "variables", "embed", "voice", "voice-role",
@@ -106,7 +106,7 @@ const seeds: RegistrySeed[] = [
 	["security", "security", "Show active server protections"],
 	["antinuke", "security", "Configure destructive-action protection"],
 	["mainrole", "security", "Manage the server main role"],
-	["trusted", "security", "Manage trusted security members"],
+	["extraowner", "security", "Manage extra owners with configurable security limits"],
 	["ignore", "security", "Manage command ignore rules", { subcommands: ["channel", "role", "user"] }],
 	["coowner", "security", "Manage owner-authorized co-owners"],
 
@@ -264,6 +264,6 @@ export function printRegistrySummary(): void {
 	console.log(`[Registry] ${total} entries · ${slashCount} root commands · ${grouped.length} grouped`);
 	console.log(`[Registry] ${deprecated.length} deprecated · ${devOnly.length} dev-only · ${premium.length} premium`);
 	if (slashCount > 90) {
-		console.warn(`[Registry] ⚠️ Root command count (${slashCount}) exceeds 90! Sync may fail.`);
+		console.warn(`[Registry] Warning: Root command count (${slashCount}) exceeds 90! Sync may fail.`);
 	}
 }

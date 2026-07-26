@@ -46,10 +46,10 @@ export default class NoPrefix extends Command {
 					noPrefix: false,
 					noPrefixExpiresAt: null,
 				});
-				return ctx.sendMessage(`<:Tick:1375519268292264012> Removed no-prefix from <@${user.id}>.`);
+				return ctx.sendMessage(`Removed no-prefix from <@${user.id}>.`);
 			}
 			await User.update(user.id, { noPrefix: true });
-			return ctx.sendMessage(`<:Tick:1375519268292264012> Gave <@${user.id}> no-prefix **indefinitely**.`);
+			return ctx.sendMessage(`Gave <@${user.id}> no-prefix **indefinitely**.`);
 		}
 
 		// Handle explicit removal
@@ -61,7 +61,7 @@ export default class NoPrefix extends Command {
 				noPrefix: false,
 				noPrefixExpiresAt: null,
 			});
-			return ctx.sendMessage(`<:Tick:1375519268292264012> Removed no-prefix from <@${user.id}>.`);
+			return ctx.sendMessage(`Removed no-prefix from <@${user.id}>.`);
 		}
 
 		// Handle duration setting
@@ -74,7 +74,7 @@ export default class NoPrefix extends Command {
 			await User.setNoPrefix(user.id, durationMs, ctx.author?.id ?? user.id);
 			const formattedDuration = TimeFormat.toHumanize(durationMs);
 
-			return ctx.sendMessage(hasNoPrefix ? `<:Tick:1375519268292264012> Updated <@${user.id}>'s no-prefix to expire in **${formattedDuration}**.` : `<:Tick:1375519268292264012> Gave <@${user.id}> no-prefix for **${formattedDuration}**.`);
+			return ctx.sendMessage(hasNoPrefix ? `Updated <@${user.id}>'s no-prefix to expire in **${formattedDuration}**.` : `Gave <@${user.id}> no-prefix for **${formattedDuration}**.`);
 		} catch {
 			return ctx.sendMessage('Invalid duration format. Use something like "1h" or "30m".');
 		}

@@ -40,7 +40,7 @@ export default class Antiswear extends Command {
         const newState = !rule.enabled;
         await rule.edit({ enabled: newState });
 
-        const statusText = newState ? "**enabled** 🟢" : "**disabled** 🔴";
+        const statusText = newState ? "**enabled**" : "**disabled**";
 
         const container = new ContainerBuilder()
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Anti-Swear Filter**`))

@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -34,32 +34,23 @@ export default class ClearQueue extends Command {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
             return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
+                components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("Player is not connected"))],
+                flags: MessageFlags.IsComponentsV2,
             });
         }
 
         if (player.queue.tracks.length === 0) {
             return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "The queue is already empty",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
+                components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("The queue is already empty"))],
+                flags: MessageFlags.IsComponentsV2,
             });
         }
 
         player.queue.tracks.splice(0, player.queue.tracks.length);
 
-        const embed = new EmbedBuilder()
-            .setDescription("The queue has been cleared")
-            .setColor(ctx.client.config.colors.main);
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent("The queue has been cleared"));
 
-        await ctx.sendMessage({ embeds: [embed] });
+        await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 }

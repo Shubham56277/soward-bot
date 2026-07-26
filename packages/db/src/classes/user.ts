@@ -1,6 +1,6 @@
 import { db, schema } from "..";
 import { AFKType, blacklistType, ID, PremiumType, UserType, WarningsType } from "../types";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { cacheAside, invalidateCache } from "../cache";
 import { env } from "@repo/env";
 
@@ -517,5 +517,35 @@ export class Premium implements PremiumType {
 	public static async hasPremium(userId: string): Promise<boolean> {
 		const premium = await Premium.get(userId);
 		return premium?.isPremium ?? false;
+	}
+
+	/**
+	 * Check whether ANY of the supplied user IDs has an active premium subscription.
+	 * Used to grant server-wide premium: if one member of a guild has premium,
+	 * every member of that guild gets premium access.
+	 *
+	 * Runs a single indexed query and returns as soon as a match is found.
+	 */
+	public static async anyHasPremium(userIds: string[]): Promise<boolean> {
+		if (!userIds.length) return false;
+
+		// Deduplicate and cap the list to keep the IN clause reasonable.
+		const unique = [...new Set(userIds)].slice(0, 5_000);
+		const now = new Date();
+
+		const rows = await db
+			.select({ userId: schema.premium.userId })
+			.from(schema.premium)
+			.where(
+				and(
+					inArray(schema.premium.userId, unique),
+					eq(schema.premium.isPremium, true),
+					gt(schema.premium.premiumUntil, now),
+				),
+			)
+			.limit(1)
+			.execute();
+
+		return rows.length > 0;
 	}
 }

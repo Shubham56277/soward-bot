@@ -104,7 +104,7 @@ export default class Ban extends Command {
                     const dmEmbed = new EmbedBuilder()
                         .setColor(0x000000)
                         .setTitle(`You've been banned from ${ctx.guild.name}`)
-                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.toString() || "Unknown"}`)
+                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.username || "Unknown"}`)
                         .setTimestamp();
                     await targetUser.send({ embeds: [dmEmbed] });
                 } catch {
@@ -115,20 +115,22 @@ export default class Ban extends Command {
             await ctx.guild.members.ban(targetUser, { reason });
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔨 Member Banned**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Banned**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**User:** ${targetUser.toString()}\n` +
-                    `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+                    `**User:** ${targetUser.username}\n` +
+                    `**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${targetUser.id}`));
 
-            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+            return msg;
         } catch (error) {
             console.error("Ban Error:", error);
-            return await ctx.sendMessage(this.msg("<:Cross:1375519752746958858> An error occurred while trying to ban this user."));
+            return await ctx.sendMessage(this.msg("An error occurred while trying to ban this user."));
         }
     }
 }

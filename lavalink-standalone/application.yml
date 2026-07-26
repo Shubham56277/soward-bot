@@ -1,5 +1,7 @@
 lavalink:
   plugins:
+    - dependency: dev.lavalink.youtube:youtube-plugin:1.13.3
+      snapshot: false
     - dependency: com.github.topi314.lavasearch:lavasearch-plugin:1.0.0
       snapshot: false
     - dependency: com.github.topi314.lavasrc:lavasrc-plugin:4.8.3
@@ -37,10 +39,10 @@ lavalink:
       soundcloud: true
       twitch: false
       vimeo: false
-      youtube: false
+      youtube: true
     trackStuckThresholdMs: 15000
     useSeekGhosting: true
-    youtubePlaylistLoadLimit: 0
+    youtubePlaylistLoadLimit: 3
     youtubeSearchEnabled: false
 logging:
   file:
@@ -66,10 +68,18 @@ metrics:
     enabled: false
     endpoint: /metrics
 plugins:
+  youtube:
+    enabled: true
+    clients:
+      - MUSIC
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
   lavasrc:
     applemusic:
       albumLoadLimit: 3
       countryCode: IN
+      mediaAPIToken: "AUTO"
       playlistLoadLimit: 3
     flowerytts:
       audioFormat: flac
@@ -84,10 +94,11 @@ plugins:
       yandexmusic: false
       youtube: false
     providers:
-      - "amsearch:%QUERY%"
+      - "ytsearch:%ISRC%"
+      - "ytsearch:%QUERY%"
       - "scsearch:%QUERY%"
     sources:
-      applemusic: true
+      applemusic: false
       deezer: false
       flowerytts: true
       qobuz: false

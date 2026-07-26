@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -37,9 +37,15 @@ export default class Volume extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
-        const embed = new EmbedBuilder();
         const number = Number(ctx.options.getInteger('number'));
         if (!player) return await ctx.sendMessage("Player is not connected");
         if (Number.isNaN(number) || number < 0 || number > 200) {
@@ -48,20 +54,12 @@ export default class Volume extends Command {
             else if (number < 0) description = "Please enter a number greater than 0";
             else if (number > 200) description = "Please enter a number less than 200";
 
-            return await ctx.sendMessage({
-                embeds: [embed.setColor(ctx.client.config.colors.red).setDescription(description)],
-            });
+            return await ctx.sendMessage(this.msg(description));
         }
 
         await player.setVolume(number);
         const currentVolume = player.volume;
 
-        return await ctx.sendMessage({
-            embeds: [
-                embed.setColor(ctx.client.config.colors.main).setDescription(
-                    `Volume has been set to ${currentVolume}%`,
-                ),
-            ],
-        });
+        return await ctx.sendMessage(this.msg(`Volume has been set to ${currentVolume}%`));
     }
 }

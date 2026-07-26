@@ -157,14 +157,14 @@ export default class Ship extends Command {
 
             // Compatibility message based on percentage
             let message: string;
-            if (compatibility < 30) message = "Not a great match... 💔";
-            else if (compatibility < 60) message = "Potential chemistry! 💖";
-            else if (compatibility < 85) message = "Great match! 💞";
-            else message = "Soulmates! 💘";
+            if (compatibility < 30) message = "Not a great match...";
+            else if (compatibility < 60) message = "Potential chemistry!";
+            else if (compatibility < 85) message = "Great match!";
+            else message = "Soulmates!";
 
             const embed = new EmbedBuilder()
                 .setColor(0x000000)
-                .setTitle(`💝 ${user1?.username} + ${user2?.username} = ${shipName}`)
+                .setTitle(`${user1?.username} + ${user2?.username} = ${shipName}`)
                 .setDescription(`**Compatibility:** ${compatibility}%\n${message}`);
 
             if (shipImage) {
@@ -175,7 +175,7 @@ export default class Ship extends Command {
         } catch (error) {
             console.error(error);
             return ctx.editMessage(
-                "Failed to calculate love. Maybe try again? ❤️",
+                "Failed to calculate love. Maybe try again?",
             );
         }
     }

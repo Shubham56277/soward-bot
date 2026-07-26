@@ -11,7 +11,7 @@ export default class MoveAll extends Command {
                 examples: ["moveall #general-voice #meeting-voice"],
                 usage: "moveall <from_channel> <to_channel>",
             },
-            category: "moderation",
+            category: "voice",
             cooldown: 10,
             args: true,
             permissions: {
@@ -65,7 +65,7 @@ export default class MoveAll extends Command {
 
         if (members.size === 0) {
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`No members are in ${fromChannel.toString()}.`));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`No members are in #${fromChannel.name}.`));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
@@ -83,7 +83,7 @@ export default class MoveAll extends Command {
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Move Complete**`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                `Moved **${moved}** member${moved !== 1 ? "s" : ""} from ${fromChannel.toString()} → ${toChannel.toString()}`
+                `Moved **${moved}** member${moved !== 1 ? "s" : ""} from #${fromChannel.name} → #${toChannel.name}`
             ));
 
         return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });

@@ -68,7 +68,7 @@ export default class EightBall extends Command {
         const response = RESPONSES[Math.floor(Math.random() * RESPONSES.length)]!;
 
         const container = new ContainerBuilder()
-            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`🎱 **Magic 8-Ball**`))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Magic 8-Ball**`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Question:** ${question}`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))

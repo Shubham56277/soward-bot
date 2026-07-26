@@ -94,207 +94,95 @@ export default class CustomroleCommand extends Command {
 			],
 		});
 	}
+	private msg(text: string): any {
+		return {
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+			flags: MessageFlags.IsComponentsV2,
+		};
+	}
+
 	public async run(ctx: Context): Promise<any> {
 		const subcommand = ctx.options.getSubCommand();
 
 		if (subcommand === "add") {
 			const alias = ctx.options.getString("alias", true, 1);
 			if (!alias) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "Please specify an alias! `/customrole add <alias> <role>`",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("Please specify an alias! `/customrole add <alias> <role>`"));
 			}
 			if (ctx.client.aliases.has(alias)) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "You cannot use this alias!",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("You cannot use this alias!"));
 			}
 			const commands = ctx.client.commands || ctx.client.aliases;
 			if (commands.has(alias.toLowerCase())) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "Please use a different alias! this is a command name!",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("Please use a different alias! this is a command name!"));
 			}
 
 			const role = ctx.options.getRole("role", true, 2);
 			if (!role) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "Please specify a role! `/customrole add <alias> <role>`",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("Please specify a role! `/customrole add <alias> <role>`"));
 			}
 			if (role instanceof Role && role.permissions.has(dangerPermissions)) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: `This role has dangerous permissions! \`${dangerPermissions.join("`, `")}\``,
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg(`This role has dangerous permissions! \`${dangerPermissions.join("`, `")}\``));
 			}
 
 			if (role.position > (ctx.guild.members.me?.roles.highest.position ?? 0)) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "I cannot manage this role as it is higher than my highest role",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("I cannot manage this role as it is higher than my highest role"));
 			}
 			const customRole = await CustomRole.get(ctx.guild.id);
 			if (customRole && customRole.roles) {
 				if (customRole.roles.some((r) => r.role === role.id) || customRole.roles.some((r) => r.aliase === alias)) {
-					return ctx.editOrReply({
-						embeds: [
-							{
-								color: ctx.client.config.colors.red,
-								description: "This role or alias already exists!",
-							},
-						],
-					});
+					return ctx.editOrReply(this.msg("This role or alias already exists!"));
 				}
 
 				customRole.roles.push({ role: role.id, aliase: alias });
 				await CustomRole.update(ctx.guild.id, customRole);
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.main,
-							description: `Added role ${role} with alias ${alias}`,
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg(`Added role ${role} with alias ${alias}`));
 			}
 			await CustomRole.create({
 				guildId: ctx.guild.id,
 				roles: [{ role: role.id, aliase: alias }],
 			});
-			return ctx.editOrReply({
-				embeds: [
-					{
-						color: ctx.client.config.colors.main,
-						description: `Added role ${role} with alias ${alias}`,
-					},
-				],
-			});
+			return ctx.editOrReply(this.msg(`Added role ${role} with alias ${alias}`));
 		}
 		if (subcommand === "remove") {
 			const role = ctx.options.getRole("role", true, 1);
 			if (!role) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "Please specify a role! `/customrole remove <role>`",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("Please specify a role! `/customrole remove <role>`"));
 			}
 			const customRole = await CustomRole.get(ctx.guild.id);
 			if (customRole && customRole.roles) {
 				if (!customRole.roles.some((r) => r.role === role.id)) {
-					return ctx.editOrReply({
-						embeds: [
-							{
-								color: ctx.client.config.colors.red,
-								description: "This role does not exist!",
-							},
-						],
-					});
+					return ctx.editOrReply(this.msg("This role does not exist!"));
 				}
 				customRole.roles = customRole.roles.filter((r) => r.role !== role.id);
 				await CustomRole.update(ctx.guild.id, customRole);
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.main,
-							description: `Removed role ${role}`,
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg(`Removed role ${role}`));
 			}
 		}
 		if (subcommand === "manger") {
 			const role = ctx.options.getRole("role", true, 1);
 			if (!role) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "Please specify a role! `/customrole manger <role>`",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("Please specify a role! `/customrole manger <role>`"));
 			}
 			const customRole = await CustomRole.get(ctx.guild.id);
 			if (customRole) {
 				customRole.managerRole = role.id;
 				await CustomRole.update(ctx.guild.id, customRole);
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.main,
-							description: `Set manager role to ${role}`,
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg(`Set manager role to ${role}`));
 			}
 		}
 		if (subcommand === "reset") {
 			await CustomRole.delete(ctx.guild.id);
-			return ctx.editOrReply({
-				embeds: [
-					{
-						color: ctx.client.config.colors.main,
-						description: "Reset custom roles",
-					},
-				],
-			});
+			return ctx.editOrReply(this.msg("Reset custom roles"));
 		}
 		if (subcommand === "list") {
 			const customRole = await CustomRole.get(ctx.guild.id);
 			if (!customRole) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "No custom roles",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("No custom roles"));
 			}
 
 			if (customRole.roles?.length === 0) {
-				return ctx.editOrReply({
-					embeds: [
-						{
-							color: ctx.client.config.colors.red,
-							description: "No custom roles",
-						},
-					],
-				});
+				return ctx.editOrReply(this.msg("No custom roles"));
 			}
 			const pages: ContainerBuilder[] = [];
 			for (let i = 0; i < customRole.roles!.length; i += 10) {

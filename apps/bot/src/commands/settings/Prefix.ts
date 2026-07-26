@@ -21,24 +21,33 @@ export default class Prefix extends Command {
                 client: ["SendMessages", "EmbedLinks"],
             },
             slashCommand: true,
+            // The prefix option is optional to allow viewing the current prefix.
             options: [
                 {
                     name: "prefix",
-                    description: "The new prefix for this server",
+                    description: "The new prefix for this server (or \"reset\" to reset). Omit to view current prefix.",
                     type: 3,
-                    required: true,
+                    required: false,
                 },
             ],
         });
     }
 
     public async run(ctx: Context): Promise<any> {
+        // Get the provided prefix argument, if any.
         const prefix = ctx.options.getString("prefix");
 
+        // If no prefix argument was supplied, show the current prefix.
+        if (!prefix) {
+            return this.viewPrefix(ctx);
+        }
+
+        // Handle reset command.
         if (prefix === "reset") {
             return this.resetPrefix(ctx);
         }
 
+        // Otherwise set the new prefix.
         return this.setPrefix(ctx, prefix);
     }
 
@@ -50,8 +59,25 @@ export default class Prefix extends Command {
         return ctx.sendMessage({
             components: [
                 new ContainerBuilder().addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Successfully set prefix to \`${prefix}\``)
+                    new TextDisplayBuilder().setContent(`Successfully set prefix to \`${prefix}\``)
                 )
+            ],
+            flags: MessageFlags.IsComponentsV2,
+        });
+    }
+
+    /**
+     * Send a message displaying the current prefix for the guild.
+     */
+    private async viewPrefix(ctx: Context) {
+        // Retrieve the guild data from the database.
+        const guild = await Guild.get(ctx.guild!.id);
+        const currentPrefix = guild?.prefix ?? ctx.client.config.prefix;
+        return ctx.sendMessage({
+            components: [
+                new ContainerBuilder().addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`Current prefix is \`${currentPrefix}\``)
+                ),
             ],
             flags: MessageFlags.IsComponentsV2,
         });
@@ -65,7 +91,7 @@ export default class Prefix extends Command {
         return ctx.sendMessage({
             components: [
                 new ContainerBuilder().addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`<:Tick:1375519268292264012> Reset prefix to \`${ctx.client.config.prefix}\``)
+                    new TextDisplayBuilder().setContent(`Reset prefix to \`${ctx.client.config.prefix}\``)
                 )
             ],
             flags: MessageFlags.IsComponentsV2,

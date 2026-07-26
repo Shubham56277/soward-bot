@@ -1,4 +1,4 @@
-import { EmbedBuilder, TextChannel, ApplicationCommandOptionType } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, TextChannel, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -32,6 +32,13 @@ export default class Lockdown extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const reason = ctx.options?.getString("reason") || ctx.args?.join(" ") || "No reason provided";
         const channels = ctx.guild.channels.cache.filter(c => c.isTextBased());
@@ -55,29 +62,24 @@ export default class Lockdown extends Command {
             const results = await Promise.all(lockPromises);
             const failed = results.filter(r => !r.success).length;
 
-            const embed = new EmbedBuilder()
-                .setColor(failed > 0 ? Colors.Orange : Colors.Green)
-                .setTitle("🔐 Server Lockdown")
-                .setDescription(
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Server Lockdown**`))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `Locked ${results.length - failed}/${results.length} text channels\n\n` +
-                    `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+                    `**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
                     `**Reason:** ${reason}`
-                )
-                .setFooter({
-                    text: failed > 0
-                        ? `${failed} channels failed to lock`
-                        : "All channels locked successfully"
-                })
-                .setTimestamp();        
+                ))
+                .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                    `-# ${failed > 0 ? `${failed} channels failed to lock` : "All channels locked successfully"}`
+                ));
 
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 
         } catch (error) {
             console.error("Lockdown Error:", error);
-            const embed = new EmbedBuilder()
-                .setColor(0x000000)
-                .setDescription("Failed to initiate server lockdown");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("Failed to initiate server lockdown"));
         }
     }
 }

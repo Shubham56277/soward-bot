@@ -1,11 +1,11 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ComponentType, EmbedBuilder, Message, MessageFlags } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ComponentType, ContainerBuilder, Message, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Button from "../../abstract/Button";
 import BaseClient from "../../base/Client";
 import { Giveaway } from "@repo/db";
 
 export default class GiveawayView extends Button {
 	private currentPage = 0;
-	private embeds: EmbedBuilder[] = [];
+	private pages: ContainerBuilder[] = [];
 	message: Message | undefined;
 	constructor(client: BaseClient) {
 		super(client, {
@@ -19,7 +19,7 @@ export default class GiveawayView extends Button {
 
 		// Reset state on each execution
 		this.currentPage = 0;
-		this.embeds = [];
+		this.pages = [];
 
 		const giveaway = await Giveaway.get(guildId, message.id);
 		if (!giveaway) {
@@ -37,24 +37,24 @@ export default class GiveawayView extends Button {
 		for (let i = 0; i < uniqueParticipants.length; i += usersPerPage) {
 			const pageUsers = uniqueParticipants.slice(i, i + usersPerPage);
 
-			const em = new EmbedBuilder()
-				.setColor(interaction.client.config.colors.main)
-				.setTitle("Participants")
-				.setDescription(pageUsers.map((user) => `<@${user.id}> (\`${user.id}\`)`).join("\n"))
-				.setFooter({ text: `Total: ${uniqueParticipants.length} users` });
+			const page = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Participants**"))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(pageUsers.map((user) => `<@${user.id}> (\`${user.id}\`)`).join("\n")))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Total: ${uniqueParticipants.length} users`));
 
-			this.embeds.push(em);
+			this.pages.push(page);
 		}
 
-		if (this.embeds.length === 0) {
-			throw new Error("No embeds provided for pagination");
+		if (this.pages.length === 0) {
+			throw new Error("No pages provided for pagination");
 		}
 
 		const components = this.createComponents();
 		await interaction.reply({
-			embeds: [this.embeds[this.currentPage]!],
-			components: [components],
-			flags: MessageFlags.Ephemeral,
+			components: [this.pages[this.currentPage]!, components],
+			flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 		});
 		this.message = await interaction.fetchReply();
 		this.setupCollector();
@@ -69,14 +69,14 @@ export default class GiveawayView extends Button {
 				.setDisabled(this.currentPage === 0),
 			new ButtonBuilder()
 				.setCustomId("pagination_page")
-				.setLabel(`${this.currentPage + 1}/${this.embeds.length}`)
+				.setLabel(`${this.currentPage + 1}/${this.pages.length}`)
 				.setStyle(ButtonStyle.Secondary)
 				.setDisabled(true),
 			new ButtonBuilder()
 				.setCustomId("pagination_next")
 				.setLabel("▶")
 				.setStyle(ButtonStyle.Primary)
-				.setDisabled(this.currentPage === this.embeds.length - 1),
+				.setDisabled(this.currentPage === this.pages.length - 1),
 		);
 	}
 
@@ -94,8 +94,7 @@ export default class GiveawayView extends Button {
 			}
 
 			await interaction.update({
-				embeds: [this.embeds[this.currentPage]!],
-				components: [this.createComponents()],
+				components: [this.pages[this.currentPage]!, this.createComponents()],
 			});
 		});
 	}

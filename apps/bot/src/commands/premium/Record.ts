@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, EmbedBuilder, GuildMember, MessageFlags, PermissionFlagsBits } from "discord.js";
+import { ApplicationCommandOptionType, ContainerBuilder, GuildMember, MessageFlags, PermissionFlagsBits, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import { env } from "@repo/env";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
@@ -70,14 +70,11 @@ export default class Record extends Command {
 
 		if (action === "status") {
 			if (!status) return ctx.sendMessage("There is no active voice recording in this server.");
-			return ctx.sendMessage({
-				embeds: [
-					new EmbedBuilder()
-						.setColor(ctx.client.config.colors.main)
-						.setTitle("Recording Active")
-						.setDescription(`Channel: <#${status.channelId}>\nStarted: <t:${Math.floor(status.startedAt / 1_000)}:R>\nSpeakers captured: **${status.speakers}**`),
-				],
-			});
+			const container = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Recording Active**"))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Channel: <#${status.channelId}>\nStarted: <t:${Math.floor(status.startedAt / 1_000)}:R>\nSpeakers captured: **${status.speakers}**`));
+			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		}
 
 		if (action === "start") {
@@ -100,16 +97,13 @@ export default class Record extends Command {
 
 			await ctx.author!.createDM();
 			const started = await voiceRecordingService.start(ctx.guild, ctx.member.voice.channel, ctx.author!);
-			return ctx.sendMessage({
-				embeds: [
-					new EmbedBuilder()
-						.setColor(0x000000)
-						.setTitle("Voice Recording Started")
-						.setDescription(
-							`Recording is active in <#${started.channelId}>. It stops after five minutes or with \`record stop\`. The MP3 will be sent only by DM, then all temporary bot files are deleted.`,
-						),
-				],
-			});
+			const startedContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Voice Recording Started**"))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`Recording is active in <#${started.channelId}>. It stops after five minutes or with \`record stop\`. The MP3 will be sent only by DM, then all temporary bot files are deleted.`,
+				));
+			return ctx.sendMessage({ components: [startedContainer], flags: MessageFlags.IsComponentsV2 });
 		}
 
 		if (action !== "stop") return ctx.sendMessage("Use `record start`, `record status`, `record stop`, or `record disconnect`.");

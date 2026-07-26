@@ -12,6 +12,7 @@ import {
 } from "discord.js";
 import BaseClient from "../base/Client";
 import { voiceRecordingService } from "../service/voiceRecordingService";
+import { checkPremium } from "./premiumCheck";
 
 export function buildRecordingPanel(client: BaseClient, guildId: string) {
 	const status = voiceRecordingService.getStatus(guildId);
@@ -49,7 +50,8 @@ export function buildRecordingPanel(client: BaseClient, guildId: string) {
 }
 
 export async function requireRecordingPremium(interaction: ButtonInteraction): Promise<boolean> {
-	if (env.DEVELOPER_IDS.includes(interaction.user.id) || (await Premium.hasPremium(interaction.user.id))) return true;
+	const redis = (interaction.client as any).redis;
+	if (env.DEVELOPER_IDS.includes(interaction.user.id) || (await checkPremium(redis, interaction.user.id, interaction.guild!))) return true;
 	await interaction.reply({
 		content: "This is a premium feature. Redeem an activation code with `/premium redeem` first.",
 		flags: MessageFlags.Ephemeral,

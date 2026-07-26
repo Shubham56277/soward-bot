@@ -72,17 +72,19 @@ export default class Unmute extends Command {
             await target.timeout(null, reason).catch(() => {});
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔈 Member Unmuted**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Unmuted**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**User:** ${target.toString()}\n` +
-                    `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+                    `**User:** ${target.user.username}\n` +
+                    `**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${target.id}`));
 
-            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+            return msg;
 
         } catch (error) {
             console.error("Unmute Error:", error);

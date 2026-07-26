@@ -2,6 +2,7 @@ import { ApplicationCommandOptionType, ChannelType, GuildMember, MessageFlags, P
 import { Premium } from "@repo/db";
 import { env } from "@repo/env";
 import Command from "../../abstract/Command";
+import { checkPremium } from "../../utils/premiumCheck";
 import Context from "../../lib/Context";
 
 import AlwaysOn from "./247";
@@ -92,7 +93,7 @@ export default class Music extends Command {
 
 		const premiumAction = action === "play-file" || action === "autoplay" || action === "always-on";
 		const activeAction = !["play", "play-file", "search", "join", "leave", "always-on"].includes(action);
-		if (premiumAction && !env.DEVELOPER_IDS.includes(ctx.author!.id) && !(await Premium.hasPremium(ctx.author!.id))) {
+		if (premiumAction && !env.DEVELOPER_IDS.includes(ctx.author!.id) && !(await checkPremium(ctx.client.redis, ctx.author!.id, ctx.guild))) {
 			return ctx.sendMessage({ content: "This is a premium music action. Use `/premium redeem` with an activation code to unlock it.", flags: ctx.isInteraction ? MessageFlags.Ephemeral : undefined });
 		}
 		if (!(ctx.member instanceof GuildMember) || !ctx.member.voice.channel) return ctx.sendMessage("You need to be in a voice channel to use music.");

@@ -6,11 +6,12 @@ import { env } from "@repo/env";
 import { acquireMusicCommandLock } from "../../utils/musicCommandSafety";
 import { createMusicPanel } from "../../utils/musicPanel";
 import { readMusicRecommendations } from "../../utils/musicRecommendations";
+import { checkPremium } from "../../utils/premiumCheck";
 
 const MUSIC_BUTTONS = new Set([
+	"music_previous",
 	"music_resume",
 	"music_skip",
-	"music_stop",
 	"music_loop",
 	"music_shuffle",
 	"music_save",
@@ -44,6 +45,15 @@ export class MusicModule {
 
 		try {
 			switch (customId) {
+				case "music_previous":
+					await this.interaction.deferUpdate();
+					if (!player.queue.previous.length) return this.reply("No previous track to go back to.");
+					const prev = player.queue.previous[player.queue.previous.length - 1];
+					if (prev) {
+						await player.queue.add(prev, 0);
+						await player.skip();
+					}
+					break;
 				case "music_resume":
 					await this.interaction.deferUpdate();
 					player.paused ? await player.resume() : await player.pause();
@@ -52,10 +62,6 @@ export class MusicModule {
 				case "music_skip":
 					await this.interaction.deferUpdate();
 					await player.skip();
-					break;
-				case "music_stop":
-					await this.interaction.deferUpdate();
-					await player.stopPlaying(true, false);
 					break;
 				case "music_loop": {
 					await this.interaction.deferUpdate();
@@ -72,7 +78,7 @@ export class MusicModule {
 					break;
 				case "music_similar": {
 					const isDeveloper = env.DEVELOPER_IDS.includes(this.interaction.user.id);
-					if (!isDeveloper && !(await Premium.hasPremium(this.interaction.user.id))) {
+					if (!isDeveloper && !(await checkPremium(this.client.redis, this.interaction.user.id, this.interaction.guild!))) {
 						return this.reply("Adding similar songs requires premium access. Use /premium redeem to activate it.");
 					}
 					if (!this.interaction.isStringSelectMenu()) return;
@@ -91,7 +97,7 @@ export class MusicModule {
 			}
 		} catch (error) {
 			this.client.logger.error(`Music button ${customId} failed: ${error instanceof Error ? error.message : String(error)}`);
-			if (!this.interaction.deferred && !this.interaction.replied) await this.reply("That control could not be completed. Please try again.");
+			if (!this.interaction.deferred && !this.interaction.replied) await this.reply("That control could not be completed. Please try again.").catch(() => undefined);
 		} finally {
 			await release();
 		}
@@ -122,10 +128,18 @@ export class MusicModule {
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setLabel("Search lyrics").setStyle(ButtonStyle.Link).setURL(`https://genius.com/search?q=${query}`),
 		);
-		await this.interaction.reply({ content: `-# Lyrics search for **${track.info.title}**`, components: [row], flags: MessageFlags.Ephemeral });
+		await this.interaction.reply({ content: `-# Lyrics search for **${track.info.title}**`, components: [row], flags: MessageFlags.Ephemeral }).catch(() => undefined);
 	}
 
 	private async reply(message: string): Promise<void> {
-		await this.interaction.reply({ content: `-# ${message}`, flags: MessageFlags.Ephemeral });
+		try {
+			if (this.interaction.replied || this.interaction.deferred) {
+				await this.interaction.followUp({ content: `-# ${message}`, flags: MessageFlags.Ephemeral });
+			} else {
+				await this.interaction.reply({ content: `-# ${message}`, flags: MessageFlags.Ephemeral });
+			}
+		} catch {
+			// Interaction token expired (e.g. after a shard reconnect) — silently drop
+		}
 	}
 }

@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, MessageFlags, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, EmbedBuilder, MessageFlags, ModalBuilder, SeparatorBuilder, SeparatorSpacingSize, StringSelectMenuBuilder, TextDisplayBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AutoResponder } from "@repo/db";
@@ -33,31 +33,26 @@ export default class Autoresponder extends Command {
 		const addButton = new ButtonBuilder()
 			.setCustomId("auto_responder_open_modal")
 			.setLabel("Add Responder")
-			.setEmoji("➕")
 			.setStyle(ButtonStyle.Primary);
 
 		const removeButton = new ButtonBuilder()
 			.setCustomId("auto_responder_remove")
 			.setLabel("Remove")
-			.setEmoji("🗑️")
 			.setStyle(ButtonStyle.Danger);
 
 		const editButton = new ButtonBuilder()
 			.setCustomId("auto_responder_edit")
 			.setLabel("Edit")
-			.setEmoji("✏️")
 			.setStyle(ButtonStyle.Secondary);
 
 		const listButton = new ButtonBuilder()
 			.setCustomId("auto_responder_list")
 			.setLabel("View All")
-			.setEmoji("📋")
 			.setStyle(ButtonStyle.Success);
 
 		const clearButton = new ButtonBuilder()
 			.setCustomId("auto_responder_clear")
 			.setLabel("Clear All")
-			.setEmoji("🧹")
 			.setStyle(ButtonStyle.Secondary);
 
 		// Primary action row with the most common operations
@@ -68,33 +63,28 @@ export default class Autoresponder extends Command {
 		const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
 			.addComponents(removeButton, clearButton);
 
-		// Create an improved embed with more information
-		const embed = new EmbedBuilder()
-			.setColor(ctx.client.config.colors.main)
-			.setTitle("🤖 Autoresponder Manager")
-			.setDescription("Set up automatic responses to specific messages in your server.")
-			.addFields(
-				{ name: "How it works", value: "When a user types a trigger word or pattern, the bot will automatically respond with your configured message." },
-				{ name: "Getting Started", value: "Click the buttons below to manage your autoresponders." }
-			)
-			.setFooter({ text: "You must have the 'Manage Server' permission to use this command." });
+		// Create an improved V2 panel
+		const panel = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Autoresponder Manager**"))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+				"Set up automatic responses to specific messages in your server.\n\n" +
+				"**How it works**\nWhen a user types a trigger word or pattern, the bot will automatically respond with your configured message.\n\n" +
+				"**Getting Started**\nClick the buttons below to manage your autoresponders."
+			));
 
 		// Send initial message with components
 		const msg = await ctx.editOrReply({
-			components: [primaryRow, secondaryRow],
-			embeds: [embed],
+			components: [panel, primaryRow, secondaryRow],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		// Only allow the command author to interact with the buttons
 		const filter = (i: any) => {
 			if (i.user.id === ctx.author?.id) return true;
 			i.reply({
-				embeds: [
-					new EmbedBuilder()
-						.setColor(ctx.client.config.colors.red)
-						.setDescription("<:Cross:1375519752746958858> You don't have permission to use these controls.")
-				],
-				flags: MessageFlags.Ephemeral,
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("You don't have permission to use these controls."))],
+				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 			});
 			return false;
 		};
@@ -169,7 +159,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.red)
-										.setDescription("<:Cross:1375519752746958858> A responder with this name already exists!")
+										.setDescription("A responder with this name already exists!")
 										.addFields(
 											{ name: "What to do", value: "Please choose a different name or edit the existing responder." }
 										)
@@ -187,7 +177,7 @@ export default class Autoresponder extends Command {
 									embeds: [
 										new EmbedBuilder()
 											.setColor(ctx.client.config.colors.red)
-											.setDescription("<:Cross:1375519752746958858> Invalid regex pattern!")
+											.setDescription("Invalid regex pattern!")
 											.addFields(
 												{ name: "Error Details", value: "The regex pattern you provided is not valid. Please check your syntax and try again." }
 											)
@@ -213,7 +203,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.main)
-									.setTitle("<:Tick:1375519268292264012> Responder Added")
+									.setTitle("Responder Added")
 									.setDescription(`Successfully created autoresponder: **${name}**`)
 									.addFields(
 										{ name: "Trigger", value: trigger },
@@ -230,7 +220,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.red)
-									.setDescription("<:Cross:1375519752746958858> Time expired! Please try again.")
+									.setDescription("Time expired! Please try again.")
 							],
 							flags: MessageFlags.Ephemeral
 						});
@@ -244,7 +234,7 @@ export default class Autoresponder extends Command {
 						embeds: [
 							new EmbedBuilder()
 								.setColor(ctx.client.config.colors.red)
-								.setDescription("<:Cross:1375519752746958858> No autoresponders found in this server!")
+								.setDescription("No autoresponders found in this server!")
 								.addFields(
 									{ name: "Getting Started", value: "Click the 'Add Responder' button to create your first autoresponder." }
 								)
@@ -266,7 +256,6 @@ export default class Autoresponder extends Command {
 						label: r.name,
 						description: `Trigger: ${r.trigger.length > 20 ? `${r.trigger.substring(0, 20)}...` : r.trigger}`,
 						value: r.name,
-						emoji: "🗑️",
 					});
 				}
 
@@ -276,7 +265,7 @@ export default class Autoresponder extends Command {
 					embeds: [
 						new EmbedBuilder()
 							.setColor(ctx.client.config.colors.main)
-							.setTitle("🗑️ Remove Autoresponder")
+							.setTitle("Remove Autoresponder")
 							.setDescription("Select an autoresponder to remove from your server.")
 					],
 					components: [row],
@@ -298,7 +287,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.red)
-									.setDescription("<:Cross:1375519752746958858> Responder not found!")
+									.setDescription("Responder not found!")
 							],
 							flags: MessageFlags.Ephemeral
 						});
@@ -322,7 +311,7 @@ export default class Autoresponder extends Command {
 						embeds: [
 							new EmbedBuilder()
 								.setColor(ctx.client.config.colors.red)
-								.setTitle("⚠️ Confirm Deletion")
+								.setTitle("Confirm Deletion")
 								.setDescription(`Are you sure you want to remove the autoresponder **${responder.name}**?`)
 								.addFields(
 									{ name: "Trigger", value: responder.trigger },
@@ -345,7 +334,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.main)
-										.setDescription(`<:Tick:1375519268292264012> Autoresponder **${responder.name}** has been removed!`)
+										.setDescription(`Autoresponder **${responder.name}** has been removed!`)
 								],
 								components: [],
 							});
@@ -354,7 +343,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.main)
-										.setDescription("<:Cross:1375519752746958858> Deletion cancelled.")
+										.setDescription("Deletion cancelled.")
 								],
 								components: [],
 							});
@@ -369,7 +358,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.red)
-										.setDescription("⏱️ Time expired! Deletion cancelled.")
+										.setDescription("Time expired! Deletion cancelled.")
 								],
 								components: [],
 							});
@@ -383,7 +372,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.red)
-									.setDescription("⏱️ Time expired! Please try again.")
+									.setDescription("Time expired! Please try again.")
 							],
 							components: [],
 						});
@@ -397,7 +386,7 @@ export default class Autoresponder extends Command {
 						embeds: [
 							new EmbedBuilder()
 								.setColor(ctx.client.config.colors.red)
-								.setDescription("<:Cross:1375519752746958858> No autoresponders found in this server!")
+								.setDescription("No autoresponders found in this server!")
 						],
 						flags: MessageFlags.Ephemeral
 					});
@@ -421,7 +410,7 @@ export default class Autoresponder extends Command {
 					embeds: [
 						new EmbedBuilder()
 							.setColor(ctx.client.config.colors.red)
-							.setTitle("⚠️ Clear All Autoresponders")
+							.setTitle("Clear All Autoresponders")
 							.setDescription(`Are you sure you want to delete **ALL ${responders.length} autoresponders** from this server?`)
 							.addFields(
 								{ name: "Warning", value: "This action cannot be undone!" }
@@ -446,7 +435,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.red)
-										.setDescription("<:Cross:1375519752746958858> No autoresponders found to delete!")
+										.setDescription("No autoresponders found to delete!")
 								],
 								components: []
 							});
@@ -460,7 +449,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.main)
-									.setDescription(`<:Tick:1375519268292264012> Successfully removed all ${all.length} autoresponders!`)
+									.setDescription(`Successfully removed all ${all.length} autoresponders!`)
 							],
 							components: []
 						});
@@ -471,7 +460,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.main)
-									.setDescription("<:Cross:1375519752746958858> Operation cancelled.")
+									.setDescription("Operation cancelled.")
 							],
 							components: []
 						});
@@ -484,7 +473,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.red)
-									.setDescription("⏱️ Time expired! Operation cancelled.")
+									.setDescription("Time expired! Operation cancelled.")
 							],
 							components: [],
 						});
@@ -498,7 +487,7 @@ export default class Autoresponder extends Command {
 						embeds: [
 							new EmbedBuilder()
 								.setColor(ctx.client.config.colors.red)
-								.setDescription("<:Cross:1375519752746958858> No autoresponders found in this server!")
+								.setDescription("No autoresponders found in this server!")
 								.addFields(
 									{ name: "Getting Started", value: "Click the 'Add Responder' button to create your first autoresponder." }
 								)
@@ -520,7 +509,6 @@ export default class Autoresponder extends Command {
 						label: r.name,
 						description: `Trigger: ${r.trigger.length > 20 ? `${r.trigger.substring(0, 20)}...` : r.trigger}`,
 						value: r.name,
-						emoji: "✏️",
 					});
 				}
 
@@ -530,7 +518,7 @@ export default class Autoresponder extends Command {
 					embeds: [
 						new EmbedBuilder()
 							.setColor(ctx.client.config.colors.main)
-							.setTitle("✏️ Edit Autoresponder")
+							.setTitle("Edit Autoresponder")
 							.setDescription("Select an autoresponder to modify its settings.")
 					],
 					components: [row],
@@ -555,7 +543,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.red)
-									.setDescription("<:Cross:1375519752746958858> Responder not found!")
+									.setDescription("Responder not found!")
 							],
 							flags: MessageFlags.Ephemeral
 						});
@@ -628,7 +616,7 @@ export default class Autoresponder extends Command {
 										embeds: [
 											new EmbedBuilder()
 												.setColor(ctx.client.config.colors.red)
-												.setDescription("<:Cross:1375519752746958858> Invalid regex pattern!")
+												.setDescription("Invalid regex pattern!")
 												.addFields(
 													{ name: "Error Details", value: "The regex pattern you provided is not valid. Please check your syntax and try again." }
 												)
@@ -646,7 +634,7 @@ export default class Autoresponder extends Command {
 										embeds: [
 											new EmbedBuilder()
 												.setColor(ctx.client.config.colors.red)
-												.setDescription("<:Cross:1375519752746958858> A responder with this name already exists!")
+												.setDescription("A responder with this name already exists!")
 												.addFields(
 													{ name: "What to do", value: "Please choose a different name or edit the existing responder." }
 												)
@@ -680,7 +668,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.main)
-										.setTitle("<:Tick:1375519268292264012> Responder Updated")
+										.setTitle("Responder Updated")
 										.setDescription(`Successfully updated autoresponder: **${name}**`)
 										.addFields(
 											{ name: "Trigger", value: trigger },
@@ -697,7 +685,7 @@ export default class Autoresponder extends Command {
 								embeds: [
 									new EmbedBuilder()
 										.setColor(ctx.client.config.colors.red)
-										.setDescription("⏱️ Time expired! Please try again.")
+										.setDescription("Time expired! Please try again.")
 								],
 								flags: MessageFlags.Ephemeral
 							});
@@ -710,7 +698,7 @@ export default class Autoresponder extends Command {
 							embeds: [
 								new EmbedBuilder()
 									.setColor(ctx.client.config.colors.red)
-									.setDescription("⏱️ Time expired! Please try again.")
+									.setDescription("Time expired! Please try again.")
 							],
 							components: [],
 						});
@@ -724,7 +712,7 @@ export default class Autoresponder extends Command {
 						embeds: [
 							new EmbedBuilder()
 								.setColor(ctx.client.config.colors.red)
-								.setDescription("<:Cross:1375519752746958858> No autoresponders found in this server!")
+								.setDescription("No autoresponders found in this server!")
 								.addFields(
 									{ name: "Getting Started", value: "Click the 'Add Responder' button to create your first autoresponder." }
 								)
@@ -736,7 +724,7 @@ export default class Autoresponder extends Command {
 				// Create a detailed list of responders
 				const embed = new EmbedBuilder()
 					.setColor(ctx.client.config.colors.main)
-					.setTitle("📋 Autoresponder List")
+					.setTitle("Autoresponder List")
 					.setDescription(`This server has **${responders.length}** configured autoresponders.`);
 
 				// Add responders as fields
@@ -802,7 +790,7 @@ export default class Autoresponder extends Command {
 				embeds: [
 					new EmbedBuilder()
 						.setColor(ctx.client.config.colors.main)
-						.setTitle("🤖 Autoresponder Manager - Session Ended")
+						.setTitle("Autoresponder Manager - Session Ended")
 						.setDescription("This session has expired. Type `/autoresponder` or `!ar` to start a new session.")
 				],
 			}).catch(() => { });

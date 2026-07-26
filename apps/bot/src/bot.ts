@@ -5,6 +5,8 @@ import { createREST } from "@repo/framework";
 import Redis from "ioredis";
 import Logger from "./lib/Logger";
 import { startHealthServer, stopHealthServer, markBotReady, getLatencyMonitor, type HealthClientState } from "./modules/health";
+import { handleProcessError } from "./utils/errorHandler";
+import { shutdownQueues } from "./queues";
 
 const logger = new Logger();
 const HEALTH_PORT = Number(process.env.HEALTH_PORT) || 9090;
@@ -47,7 +49,7 @@ let client: BaseClient | null = null;
         logStep("client.start resolved");
 
         // Track ready event for health
-        client.once("ready", () => {
+        client.once("clientReady", () => {
             markBotReady();
             logger.success(`[bot-entry] Discord READY: ${client?.user?.tag} | Guilds: ${client?.guilds.cache.size} | Gateway ping: ${client?.ws.ping}ms`);
         });
@@ -115,11 +117,12 @@ function getHealthState(): HealthClientState {
 }
 
 // ─────────────────────────────────────────────────────────
-// 💥 Anti-crash / Error Boundary
+// Anti-crash / Error Boundary
 // ─────────────────────────────────────────────────────────
 
 process.on("unhandledRejection", (reason: unknown, promise: Promise<any>) => {
     logger.error("Unhandled Rejection at:", promise, "reason:", reason);
+    void handleProcessError(client, reason, "unhandledRejection");
 });
 
 process.on("rejectionHandled", (promise: Promise<any>) => {
@@ -128,8 +131,12 @@ process.on("rejectionHandled", (promise: Promise<any>) => {
 
 process.on("uncaughtException", (err: Error) => {
     logger.error("Uncaught Exception thrown:", err);
-    // Non-recoverable: exit so systemd restarts us
-    process.exit(1);
+    // Non-recoverable: give the alert webhook a brief window to fire before
+    // exiting so systemd restarts us — but never block shutdown indefinitely.
+    handleProcessError(client, err, "uncaughtException")
+        .catch(() => undefined)
+        .finally(() => process.exit(1));
+    setTimeout(() => process.exit(1), 3000).unref();
 });
 
 process.on("uncaughtExceptionMonitor", (err: Error) => {
@@ -154,6 +161,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
     // Stop health server
     stopHealthServer();
+
+    // Close all BullMQ workers
+    try {
+        await shutdownQueues();
+        logger.info("[shutdown] BullMQ workers closed.");
+    } catch (err) {
+        logger.error("[shutdown] Error closing BullMQ workers:", err);
+    }
 
     // Destroy Discord client
     if (client) {

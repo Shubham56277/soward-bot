@@ -57,12 +57,12 @@ export default class NoPrefix extends Command {
             const expiresAt = currentUser?.noPrefixExpiresAt;
             if (expiresAt) {
                 const remainingTime = TimeFormat.toHumanize(expiresAt.getTime() - Date.now());
-                statusMessage = `⏳ Your no-prefix status is **active** and will expire in **${remainingTime}**.`;
+                statusMessage = `Your no-prefix status is **active** and will expire in **${remainingTime}**.`;
             } else {
-                statusMessage = "<:Tick:1375519268292264012> Your no-prefix status is **active indefinitely**.";
+                statusMessage = "Your no-prefix status is **active indefinitely**.";
             }
         } else {
-            statusMessage = "<:Cross:1375519752746958858> You currently **don't have** no-prefix enabled.";
+            statusMessage = "You currently **don't have** no-prefix enabled.";
         }
 
         const message = await ctx.sendMessage({
@@ -84,7 +84,7 @@ export default class NoPrefix extends Command {
                         noPrefix: false,
                     });
                     await interaction.update({
-                        content: "<:Tick:1375519268292264012> Your no-prefix status has been **disabled**.",
+                        content: "Your no-prefix status has been **disabled**.",
                         components: [],
                     });
                 } else {
@@ -93,14 +93,14 @@ export default class NoPrefix extends Command {
                         noPrefix: true,
                     });
                     await interaction.update({
-                        content: "<:Tick:1375519268292264012> Your no-prefix status has been **enabled**.",
+                        content: "Your no-prefix status has been **enabled**.",
                         components: [],
                     });
                 }
             } catch (error) {
                 console.error(error);
 					await interaction.followUp({
-						content: "<:Cross:1375519752746958858> An error occurred while updating your no-prefix status.",
+						content: "An error occurred while updating your no-prefix status.",
 						flags: 64,
 					});
             }
