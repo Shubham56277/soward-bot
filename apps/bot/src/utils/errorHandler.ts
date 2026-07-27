@@ -1,6 +1,5 @@
 import { ChatInputCommandInteraction, ContextMenuCommandInteraction, Message } from "discord.js";
 import { randomBytes } from "node:crypto";
-import type { Redis } from "ioredis";
 
 /**
  * Generate a short error reference ID for user-facing error messages.
@@ -65,7 +64,7 @@ export async function handleInteractionError(
 	error: unknown,
 	commandName?: string,
 ): Promise<void> {
-	const { referenceId, userMessage } = handleCommandError(logger, error, {
+	const { userMessage } = handleCommandError(logger, error, {
 		command: commandName ?? interaction.commandName,
 		guildId: interaction.guildId ?? undefined,
 		userId: interaction.user.id,
@@ -97,7 +96,7 @@ export async function handleMessageError(
 	error: unknown,
 	commandName?: string,
 ): Promise<void> {
-	const { referenceId, userMessage } = handleCommandError(logger, error, {
+	const { userMessage } = handleCommandError(logger, error, {
 		command: commandName,
 		guildId: message.guildId ?? undefined,
 		userId: message.author.id,

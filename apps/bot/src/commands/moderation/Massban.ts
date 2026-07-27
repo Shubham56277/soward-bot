@@ -1,4 +1,4 @@
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ApplicationCommandOptionType } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -77,7 +77,9 @@ export default class Massban extends Command {
 
         if (failed.length > 0) {
             lines.push(`\n**Failed (${failed.length}):**`);
-            failed.forEach(f => lines.push(`- \`${f.id}\` — ${f.error}`));
+            for (const f of failed) {
+                lines.push(`- \`${f.id}\` — ${f.error}`);
+            }
         }
 
         const container = new ContainerBuilder()

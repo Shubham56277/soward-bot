@@ -109,10 +109,9 @@ export class Pagination {
 	private cleanup(): void {
 		if (this.message?.editable) {
 			const components = this.createComponents();
-			// biome-ignore lint/complexity/noForEach: <explanation>
-			components.components.forEach((component) => {
+			for (const component of components.components) {
 				component.setDisabled(true);
-			});
+			}
 			this.message
 				.edit({
 					components: [components],
@@ -195,7 +194,9 @@ export class ContainerPagination {
 	private cleanup(): void {
 		if (this.message?.editable) {
 			const nav = this.createNav();
-			nav.components.forEach((c) => c.setDisabled(true));
+			for (const c of nav.components) {
+				c.setDisabled(true);
+			}
 			this.message.edit({ components: [this.pages[this.currentPage]!, nav] }).catch(() => {});
 		}
 		if (this.timeout) clearTimeout(this.timeout);
