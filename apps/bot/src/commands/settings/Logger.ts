@@ -236,12 +236,7 @@ export default class Logger extends Command {
                     } catch (_error) {
 
                         await i.editReply({
-                            embeds: [
-                                {
-                                    color: ctx.client.config.colors.red,
-                                    description: "Failed to create logs category. Please ensure I have the correct permissions.",
-                                },
-                            ],
+                            components: [buildPanel("Logger — Error", "Failed to create logs category. Please ensure I have the correct permissions.")],
                         });
                         return;
                     }
@@ -321,12 +316,7 @@ export default class Logger extends Command {
 
                 if (setupError) {
                     await i.editReply({
-                        embeds: [
-                            {
-                                color: ctx.client.config.colors.red,
-                                description: "Failed to create one or more log channels. Please ensure I have the correct permissions.",
-                            },
-                        ],
+                        components: [buildPanel("Logger — Error", "Failed to create one or more log channels. Please ensure I have the correct permissions.")],
                     });
                     return;
                 }
@@ -356,15 +346,12 @@ export default class Logger extends Command {
                     collector.stop();
                 } catch (error) {
                     console.error(error);
-                    await i.reply({
-                        embeds: [
-                            {
-                                color: ctx.client.config.colors.red,
-                                description: "There was an error setting up the logger.",
-                            },
-                        ],
-                        flags: MessageFlags.Ephemeral,
-                    });
+                    if (!i.deferred && !i.replied) {
+                        await i.reply({
+                            content: "There was an error setting up the logger.",
+                            flags: MessageFlags.Ephemeral,
+                        }).catch(() => {});
+                    }
                 }
             }
         });
@@ -536,12 +523,7 @@ export default class Logger extends Command {
                 await i.deferReply({ flags: MessageFlags.Ephemeral });
                 if (logger.channelAndType.length === 0) {
                     await i.editReply({
-                        embeds: [
-                            {
-                                color: ctx.client.config.colors.orange,
-                                description: "There are no events configured to remove.",
-                            },
-                        ],
+                        components: [buildPanel("Logger", "There are no events configured to remove.")],
                     });
                     return;
                 }
