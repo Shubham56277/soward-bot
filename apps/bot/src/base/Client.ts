@@ -125,6 +125,12 @@ export default class BaseClient extends FrameWorkClient {
 		const formatter = new ResponseFormatter();
 		this.rag = new RagService(this.ai, kb, this.redis, analyticsRecorder, formatter);
 		this.logger.success("[startup] KnowledgeBase + RagService init complete");
+
+		this.logger.start("[startup] AiClusterManager init begin");
+		const { AiClusterManager } = require("../service/aiClusterManager");
+		(this as any).aiCluster = new AiClusterManager(this.redis);
+		this.ai.setCluster((this as any).aiCluster);
+		this.logger.success(`[startup] AiClusterManager init complete: ${(this as any).aiCluster.totalNodes} nodes`);
 		
 		this.logger.start("[startup] rateLimit listener registration begin");
 		this.rest.on('rateLimited', async (info) => {

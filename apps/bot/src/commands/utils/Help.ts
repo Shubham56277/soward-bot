@@ -69,6 +69,12 @@ export default class Help extends Command {
 	// ─── Entry point ─────────────────────────────────────────────────────────────
 
 	public async run(ctx: Context): Promise<any> {
+		// Defer immediately for slash commands to avoid "didn't respond in time"
+		if (ctx.isInteraction && ctx.interaction && !ctx.interaction.deferred && !ctx.interaction.replied) {
+			await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+			(ctx as any).deferred = true;
+		}
+
 		const query = ctx.options.getString("command", false)?.trim().toLowerCase();
 		const prefix = (await Guild.get(ctx.guild.id))?.prefix ?? ctx.client.config.prefix;
 
@@ -125,22 +131,20 @@ export default class Help extends Command {
 				await i.reply({ content: compactReplyText("Only the person who opened this menu can use it."), flags: MessageFlags.Ephemeral }).catch(() => undefined);
 				return;
 			}
+
+			// ALWAYS defer first to prevent "didn't respond in time"
+			await i.deferUpdate().catch(() => undefined);
+
 			try {
 				const handled = this.applyInteraction(i, state);
 				if (handled === "close") {
 					collector.stop("closed");
-					await i.deferUpdate().catch(() => undefined);
 					await message.delete().catch(() => undefined);
 					return;
 				}
-				await i.update(render());
+				await message.edit(render()).catch(() => undefined);
 			} catch (err) {
 				await reportError(ctx.client, err, { source: "menu", command: "help", userId: ctx.author?.id, guildId: ctx.guild?.id, interactionId: i.id });
-				// The interaction MUST be acknowledged even if rendering failed, otherwise
-				// Discord shows "didn't respond in time" to the user.
-				if (!i.deferred && !i.replied) {
-					await i.deferUpdate().catch(() => undefined);
-				}
 			}
 		});
 

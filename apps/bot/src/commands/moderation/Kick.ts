@@ -1,4 +1,4 @@
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -95,16 +95,7 @@ export default class Kick extends Command {
 
         try {
             if (!silent && target) {
-                try {
-                    const dmEmbed = new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle(`You've been removed from ${ctx.guild.name}`)
-                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.username ?? "Unknown"}`)
-                        .setTimestamp();
-                    await target.send({ embeds: [dmEmbed] });
-                } catch {
-                    // User has DMs closed
-                }
+                await target.send(`**You've been removed from ${ctx.guild.name}**\nReason: ${reason}\nModerator: ${ctx.author?.username ?? "Unknown"}`).catch(() => {});
             }
 
             await ctx.guild.members.kick(targetUser, reason);

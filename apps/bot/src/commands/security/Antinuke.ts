@@ -7,11 +7,14 @@ import {
 	ContainerBuilder,
 	GuildMember,
 	MessageFlags,
+	ModalBuilder,
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
 	StringSelectMenuInteraction,
 	TextDisplayBuilder,
+	TextInputBuilder,
+	TextInputStyle,
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
@@ -672,20 +675,20 @@ export default class AntiNukeCommand extends Command {
 
 		const buildModuleView = (items: any[]): string => {
 			const lines = items.map((e: any) => {
-				const icon = e.enabled ? EMOJI.on : EMOJI.off;
-				return `${icon} **${capitalize(e.type)}** — limit: \`${e.limit}\` action: \`${e.action}\``;
+				const status = e.enabled ? "ON" : "OFF";
+				return `**${capitalize(e.type)}** — ${status} | limit: \`${e.limit}\` | action: \`${e.action}\``;
 			});
 
 			return [
 				`Module: **${meta.label}**`,
 				`Description: ${meta.description}`,
 				"",
-				"━━━━━━━━━━━━━━━━━━━━━━━",
+				"────────────────────",
 				"**Protection Types**",
-				"━━━━━━━━━━━━━━━━━━━━━━━",
+				"────────────────────",
 				...lines,
 				"",
-				"-# Tap a button to toggle each type on/off.",
+				"-# Click a button to configure limit and action for each type.",
 			].join("\n");
 		};
 
@@ -698,14 +701,12 @@ export default class AntiNukeCommand extends Command {
 						new ButtonBuilder()
 							.setCustomId(`an:t:${module}:${e.type}`)
 							.setLabel(capitalize(e.type))
-							.setStyle(e.enabled ? ButtonStyle.Success : ButtonStyle.Secondary)
-							.setEmoji(e.enabled ? "◈" : "◇"),
+							.setStyle(e.enabled ? ButtonStyle.Success : ButtonStyle.Danger),
 					),
 				));
 			}
-			// Back button
 			rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("an:back").setLabel("← Back").setStyle(ButtonStyle.Secondary),
+				new ButtonBuilder().setCustomId("an:back").setLabel("Back").setStyle(ButtonStyle.Secondary),
 			));
 			return rows;
 		};
@@ -737,14 +738,69 @@ export default class AntiNukeCommand extends Command {
 				const entry = moduleEntries.find((e: any) => e.type === targetType);
 				if (!entry) return;
 
-				entry.enabled = !entry.enabled;
+				// Open modal to configure this type
+				const modal = new ModalBuilder()
+					.setCustomId(`an:modal:${targetModule}:${targetType}`)
+					.setTitle(`Configure ${capitalize(targetType)}`)
+					.addComponents(
+						new ActionRowBuilder<TextInputBuilder>().addComponents(
+							new TextInputBuilder()
+								.setCustomId("an_enabled")
+								.setLabel("Enabled (on / off)")
+								.setStyle(TextInputStyle.Short)
+								.setValue(entry.enabled ? "on" : "off")
+								.setRequired(true),
+						),
+						new ActionRowBuilder<TextInputBuilder>().addComponents(
+							new TextInputBuilder()
+								.setCustomId("an_limit")
+								.setLabel("Limit (1-100)")
+								.setStyle(TextInputStyle.Short)
+								.setValue(String(entry.limit))
+								.setRequired(false),
+						),
+						new ActionRowBuilder<TextInputBuilder>().addComponents(
+							new TextInputBuilder()
+								.setCustomId("an_action")
+								.setLabel("Action (ban / kick / rolestrip)")
+								.setStyle(TextInputStyle.Short)
+								.setValue(entry.action)
+								.setRequired(false),
+						),
+					);
+
+				await btn.showModal(modal);
+
+				const modalInt = await btn.awaitModalSubmit({
+					time: 60_000,
+					filter: (i: any) => i.customId === `an:modal:${targetModule}:${targetType}` && i.user.id === ctx.author!.id,
+				}).catch(() => null);
+
+				if (!modalInt) return;
+
+				// Parse values
+				const enabledRaw = modalInt.fields.getTextInputValue("an_enabled").trim().toLowerCase();
+				const limitRaw = modalInt.fields.getTextInputValue("an_limit").trim();
+				const actionRaw = modalInt.fields.getTextInputValue("an_action").trim().toLowerCase();
+
+				entry.enabled = enabledRaw === "on" || enabledRaw === "true" || enabledRaw === "yes" || enabledRaw === "1";
+
+				if (limitRaw) {
+					const parsed = parseInt(limitRaw, 10);
+					if (!isNaN(parsed) && parsed >= 1 && parsed <= 100) entry.limit = parsed;
+				}
+
+				if (actionRaw && ["ban", "kick", "rolestrip"].includes(actionRaw)) {
+					entry.action = actionRaw;
+				}
+
 				settings = await AntiNuke.update(ctx.guild.id!, settings);
 				await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(settings));
 
 				const refreshed: any[] = (settings as any)[targetModule] ?? [];
 				const refreshedPanel = panel(`${meta.label} Module`, buildModuleView(refreshed));
 				const refreshedButtons = buildButtons(refreshed);
-				await btn.update({ components: [refreshedPanel, ...refreshedButtons] }).catch(() => {});
+				await modalInt.update({ components: [refreshedPanel, ...refreshedButtons] }).catch(() => {});
 			} catch {
 				await btn.reply({ components: [panel("Error", "An error occurred.")], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch(() => {});
 			}

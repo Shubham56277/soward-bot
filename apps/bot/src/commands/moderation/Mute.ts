@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, GuildMember, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, EmbedBuilder } from "discord.js";
+import { ApplicationCommandOptionType, GuildMember, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -102,16 +102,7 @@ export default class Mute extends Command {
 		try {
 			// Notify user if not silent
 			if (!silent) {
-				try {
-					const dmEmbed = new EmbedBuilder()
-						.setColor(0x000000)
-						.setTitle(`You've been muted in ${ctx.guild.name}`)
-						.setDescription(`**Reason:** ${reason}\n**Duration:** ${durationStr}\n**Moderator:** ${ctx.author?.username || "Unknown"}`)
-						.setTimestamp();
-					await targetUser.send({ embeds: [dmEmbed] });
-				} catch {
-					// DMs are closed, continue anyway
-				}
+				await targetUser.send(`**You've been muted in ${ctx.guild.name}**\nReason: ${reason}\nDuration: ${durationStr}\nModerator: ${ctx.author?.username ?? "Unknown"}`).catch(() => {});
 			}
 
 			// Use previously calculated durationMs.

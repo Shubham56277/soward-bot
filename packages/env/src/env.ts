@@ -96,12 +96,34 @@ const envSchema = z.object({
 	OPENROUTER_MODEL: z.string().default("openrouter/free"),
 	HUGGINGFACE_TOKEN: optionalSecret,
 	HUGGINGFACE_MODEL: z.string().default("Qwen/Qwen2.5-7B-Instruct"),
+
+	// Multi-key arrays for AI Cluster Manager (supports strings or {key,model} objects)
+	GROQ_API_KEYS: z.preprocess((val) => {
+		if (!val || (typeof val === "string" && val.trim() === "")) return undefined;
+		if (typeof val === "string") { try { return JSON.parse(val); } catch { return [val]; } }
+		return val;
+	}, z.array(z.union([z.string(), z.object({ key: z.string(), model: z.string().optional() })])).optional()),
+	GEMINI_API_KEYS: z.preprocess((val) => {
+		if (!val || (typeof val === "string" && val.trim() === "")) return undefined;
+		if (typeof val === "string") { try { return JSON.parse(val); } catch { return [val]; } }
+		return val;
+	}, z.array(z.union([z.string(), z.object({ key: z.string(), model: z.string().optional() })])).optional()),
+	OPENROUTER_API_KEYS: z.preprocess((val) => {
+		if (!val || (typeof val === "string" && val.trim() === "")) return undefined;
+		if (typeof val === "string") { try { return JSON.parse(val); } catch { return [val]; } }
+		return val;
+	}, z.array(z.union([z.string(), z.object({ key: z.string(), model: z.string().optional() })])).optional()),
+	HUGGINGFACE_TOKENS: z.preprocess((val) => {
+		if (!val || (typeof val === "string" && val.trim() === "")) return undefined;
+		if (typeof val === "string") { try { return JSON.parse(val); } catch { return [val]; } }
+		return val;
+	}, z.array(z.union([z.string(), z.object({ key: z.string(), model: z.string().optional() })])).optional()),
 	AI_TIMEOUT_SECONDS: integerFromEnv(8, 2, 30),
 	AI_MAX_HISTORY: integerFromEnv(12, 0, 30),
 	AI_MAX_OUTPUT_TOKENS: integerFromEnv(700, 64, 2_000),
 	AI_RACE_MODE: booleanFromEnv(false),
 	AI_SESSION_TTL_SECONDS: integerFromEnv(21_600, 300, 86_400),
-	AI_USER_REQUESTS_PER_MINUTE: integerFromEnv(5, 1, 60),
+	AI_USER_REQUESTS_PER_MINUTE: integerFromEnv(20, 1, 60),
 	AI_GUILD_REQUESTS_PER_MINUTE: integerFromEnv(60, 1, 1_000),
 	AI_MAX_CONCURRENCY: integerFromEnv(20, 1, 200),
 	AI_RESPONSE_CACHE_SECONDS: integerFromEnv(600, 0, 3_600),

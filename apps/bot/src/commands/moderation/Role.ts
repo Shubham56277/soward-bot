@@ -82,7 +82,10 @@ export default class GiveRole extends Command {
 			return await ctx.sendMessage(msg("I cannot assign a role higher than my highest role"));
 		}
 
-		if (role.position >= (ctx.member?.roles.highest.position ?? 0)) {
+		const isAdmin = ctx.member instanceof GuildMember && ctx.member.permissions.has(PermissionFlagsBits.Administrator);
+		const isOwner = ctx.author?.id === ctx.guild.ownerId;
+
+		if (!isAdmin && !isOwner && role.position >= (ctx.member?.roles.highest.position ?? 0)) {
 			return await ctx.sendMessage(msg("You cannot assign a role higher than your highest role"));
 		}
 

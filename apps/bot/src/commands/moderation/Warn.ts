@@ -142,14 +142,8 @@ export default class Warn extends Command {
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Warning ID: ${warning.id}`));
 
-			// DM the warned user (use embed for DM since it's a different context)
-			await target.send({
-				embeds: [{
-					color: 0x000000,
-					title: "You have been warned",
-					description: `**Server:** ${ctx.guild.name}\n**Reason:** ${reason}\n**Moderator:** ${ctx.author.username}\n**Warning ID:** \`${warning.id}\``,
-				}]
-			}).catch(() => {});
+			// DM the warned user
+			await target.send(`**You've been warned in ${ctx.guild.name}**\nReason: ${reason}\nModerator: ${ctx.author.username}\nWarning ID: ${warning.id}`).catch(() => {});
 
 			return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {

@@ -65,8 +65,18 @@ export class AiService {
 
 	public constructor(private readonly redis: Redis) {}
 
+	public setCluster(cluster: any): void {
+		(this as any)._cluster = cluster;
+	}
+
 	public configuredProviders(): string[] {
-		return this.providers().map((provider) => provider.name);
+		const single = this.providers().map((provider) => provider.name);
+		const cluster = (this as any)._cluster as import("./aiClusterManager").AiClusterManager | undefined;
+		if (cluster && cluster.totalNodes > 0) {
+			const clusterProviders = new Set(cluster.getMetrics().map(m => m.provider));
+			for (const p of clusterProviders) single.push(p);
+		}
+		return [...new Set(single)];
 	}
 
 	public async startSession(scope: AiScope): Promise<void> {
@@ -97,7 +107,12 @@ export class AiService {
 	public async ask(scope: AiScope, rawQuestion: string, useHistory: boolean): Promise<AiRequestResult> {
 		const question = rawQuestion.trim().slice(0, 4_000);
 		if (!question) return { ok: false, reason: "unavailable" };
-		if (this.providers().length === 0) return { ok: false, reason: "not_configured" };
+
+		// Check if ANY provider is configured (single-key OR multi-key via cluster)
+		const cluster = (this as any)._cluster as import("./aiClusterManager").AiClusterManager | undefined;
+		const hasProviders = this.providers().length > 0 || (cluster && cluster.totalNodes > 0);
+		if (!hasProviders) return { ok: false, reason: "not_configured" };
+
 		if (this.activeRequests >= env.AI_MAX_CONCURRENCY) return { ok: false, reason: "busy", retryAfter: 2 };
 
 		const limits = await Promise.all([
@@ -151,6 +166,40 @@ export class AiService {
 	}
 
 	private async route(messages: AiMessage[]): Promise<Omit<AiAnswer, "latencyMs" | "cached">> {
+		// Try cluster manager first (multi-key routing)
+		const cluster = (this as any)._cluster as import("./aiClusterManager").AiClusterManager | undefined;
+		if (cluster && cluster.hasAvailableNodes) {
+			// Try up to 3 different nodes
+			for (let attempt = 0; attempt < Math.min(3, cluster.totalNodes); attempt++) {
+				const node = cluster.selectNode();
+				if (!node) break;
+
+				cluster.markActive(node.id);
+				const startMs = performance.now();
+
+				try {
+					let text: string;
+					if (node.provider === "Gemini") {
+						text = await this.gemini(messages, new AbortController().signal, node.apiKey);
+					} else {
+						const url = node.provider === "Groq" ? "https://api.groq.com/openai/v1/chat/completions"
+							: node.provider === "OpenRouter" ? "https://openrouter.ai/api/v1/chat/completions"
+							: "https://router.huggingface.co/v1/chat/completions";
+						const extraHeaders = node.provider === "OpenRouter" ? { "HTTP-Referer": env.NEXT_PUBLIC_BASE_URL || "https://discord.com", "X-Title": "Soward Discord Bot" } : {};
+						text = await this.openAiCompatible(url, node.apiKey, node.model, messages, new AbortController().signal, extraHeaders);
+					}
+
+					cluster.recordSuccess(node.id, Math.round(performance.now() - startMs));
+					return { text, provider: node.provider, model: node.model };
+				} catch (error: any) {
+					const status = error?.message?.match(/(\d{3})/)?.[1];
+					cluster.recordFailure(node.id, status ? parseInt(status) : undefined);
+					// Continue to next node
+				}
+			}
+		}
+
+		// Fallback to original single-key routing
 		const available: Provider[] = [];
 		for (const provider of this.providers()) {
 			if (!(await this.redis.exists(`ai:provider:cooldown:${provider.name}`))) available.push(provider);
@@ -232,11 +281,11 @@ export class AiService {
 		return text;
 	}
 
-	private async gemini(messages: AiMessage[], parentSignal: AbortSignal): Promise<string> {
+	private async gemini(messages: AiMessage[], parentSignal: AbortSignal, apiKey?: string): Promise<string> {
 		const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_MODEL)}:generateContent`;
 		const response = await this.fetchWithTimeout(url, {
 			method: "POST",
-			headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! },
+			headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey ?? env.GEMINI_API_KEY! },
 			body: JSON.stringify({
 				systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
 				contents: messages.map((message) => ({ role: message.role === "assistant" ? "model" : "user", parts: [{ text: message.content }] })),
@@ -285,7 +334,8 @@ export class AiService {
 	}
 
 	private async takeRateLimit(key: string, limit: number): Promise<{ allowed: boolean; retryAfter: number }> {
-		const [count, ttl] = await this.redis.eval(RATE_LIMIT_SCRIPT, 1, key, "60") as [number, number];
+		// Use a 300-second (5 min) window — once a user hits the limit they wait 5 minutes
+		const [count, ttl] = await this.redis.eval(RATE_LIMIT_SCRIPT, 1, key, "300") as [number, number];
 		return { allowed: Number(count) <= limit, retryAfter: Math.max(1, Number(ttl)) };
 	}
 

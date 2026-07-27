@@ -206,8 +206,9 @@ export class RagService {
 			if (!userLimit.allowed) return { ok: false, reason: "rate_limited", retryAfter: userLimit.retryAfter };
 			if (!guildLimit.allowed) return { ok: false, reason: "rate_limited", retryAfter: guildLimit.retryAfter };
 
-			// Check provider configuration
-			if (!env.GROQ_API_KEY) return { ok: false, reason: "not_configured" };
+			// Check provider configuration — support both single and multi-key
+			const groqKey = env.GROQ_API_KEY || (env.GROQ_API_KEYS?.[0] && (typeof env.GROQ_API_KEYS[0] === "string" ? env.GROQ_API_KEYS[0] : (env.GROQ_API_KEYS[0] as any)?.key));
+			if (!groqKey) return { ok: false, reason: "not_configured" };
 
 			this.activeRequests += 1;
 
@@ -394,14 +395,18 @@ export class RagService {
 				function: { name: t.name, description: t.description, parameters: t.parameters },
 			}));
 
+			// Resolve Groq key from multi-key or single-key
+			const groqKey = env.GROQ_API_KEY || (env.GROQ_API_KEYS?.[0] && (typeof env.GROQ_API_KEYS[0] === "string" ? env.GROQ_API_KEYS[0] : (env.GROQ_API_KEYS[0] as any)?.key)) || "";
+			const groqModel = env.GROQ_MODEL || (env.GROQ_API_KEYS?.[0] && typeof env.GROQ_API_KEYS[0] === "object" ? (env.GROQ_API_KEYS[0] as any)?.model : undefined) || "llama-3.3-70b-versatile";
+
 			const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					Authorization: `Bearer ${env.GROQ_API_KEY}`,
+					Authorization: `Bearer ${groqKey}`,
 				},
 				body: JSON.stringify({
-					model: env.GROQ_MODEL,
+					model: groqModel,
 					messages,
 					tools,
 					tool_choice: "auto",

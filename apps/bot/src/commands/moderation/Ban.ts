@@ -1,4 +1,4 @@
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -100,16 +100,7 @@ export default class Ban extends Command {
         try {
             // Notify user if not silent
             if (!silent) {
-                try {
-                    const dmEmbed = new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle(`You've been banned from ${ctx.guild.name}`)
-                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.username || "Unknown"}`)
-                        .setTimestamp();
-                    await targetUser.send({ embeds: [dmEmbed] });
-                } catch {
-                    // DMs are closed, continue anyway
-                }
+                await targetUser.send(`**You've been banned from ${ctx.guild.name}**\nReason: ${reason}\nModerator: ${ctx.author?.username ?? "Unknown"}`).catch(() => {});
             }
 
             await ctx.guild.members.ban(targetUser, { reason });
