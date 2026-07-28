@@ -118,14 +118,14 @@ const envSchema = z.object({
 		if (typeof val === "string") { try { return JSON.parse(val); } catch { return [val]; } }
 		return val;
 	}, z.array(z.union([z.string(), z.object({ key: z.string(), model: z.string().optional() })])).optional()),
-	AI_TIMEOUT_SECONDS: integerFromEnv(8, 2, 30),
+	AI_TIMEOUT_SECONDS: integerFromEnv(15, 2, 30),
 	AI_MAX_HISTORY: integerFromEnv(12, 0, 30),
 	AI_MAX_OUTPUT_TOKENS: integerFromEnv(700, 64, 2_000),
-	AI_RACE_MODE: booleanFromEnv(false),
+	AI_RACE_MODE: booleanFromEnv(true),
 	AI_SESSION_TTL_SECONDS: integerFromEnv(21_600, 300, 86_400),
-	AI_USER_REQUESTS_PER_MINUTE: integerFromEnv(20, 1, 60),
-	AI_GUILD_REQUESTS_PER_MINUTE: integerFromEnv(60, 1, 1_000),
-	AI_MAX_CONCURRENCY: integerFromEnv(20, 1, 200),
+	AI_USER_REQUESTS_PER_MINUTE: integerFromEnv(10, 1, 60),
+	AI_GUILD_REQUESTS_PER_MINUTE: integerFromEnv(100, 1, 1_000),
+	AI_MAX_CONCURRENCY: integerFromEnv(50, 1, 200),
 	AI_RESPONSE_CACHE_SECONDS: integerFromEnv(600, 0, 3_600),
 });
 

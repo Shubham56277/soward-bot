@@ -228,7 +228,7 @@ export class AiService {
 			try {
 				return { text: await provider.request(messages, new AbortController().signal), provider: provider.name, model: provider.model };
 			} catch {
-				await this.redis.set(`ai:provider:cooldown:${provider.name}`, "1", "EX", 15).catch(() => undefined);
+				await this.redis.set(`ai:provider:cooldown:${provider.name}`, "1", "EX", 5).catch(() => undefined);
 			}
 		}
 		throw new Error("Every configured AI provider failed");
@@ -334,8 +334,8 @@ export class AiService {
 	}
 
 	private async takeRateLimit(key: string, limit: number): Promise<{ allowed: boolean; retryAfter: number }> {
-		// Use a 300-second (5 min) window — once a user hits the limit they wait 5 minutes
-		const [count, ttl] = await this.redis.eval(RATE_LIMIT_SCRIPT, 1, key, "300") as [number, number];
+		// 60-second window — once a user hits the limit they wait up to 1 minute
+		const [count, ttl] = await this.redis.eval(RATE_LIMIT_SCRIPT, 1, key, "60") as [number, number];
 		return { allowed: Number(count) <= limit, retryAfter: Math.max(1, Number(ttl)) };
 	}
 
