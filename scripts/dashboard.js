@@ -25,8 +25,13 @@ const C = {
 };
 
 const ROOT       = path.resolve(__dirname, "..");
-const REDIS_PATH = "C:\\Users\\Shubham mankar\\AppData\\Local\\Microsoft\\WinGet\\Packages\\taizod1024.redis-windows-fork_Microsoft.Winget.Source_8wekyb3d8bbwe\\Redis-8.8.0-Windows-x64-msys2\\redis-server.exe";
-const REDIS_CLI  = REDIS_PATH.replace("redis-server.exe", "redis-cli.exe");
+// Redis binaries are resolved per-platform. On Linux/macOS the standard
+// `redis-server`/`redis-cli` from PATH are used (e.g. installed via apt/brew).
+// On Windows we fall back to a local build. All can be overridden via env.
+const IS_WIN = process.platform === "win32";
+const WIN_REDIS_SERVER = "C:\\Users\\Shubham mankar\\AppData\\Local\\Microsoft\\WinGet\\Packages\\taizod1024.redis-windows-fork_Microsoft.Winget.Source_8wekyb3d8bbwe\\Redis-8.8.0-Windows-x64-msys2\\redis-server.exe";
+const REDIS_PATH = process.env.REDIS_SERVER_BIN || (IS_WIN ? WIN_REDIS_SERVER : "redis-server");
+const REDIS_CLI  = process.env.REDIS_CLI_BIN || (IS_WIN ? WIN_REDIS_SERVER.replace("redis-server.exe", "redis-cli.exe") : "redis-cli");
 const BOT_PID_FILE = path.join(ROOT, "logs", "bot.pid");
 
 // ─── Logo ─────────────────────────────────────────────────────────────────
