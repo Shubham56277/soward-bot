@@ -178,9 +178,9 @@ export class Services {
 
 				const cooldownKey =
 					`cooldown:auto_responder:${message.guild.id}:${entry.trigger}:${message.author.id}`;
-				if (await redis.get(cooldownKey)) return;
+				if (await redis.get(cooldownKey)) continue;
 
-				await message.channel.send(entry.response);
+				await message.channel.send({ content: entry.response, allowedMentions: { parse: [] } });
 				await redis.setex(cooldownKey, entry.cooldown, "1");
 				break;
 			}

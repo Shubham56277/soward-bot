@@ -520,29 +520,9 @@ export default class Autoresponder extends Command {
 					description += `\nShowing ${MAX_LISTED} of ${responders.length}. Use Edit or Remove to manage the rest.`;
 				}
 
-				const backButton = new ButtonBuilder().setCustomId("auto_responder_list_back").setLabel("Back to Menu").setStyle(ButtonStyle.Secondary);
-				const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(backButton);
-
 				await i.reply({
-					components: [panel("Autoresponder list", description, sections), backRow],
+					components: [panel("Autoresponder list", description, sections)],
 					flags: V2_EPHEMERAL_FLAGS,
-				});
-
-				const message = await i.fetchReply();
-				const backCollector = message.createMessageComponentCollector({
-					componentType: ComponentType.Button,
-					idle: 60000,
-				});
-
-				backCollector.on("collect", async (btn) => {
-					if (btn.customId === "auto_responder_list_back") {
-						// Restore the main manager panel in place.
-						const restored = this.buildManager();
-						await btn.update({
-							components: [restored.container, ...restored.rows],
-						});
-						backCollector.stop();
-					}
 				});
 			}
 		});
@@ -551,7 +531,7 @@ export default class Autoresponder extends Command {
 		collector.on("end", async () => {
 			await msg
 				.edit({
-					components: [panel("Autoresponder Manager", "This session has ended. Run `/autoresponder` or `!ar` to start a new session.")],
+					components: [panel("Autoresponder Manager", "This session has ended. Run the autoresponder command again to start a new session.")],
 					flags: V2_FLAGS,
 				})
 				.catch(() => {});
