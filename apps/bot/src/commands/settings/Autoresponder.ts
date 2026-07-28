@@ -1,7 +1,21 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, EmbedBuilder, MessageFlags, ModalBuilder, SeparatorBuilder, SeparatorSpacingSize, StringSelectMenuBuilder, TextDisplayBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, MessageFlags, ModalBuilder, SeparatorBuilder, SeparatorSpacingSize, StringSelectMenuBuilder, TextDisplayBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AutoResponder } from "@repo/db";
+
+const V2_FLAGS = MessageFlags.IsComponentsV2;
+const V2_EPHEMERAL_FLAGS = MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral;
+
+/** Build a components-only panel with an optional list of heading/content sections. */
+function panel(title: string, description: string, sections: Array<[string, string]> = []): ContainerBuilder {
+	const container = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}\n${description}`));
+	for (const [heading, content] of sections) {
+		container
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${heading}**\n${content}`));
+	}
+	return container;
+}
 
 export default class Autoresponder extends Command {
 	constructor() {
@@ -28,166 +42,138 @@ export default class Autoresponder extends Command {
 			options: [],
 		});
 	}
+
+	/** Build the main manager panel and its button rows. When disabled is true the buttons are inert. */
+	private buildManager(disabled = false): { container: ContainerBuilder; rows: ActionRowBuilder<ButtonBuilder>[] } {
+		const container = panel(
+			"Autoresponder Manager",
+			"Set up automatic responses to specific messages in your server.",
+			[
+				["How it works", "When a user types a trigger word or pattern, the bot automatically replies with your configured message."],
+				["Getting started", "Use the buttons below to add, edit, view, or remove your autoresponders."],
+			],
+		);
+
+		const addButton = new ButtonBuilder().setCustomId("auto_responder_open_modal").setLabel("Add Responder").setStyle(ButtonStyle.Primary).setDisabled(disabled);
+		const editButton = new ButtonBuilder().setCustomId("auto_responder_edit").setLabel("Edit").setStyle(ButtonStyle.Secondary).setDisabled(disabled);
+		const listButton = new ButtonBuilder().setCustomId("auto_responder_list").setLabel("View All").setStyle(ButtonStyle.Success).setDisabled(disabled);
+		const removeButton = new ButtonBuilder().setCustomId("auto_responder_remove").setLabel("Remove").setStyle(ButtonStyle.Danger).setDisabled(disabled);
+		const clearButton = new ButtonBuilder().setCustomId("auto_responder_clear").setLabel("Clear All").setStyle(ButtonStyle.Secondary).setDisabled(disabled);
+
+		const primaryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(addButton, editButton, listButton);
+		const secondaryRow = new ActionRowBuilder<ButtonBuilder>().addComponents(removeButton, clearButton);
+
+		return { container, rows: [primaryRow, secondaryRow] };
+	}
+
+	/** Build the responder details modal, optionally prefilled for editing. */
+	private buildModal(customId: string, title: string, prefill?: { name: string; trigger: string; response: string; useRegex: boolean }): ModalBuilder {
+		const modal = new ModalBuilder().setCustomId(customId).setTitle(title);
+
+		const nameInput = new TextInputBuilder()
+			.setCustomId("name")
+			.setLabel("Name (unique identifier)")
+			.setPlaceholder("Enter a unique name like 'greeting' or 'faq'")
+			.setStyle(TextInputStyle.Short)
+			.setRequired(true);
+
+		const triggerInput = new TextInputBuilder()
+			.setCustomId("trigger")
+			.setLabel("Trigger Word/Pattern")
+			.setPlaceholder("Word or regex pattern that will trigger the response")
+			.setStyle(TextInputStyle.Short)
+			.setRequired(true);
+
+		const responseInput = new TextInputBuilder()
+			.setCustomId("response")
+			.setLabel("Response Message")
+			.setPlaceholder("Message the bot will send when triggered")
+			.setStyle(TextInputStyle.Paragraph)
+			.setRequired(true);
+
+		const regexInput = new TextInputBuilder()
+			.setCustomId("use_regex")
+			.setLabel("Use Regex? (yes/no)")
+			.setPlaceholder("Type 'yes' to use regex pattern matching, 'no' for exact match")
+			.setStyle(TextInputStyle.Short)
+			.setRequired(false);
+
+		if (prefill) {
+			nameInput.setValue(prefill.name);
+			triggerInput.setValue(prefill.trigger);
+			responseInput.setValue(prefill.response);
+			regexInput.setValue(prefill.useRegex ? "Yes" : "No").setPlaceholder(prefill.useRegex ? "Yes" : "No");
+		}
+
+		modal.addComponents(
+			new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+			new ActionRowBuilder<TextInputBuilder>().addComponents(triggerInput),
+			new ActionRowBuilder<TextInputBuilder>().addComponents(responseInput),
+			new ActionRowBuilder<TextInputBuilder>().addComponents(regexInput),
+		);
+
+		return modal;
+	}
+
 	public async run(ctx: Context): Promise<any> {
-		// Create buttons with improved labels and emoji indicators
-		const addButton = new ButtonBuilder()
-			.setCustomId("auto_responder_open_modal")
-			.setLabel("Add Responder")
-			.setStyle(ButtonStyle.Primary);
+		const { container, rows } = this.buildManager();
 
-		const removeButton = new ButtonBuilder()
-			.setCustomId("auto_responder_remove")
-			.setLabel("Remove")
-			.setStyle(ButtonStyle.Danger);
-
-		const editButton = new ButtonBuilder()
-			.setCustomId("auto_responder_edit")
-			.setLabel("Edit")
-			.setStyle(ButtonStyle.Secondary);
-
-		const listButton = new ButtonBuilder()
-			.setCustomId("auto_responder_list")
-			.setLabel("View All")
-			.setStyle(ButtonStyle.Success);
-
-		const clearButton = new ButtonBuilder()
-			.setCustomId("auto_responder_clear")
-			.setLabel("Clear All")
-			.setStyle(ButtonStyle.Secondary);
-
-		// Primary action row with the most common operations
-		const primaryRow = new ActionRowBuilder<ButtonBuilder>()
-			.addComponents(addButton, editButton, listButton);
-
-		// Secondary action row with destructive operations
-		const secondaryRow = new ActionRowBuilder<ButtonBuilder>()
-			.addComponents(removeButton, clearButton);
-
-		// Create an improved V2 panel
-		const panel = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Autoresponder Manager**"))
-			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				"Set up automatic responses to specific messages in your server.\n\n" +
-				"**How it works**\nWhen a user types a trigger word or pattern, the bot will automatically respond with your configured message.\n\n" +
-				"**Getting Started**\nClick the buttons below to manage your autoresponders."
-			));
-
-		// Send initial message with components
+		// Send the initial manager panel.
 		const msg = await ctx.editOrReply({
-			components: [panel, primaryRow, secondaryRow],
-			flags: MessageFlags.IsComponentsV2,
+			components: [container, ...rows],
+			flags: V2_FLAGS,
 		});
 
-		// Only allow the command author to interact with the buttons
+		// Only allow the command author to interact with the buttons.
 		const filter = (i: any) => {
 			if (i.user.id === ctx.author?.id) return true;
 			i.reply({
-				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("You don't have permission to use these controls."))],
-				flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
-			});
+				components: [panel("Permission required", "You do not have permission to use these controls.")],
+				flags: V2_EPHEMERAL_FLAGS,
+			}).catch(() => {});
 			return false;
 		};
 
-		// Create component collector
-		const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, filter, idle: 300000 }); // Extended idle time to 5 minutes
+		const collector = msg.createMessageComponentCollector({ componentType: ComponentType.Button, filter, idle: 300000 });
 
 		collector.on("collect", async (i) => {
 			if (i.customId === "auto_responder_open_modal") {
-				// Create modal for adding new responder with improved guidance
-				const modal = new ModalBuilder()
-					.setCustomId("auto_responder_modal")
-					.setTitle("Create New Auto Responder");
-
-				const nameInput = new TextInputBuilder()
-					.setCustomId("name")
-					.setLabel("Name (unique identifier)")
-					.setPlaceholder("Enter a unique name like 'greeting' or 'faq'")
-					.setStyle(TextInputStyle.Short)
-					.setRequired(true);
-
-				const triggerInput = new TextInputBuilder()
-					.setCustomId("trigger")
-					.setLabel("Trigger Word/Pattern")
-					.setPlaceholder("Word or regex pattern that will trigger the response")
-					.setStyle(TextInputStyle.Short)
-					.setRequired(true);
-
-				const responseInput = new TextInputBuilder()
-					.setCustomId("response")
-					.setLabel("Response Message")
-					.setPlaceholder("Message the bot will send when triggered")
-					.setStyle(TextInputStyle.Paragraph)
-					.setRequired(true);
-
-				const regexInput = new TextInputBuilder()
-					.setCustomId("use_regex")
-					.setLabel("Use Regex? (yes/no)")
-					.setPlaceholder("Type 'yes' to use regex pattern matching, 'no' for exact match")
-					.setStyle(TextInputStyle.Short)
-					.setRequired(false);
-
-				const row0 = new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput);
-				const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(triggerInput);
-				const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(responseInput);
-				const row3 = new ActionRowBuilder<TextInputBuilder>().addComponents(regexInput);
-
-				modal.addComponents(row0, row1, row2, row3);
+				const modal = this.buildModal("auto_responder_modal", "Create New Auto Responder");
 
 				await i.showModal(modal);
 				await i
 					.awaitModalSubmit({
 						filter: (m) => m.user.id === ctx.author?.id,
-						time: 120000, // Extended to 2 minutes
+						time: 120000,
 					})
 					.then(async (m) => {
-
 						const name = m.fields.getTextInputValue("name");
 						const trigger = m.fields.getTextInputValue("trigger");
 						const response = m.fields.getTextInputValue("response");
 						const regex = m.fields.getTextInputValue("use_regex");
-						let useRegex = false;
+						const useRegex = regex?.toLowerCase() === "yes";
 
-						if (regex?.toLowerCase() === "yes") {
-							useRegex = true;
-						}
-
-						// Check if responder with this name already exists
+						// Reject duplicate names.
 						const responder = await AutoResponder.get(ctx.guild?.id, name);
 						if (responder) {
-							return await m.reply({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.red)
-										.setDescription("A responder with this name already exists!")
-										.addFields(
-											{ name: "What to do", value: "Please choose a different name or edit the existing responder." }
-										)
-								],
-								flags: MessageFlags.Ephemeral
+							return m.reply({
+								components: [panel("Name already in use", "A responder with this name already exists.", [["What to do", "Choose a different name or edit the existing responder."]])],
+								flags: V2_EPHEMERAL_FLAGS,
 							});
 						}
 
-						// Validate regex if used
+						// Validate regex when requested.
 						if (useRegex) {
 							try {
 								new RegExp(trigger);
 							} catch (_error) {
 								return m.reply({
-									embeds: [
-										new EmbedBuilder()
-											.setColor(ctx.client.config.colors.red)
-											.setDescription("Invalid regex pattern!")
-											.addFields(
-												{ name: "Error Details", value: "The regex pattern you provided is not valid. Please check your syntax and try again." }
-											)
-									],
-									flags: MessageFlags.Ephemeral
+									components: [panel("Invalid regex pattern", "The regex pattern you provided is not valid.", [["Error details", "Check your syntax and try again."]])],
+									flags: V2_EPHEMERAL_FLAGS,
 								});
 							}
 						}
 
-						// Create the autoresponder
 						await AutoResponder.create({
 							name: name,
 							trigger: trigger,
@@ -200,57 +186,38 @@ export default class Autoresponder extends Command {
 						});
 
 						return m.reply({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.main)
-									.setTitle("Responder Added")
-									.setDescription(`Successfully created autoresponder: **${name}**`)
-									.addFields(
-										{ name: "Trigger", value: trigger },
-										{ name: "Uses Regex", value: useRegex ? "Yes" : "No" },
-										{ name: "Response", value: response.length > 100 ? `${response.substring(0, 100)}...` : response }
-									)
+							components: [
+								panel("Responder added", `Successfully created autoresponder: **${name}**`, [
+									["Trigger", trigger],
+									["Uses regex", useRegex ? "Yes" : "No"],
+									["Response", response.length > 100 ? `${response.substring(0, 100)}...` : response],
+								]),
 							],
-							flags: MessageFlags.Ephemeral
+							flags: V2_EPHEMERAL_FLAGS,
 						});
 					})
 					.catch(() => {
-						// Handle timeout
 						i.followUp({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.red)
-									.setDescription("Time expired! Please try again.")
-							],
-							flags: MessageFlags.Ephemeral
-						});
+							components: [panel("Time expired", "The form timed out. Please try again.")],
+							flags: V2_EPHEMERAL_FLAGS,
+						}).catch(() => {});
 					});
 			} else if (i.customId === "auto_responder_remove") {
-				// Get all responders for this guild
 				const responders = await AutoResponder.getAll(ctx.guild?.id);
 
 				if (!responders || responders.length === 0) {
 					return i.reply({
-						embeds: [
-							new EmbedBuilder()
-								.setColor(ctx.client.config.colors.red)
-								.setDescription("No autoresponders found in this server!")
-								.addFields(
-									{ name: "Getting Started", value: "Click the 'Add Responder' button to create your first autoresponder." }
-								)
-						],
-						flags: MessageFlags.Ephemeral
+						components: [panel("No autoresponders", "No autoresponders found in this server.", [["Getting started", "Use the Add Responder button to create your first autoresponder."]])],
+						flags: V2_EPHEMERAL_FLAGS,
 					});
 				}
 
-				// Create selection menu
 				const menu = new StringSelectMenuBuilder()
 					.setCustomId("auto_responder_remove_menu")
 					.setPlaceholder("Select a responder to remove")
 					.setMinValues(1)
 					.setMaxValues(1);
 
-				// Add options for each responder
 				for (const r of responders) {
 					menu.addOptions({
 						label: r.name,
@@ -262,90 +229,54 @@ export default class Autoresponder extends Command {
 				const row = new ActionRowBuilder<StringSelectMenuBuilder>().setComponents(menu);
 
 				await i.reply({
-					embeds: [
-						new EmbedBuilder()
-							.setColor(ctx.client.config.colors.main)
-							.setTitle("Remove Autoresponder")
-							.setDescription("Select an autoresponder to remove from your server.")
-					],
-					components: [row],
-					flags: MessageFlags.Ephemeral,
+					components: [panel("Remove autoresponder", "Select an autoresponder to remove from your server."), row],
+					flags: V2_EPHEMERAL_FLAGS,
 				});
 
 				const message = await i.fetchReply();
-
 				const menuCollector = message.createMessageComponentCollector({
 					componentType: ComponentType.StringSelect,
-					idle: 60000
+					idle: 60000,
 				});
 
-				menuCollector.on("collect", async (i) => {
-					const responder = await AutoResponder.get(ctx.guild?.id, i.values[0]!);
+				menuCollector.on("collect", async (select) => {
+					const responder = await AutoResponder.get(ctx.guild?.id, select.values[0]!);
 
 					if (!responder) {
-						return i.reply({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.red)
-									.setDescription("Responder not found!")
-							],
-							flags: MessageFlags.Ephemeral
+						return select.reply({
+							components: [panel("Not found", "That responder could not be found.")],
+							flags: V2_EPHEMERAL_FLAGS,
 						});
 					}
 
-					// Create confirmation buttons
-					const confirmButton = new ButtonBuilder()
-						.setCustomId("auto_responder_remove_confirm")
-						.setLabel("Confirm Delete")
-						.setStyle(ButtonStyle.Danger);
+					const confirmButton = new ButtonBuilder().setCustomId("auto_responder_remove_confirm").setLabel("Confirm Delete").setStyle(ButtonStyle.Danger);
+					const cancelButton = new ButtonBuilder().setCustomId("auto_responder_remove_cancel").setLabel("Cancel").setStyle(ButtonStyle.Secondary);
+					const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(confirmButton, cancelButton);
 
-					const cancelButton = new ButtonBuilder()
-						.setCustomId("auto_responder_remove_cancel")
-						.setLabel("Cancel")
-						.setStyle(ButtonStyle.Secondary);
-
-					const confirmRow = new ActionRowBuilder<ButtonBuilder>()
-						.addComponents(confirmButton, cancelButton);
-
-					await i.update({
-						embeds: [
-							new EmbedBuilder()
-								.setColor(ctx.client.config.colors.red)
-								.setTitle("Confirm Deletion")
-								.setDescription(`Are you sure you want to remove the autoresponder **${responder.name}**?`)
-								.addFields(
-									{ name: "Trigger", value: responder.trigger },
-									{ name: "Response", value: responder.response.length > 100 ? `${responder.response.substring(0, 100)}...` : responder.response }
-								)
+					await select.update({
+						components: [
+							panel("Confirm deletion", `Are you sure you want to remove the autoresponder **${responder.name}**?`, [
+								["Trigger", responder.trigger],
+								["Response", responder.response.length > 100 ? `${responder.response.substring(0, 100)}...` : responder.response],
+							]),
+							confirmRow,
 						],
-						components: [confirmRow],
 					});
 
 					const confirmCollector = message.createMessageComponentCollector({
 						componentType: ComponentType.Button,
-						idle: 30000
+						idle: 30000,
 					});
 
 					confirmCollector.on("collect", async (btn) => {
 						if (btn.customId === "auto_responder_remove_confirm") {
 							await AutoResponder.delete(ctx.guild?.id, responder.name);
-
 							await btn.update({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.main)
-										.setDescription(`Autoresponder **${responder.name}** has been removed!`)
-								],
-								components: [],
+								components: [panel("Responder removed", `Autoresponder **${responder.name}** has been removed.`)],
 							});
 						} else if (btn.customId === "auto_responder_remove_cancel") {
 							await btn.update({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.main)
-										.setDescription("Deletion cancelled.")
-								],
-								components: [],
+								components: [panel("Cancelled", "Deletion cancelled.")],
 							});
 						}
 
@@ -354,14 +285,9 @@ export default class Autoresponder extends Command {
 
 					confirmCollector.on("end", async (collected, reason) => {
 						if (reason === "idle" && collected.size === 0) {
-							await i.editReply({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.red)
-										.setDescription("Time expired! Deletion cancelled.")
-								],
-								components: [],
-							});
+							await select.editReply({
+								components: [panel("Time expired", "Deletion cancelled.")],
+							}).catch(() => {});
 						}
 					});
 				});
@@ -369,13 +295,8 @@ export default class Autoresponder extends Command {
 				menuCollector.on("end", async (collected, reason) => {
 					if (reason === "idle" && collected.size === 0) {
 						await i.editReply({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.red)
-									.setDescription("Time expired! Please try again.")
-							],
-							components: [],
-						});
+							components: [panel("Time expired", "Please try again.")],
+						}).catch(() => {});
 					}
 				});
 			} else if (i.customId === "auto_responder_clear") {
@@ -383,47 +304,27 @@ export default class Autoresponder extends Command {
 
 				if (!responders || responders.length === 0) {
 					return i.reply({
-						embeds: [
-							new EmbedBuilder()
-								.setColor(ctx.client.config.colors.red)
-								.setDescription("No autoresponders found in this server!")
-						],
-						flags: MessageFlags.Ephemeral
+						components: [panel("No autoresponders", "No autoresponders found in this server.")],
+						flags: V2_EPHEMERAL_FLAGS,
 					});
 				}
 
-				// Create confirmation buttons
-				const confirmButton = new ButtonBuilder()
-					.setCustomId("auto_responder_clear_confirm")
-					.setLabel("Yes, Delete All")
-					.setStyle(ButtonStyle.Danger);
-
-				const cancelButton = new ButtonBuilder()
-					.setCustomId("auto_responder_clear_cancel")
-					.setLabel("Cancel")
-					.setStyle(ButtonStyle.Secondary);
-
-				const confirmRow = new ActionRowBuilder<ButtonBuilder>()
-					.addComponents(confirmButton, cancelButton);
+				const confirmButton = new ButtonBuilder().setCustomId("auto_responder_clear_confirm").setLabel("Yes, Delete All").setStyle(ButtonStyle.Danger);
+				const cancelButton = new ButtonBuilder().setCustomId("auto_responder_clear_cancel").setLabel("Cancel").setStyle(ButtonStyle.Secondary);
+				const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(confirmButton, cancelButton);
 
 				await i.reply({
-					embeds: [
-						new EmbedBuilder()
-							.setColor(ctx.client.config.colors.red)
-							.setTitle("Clear All Autoresponders")
-							.setDescription(`Are you sure you want to delete **ALL ${responders.length} autoresponders** from this server?`)
-							.addFields(
-								{ name: "Warning", value: "This action cannot be undone!" }
-							)
+					components: [
+						panel("Clear all autoresponders", `Are you sure you want to delete all ${responders.length} autoresponders from this server?`, [["Warning", "This action cannot be undone."]]),
+						confirmRow,
 					],
-					components: [confirmRow],
-					flags: MessageFlags.Ephemeral,
+					flags: V2_EPHEMERAL_FLAGS,
 				});
 
 				const message = await i.fetchReply();
 				const clearCollector = message.createMessageComponentCollector({
 					componentType: ComponentType.Button,
-					idle: 30000
+					idle: 30000,
 				});
 
 				clearCollector.on("collect", async (btn) => {
@@ -432,12 +333,7 @@ export default class Autoresponder extends Command {
 
 						if (!all || all.length === 0) {
 							return btn.update({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.red)
-										.setDescription("No autoresponders found to delete!")
-								],
-								components: []
+								components: [panel("Nothing to delete", "No autoresponders found to delete.")],
 							});
 						}
 
@@ -446,23 +342,13 @@ export default class Autoresponder extends Command {
 						}
 
 						return btn.update({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.main)
-									.setDescription(`Successfully removed all ${all.length} autoresponders!`)
-							],
-							components: []
+							components: [panel("All cleared", `Successfully removed all ${all.length} autoresponders.`)],
 						});
 					}
 
 					if (btn.customId === "auto_responder_clear_cancel") {
 						return btn.update({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.main)
-									.setDescription("Operation cancelled.")
-							],
-							components: []
+							components: [panel("Cancelled", "Operation cancelled.")],
 						});
 					}
 				});
@@ -470,13 +356,8 @@ export default class Autoresponder extends Command {
 				clearCollector.on("end", async (collected, reason) => {
 					if (reason === "idle" && collected.size === 0) {
 						await i.editReply({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.red)
-									.setDescription("Time expired! Operation cancelled.")
-							],
-							components: [],
-						});
+							components: [panel("Time expired", "Operation cancelled.")],
+						}).catch(() => {});
 					}
 				});
 			} else if (i.customId === "auto_responder_edit") {
@@ -484,26 +365,17 @@ export default class Autoresponder extends Command {
 
 				if (!responders || responders.length === 0) {
 					return i.reply({
-						embeds: [
-							new EmbedBuilder()
-								.setColor(ctx.client.config.colors.red)
-								.setDescription("No autoresponders found in this server!")
-								.addFields(
-									{ name: "Getting Started", value: "Click the 'Add Responder' button to create your first autoresponder." }
-								)
-						],
-						flags: MessageFlags.Ephemeral
+						components: [panel("No autoresponders", "No autoresponders found in this server.", [["Getting started", "Use the Add Responder button to create your first autoresponder."]])],
+						flags: V2_EPHEMERAL_FLAGS,
 					});
 				}
 
-				// Create selection menu
 				const menu = new StringSelectMenuBuilder()
 					.setCustomId("auto_responder_edit_menu")
 					.setPlaceholder("Select a responder to edit")
 					.setMinValues(1)
 					.setMaxValues(1);
 
-				// Add options for each responder
 				for (const r of responders) {
 					menu.addOptions({
 						label: r.name,
@@ -515,135 +387,71 @@ export default class Autoresponder extends Command {
 				const row = new ActionRowBuilder<StringSelectMenuBuilder>().setComponents(menu);
 
 				await i.reply({
-					embeds: [
-						new EmbedBuilder()
-							.setColor(ctx.client.config.colors.main)
-							.setTitle("Edit Autoresponder")
-							.setDescription("Select an autoresponder to modify its settings.")
-					],
-					components: [row],
-					flags: MessageFlags.Ephemeral,
+					components: [panel("Edit autoresponder", "Select an autoresponder to modify its settings."), row],
+					flags: V2_EPHEMERAL_FLAGS,
 				});
 
 				const message = await i.fetchReply();
-
 				const menuCollector = message.createMessageComponentCollector({
 					componentType: ComponentType.StringSelect,
-					idle: 60000
+					idle: 60000,
 				});
 
-				menuCollector.on("collect", async (i) => {
-					const value = i.values[0];
+				menuCollector.on("collect", async (select) => {
+					const value = select.values[0];
 					if (!value) return;
 
 					const responder = await AutoResponder.get(ctx.guild?.id, value);
 
 					if (!responder) {
-						return i.reply({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.red)
-									.setDescription("Responder not found!")
-							],
-							flags: MessageFlags.Ephemeral
+						return select.reply({
+							components: [panel("Not found", "That responder could not be found.")],
+							flags: V2_EPHEMERAL_FLAGS,
 						});
 					}
 
-					// Create modal for editing
-					const modal = new ModalBuilder()
-						.setCustomId("auto_responder_edit_modal")
-						.setTitle(`Edit Responder: ${responder.name}`);
+					const modal = this.buildModal("auto_responder_edit_modal", `Edit Responder: ${responder.name}`.slice(0, 45), {
+						name: responder.name,
+						trigger: responder.trigger,
+						response: responder.response,
+						useRegex: Boolean(responder.useRegex),
+					});
 
-					const nameInput = new TextInputBuilder()
-						.setCustomId("name")
-						.setLabel("Name (unique identifier)")
-						.setStyle(TextInputStyle.Short)
-						.setRequired(true)
-						.setValue(responder.name);
-
-					const triggerInput = new TextInputBuilder()
-						.setCustomId("trigger")
-						.setLabel("Trigger Word/Pattern")
-						.setStyle(TextInputStyle.Short)
-						.setRequired(true)
-						.setValue(responder.trigger);
-
-					const responseInput = new TextInputBuilder()
-						.setCustomId("response")
-						.setLabel("Response Message")
-						.setStyle(TextInputStyle.Paragraph)
-						.setRequired(true)
-						.setValue(responder.response);
-
-					const regexInput = new TextInputBuilder()
-						.setCustomId("use_regex")
-						.setLabel("Use Regex? (yes/no)")
-						.setStyle(TextInputStyle.Short)
-						.setRequired(false)
-						.setPlaceholder(responder.useRegex ? "Yes" : "No")
-						.setValue(responder.useRegex ? "Yes" : "No");
-
-					const row0 = new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput);
-					const row1 = new ActionRowBuilder<TextInputBuilder>().addComponents(triggerInput);
-					const row2 = new ActionRowBuilder<TextInputBuilder>().addComponents(responseInput);
-					const row3 = new ActionRowBuilder<TextInputBuilder>().addComponents(regexInput);
-
-					modal.addComponents(row0, row1, row2, row3);
-
-					await i.showModal(modal);
-					await i
+					await select.showModal(modal);
+					await select
 						.awaitModalSubmit({
 							filter: (m) => m.user.id === ctx.author?.id,
-							time: 120000, // Extended to 2 minutes
+							time: 120000,
 						})
 						.then(async (m) => {
 							const name = m.fields.getTextInputValue("name");
 							const trigger = m.fields.getTextInputValue("trigger");
 							const response = m.fields.getTextInputValue("response");
 							const regex = m.fields.getTextInputValue("use_regex");
-							let useRegex = false;
+							const useRegex = regex?.toLowerCase() === "yes";
 
-							if (regex?.toLowerCase() === "yes") {
-								useRegex = true;
-							}
-
-							// Validate regex if used
+							// Validate regex when requested.
 							if (useRegex) {
 								try {
 									new RegExp(trigger);
 								} catch (_error) {
 									return m.reply({
-										embeds: [
-											new EmbedBuilder()
-												.setColor(ctx.client.config.colors.red)
-												.setDescription("Invalid regex pattern!")
-												.addFields(
-													{ name: "Error Details", value: "The regex pattern you provided is not valid. Please check your syntax and try again." }
-												)
-										],
-										flags: MessageFlags.Ephemeral
+										components: [panel("Invalid regex pattern", "The regex pattern you provided is not valid.", [["Error details", "Check your syntax and try again."]])],
+										flags: V2_EPHEMERAL_FLAGS,
 									});
 								}
 							}
 
-							// If name changed, check if the new name already exists
+							// If the name changed, ensure the new name is free, then delete + recreate.
 							if (name !== responder.name) {
 								const existingResponder = await AutoResponder.get(ctx.guild?.id, name);
 								if (existingResponder) {
 									return m.reply({
-										embeds: [
-											new EmbedBuilder()
-												.setColor(ctx.client.config.colors.red)
-												.setDescription("A responder with this name already exists!")
-												.addFields(
-													{ name: "What to do", value: "Please choose a different name or edit the existing responder." }
-												)
-										],
-										flags: MessageFlags.Ephemeral
+										components: [panel("Name already in use", "A responder with this name already exists.", [["What to do", "Choose a different name or edit the existing responder."]])],
+										flags: V2_EPHEMERAL_FLAGS,
 									});
 								}
 
-								// Delete the old responder and create a new one with the updated name
 								await AutoResponder.delete(ctx.guild?.id, responder.name);
 								await AutoResponder.create({
 									name: name,
@@ -656,7 +464,6 @@ export default class Autoresponder extends Command {
 									enabled: responder.enabled,
 								});
 							} else {
-								// Update the existing responder
 								await AutoResponder.update(ctx.guild?.id, name, {
 									trigger: trigger,
 									response: response,
@@ -665,43 +472,29 @@ export default class Autoresponder extends Command {
 							}
 
 							return m.reply({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.main)
-										.setTitle("Responder Updated")
-										.setDescription(`Successfully updated autoresponder: **${name}**`)
-										.addFields(
-											{ name: "Trigger", value: trigger },
-											{ name: "Uses Regex", value: useRegex ? "Yes" : "No" },
-											{ name: "Response", value: response.length > 100 ? `${response.substring(0, 100)}...` : response }
-										)
+								components: [
+									panel("Responder updated", `Successfully updated autoresponder: **${name}**`, [
+										["Trigger", trigger],
+										["Uses regex", useRegex ? "Yes" : "No"],
+										["Response", response.length > 100 ? `${response.substring(0, 100)}...` : response],
+									]),
 								],
-								flags: MessageFlags.Ephemeral
+								flags: V2_EPHEMERAL_FLAGS,
 							});
 						})
 						.catch(() => {
-							// Handle timeout
-							i.followUp({
-								embeds: [
-									new EmbedBuilder()
-										.setColor(ctx.client.config.colors.red)
-										.setDescription("Time expired! Please try again.")
-								],
-								flags: MessageFlags.Ephemeral
-							});
+							select.followUp({
+								components: [panel("Time expired", "The form timed out. Please try again.")],
+								flags: V2_EPHEMERAL_FLAGS,
+							}).catch(() => {});
 						});
 				});
 
 				menuCollector.on("end", async (collected, reason) => {
 					if (reason === "idle" && collected.size === 0) {
 						await i.editReply({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.red)
-									.setDescription("Time expired! Please try again.")
-							],
-							components: [],
-						});
+							components: [panel("Time expired", "Please try again.")],
+						}).catch(() => {});
 					}
 				});
 			} else if (i.customId === "auto_responder_list") {
@@ -709,91 +502,59 @@ export default class Autoresponder extends Command {
 
 				if (!responders || responders.length === 0) {
 					return i.reply({
-						embeds: [
-							new EmbedBuilder()
-								.setColor(ctx.client.config.colors.red)
-								.setDescription("No autoresponders found in this server!")
-								.addFields(
-									{ name: "Getting Started", value: "Click the 'Add Responder' button to create your first autoresponder." }
-								)
-						],
-						flags: MessageFlags.Ephemeral
+						components: [panel("No autoresponders", "No autoresponders found in this server.", [["Getting started", "Use the Add Responder button to create your first autoresponder."]])],
+						flags: V2_EPHEMERAL_FLAGS,
 					});
 				}
 
-				// Create a detailed list of responders
-				const embed = new EmbedBuilder()
-					.setColor(ctx.client.config.colors.main)
-					.setTitle("Autoresponder List")
-					.setDescription(`This server has **${responders.length}** configured autoresponders.`);
+				const MAX_LISTED = 25;
+				const shown = responders.slice(0, MAX_LISTED);
+				const sections: Array<[string, string]> = shown.map((r, index) => {
+					const trigger = r.trigger.length > 30 ? `${r.trigger.substring(0, 30)}...` : r.trigger;
+					const response = r.response.length > 40 ? `${r.response.substring(0, 40)}...` : r.response;
+					return [`${index + 1}. ${r.name}`, `Trigger: ${trigger}\nRegex: ${r.useRegex ? "Yes" : "No"}\nResponse: ${response}`];
+				});
 
-				// Add responders as fields
-				let count = 0;
-				for (const r of responders) {
-					count++;
-					if (count <= 25) { // Discord has a 25 field limit
-						embed.addFields({
-							name: `${count}. ${r.name}`,
-							value: `**Trigger**: ${r.trigger.length > 30 ? `${r.trigger.substring(0, 30)}...` : r.trigger}\n**Regex**: ${r.useRegex ? "Yes" : "No"}\n**Response**: ${r.response.length > 40 ? `${r.response.substring(0, 40)}...` : r.response}`
-						});
-					}
+				let description = `This server has **${responders.length}** configured autoresponders.`;
+				if (responders.length > MAX_LISTED) {
+					description += `\nShowing ${MAX_LISTED} of ${responders.length}. Use Edit or Remove to manage the rest.`;
 				}
 
-				// If we have more than 25, note it
-				if (count > 25) {
-					embed.setFooter({
-						text: `Showing 25/${count} responders. Use the Edit or Remove buttons to see more.`
-					});
-				}
-
-				// Create a "back" button
-				const backButton = new ButtonBuilder()
-					.setCustomId("auto_responder_list_back")
-					.setLabel("Back to Menu")
-					.setStyle(ButtonStyle.Secondary);
-
+				const backButton = new ButtonBuilder().setCustomId("auto_responder_list_back").setLabel("Back to Menu").setStyle(ButtonStyle.Secondary);
 				const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(backButton);
 
 				await i.reply({
-					embeds: [embed],
-					components: [backRow],
-					flags: MessageFlags.Ephemeral
+					components: [panel("Autoresponder list", description, sections), backRow],
+					flags: V2_EPHEMERAL_FLAGS,
 				});
 
-				// Set up collector for the back button
 				const message = await i.fetchReply();
 				const backCollector = message.createMessageComponentCollector({
 					componentType: ComponentType.Button,
-					idle: 60000
+					idle: 60000,
 				});
 
 				backCollector.on("collect", async (btn) => {
 					if (btn.customId === "auto_responder_list_back") {
+						// Restore the main manager panel in place.
+						const restored = this.buildManager();
 						await btn.update({
-							embeds: [
-								new EmbedBuilder()
-									.setColor(ctx.client.config.colors.main)
-									.setDescription("Returning to main menu...")
-							],
-							components: [],
+							components: [restored.container, ...restored.rows],
 						});
+						backCollector.stop();
 					}
 				});
 			}
 		});
 
-		// Handle collector end
+		// When the session ends, replace the controls with a components-only notice.
 		collector.on("end", async () => {
-			// Update the message to show the session has ended
-			await msg.edit({
-				components: [],
-				embeds: [
-					new EmbedBuilder()
-						.setColor(ctx.client.config.colors.main)
-						.setTitle("Autoresponder Manager - Session Ended")
-						.setDescription("This session has expired. Type `/autoresponder` or `!ar` to start a new session.")
-				],
-			}).catch(() => { });
+			await msg
+				.edit({
+					components: [panel("Autoresponder Manager", "This session has ended. Run `/autoresponder` or `!ar` to start a new session.")],
+					flags: V2_FLAGS,
+				})
+				.catch(() => {});
 		});
 	}
 }

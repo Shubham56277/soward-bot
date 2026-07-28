@@ -248,6 +248,7 @@ export const welcome_configs = pgTable("welcome_configs", {
 export const guilds = pgTable("guilds", {
 	guildId: text("guild_id").primaryKey(),
 	prefix: text("prefix").default(env.PREFIX),
+	prefixes: text("prefixes").array().notNull().default([]),
 	language: text("language").default("en"),
 	twoFourSeven: json("247").$type<{ channelId: string }>(),
 	customRoles: json("custom_roles").$type<ID[]>(),
@@ -262,6 +263,7 @@ export const guilds = pgTable("guilds", {
 export const users = pgTable("users", {
 	userId: text("user_id").primaryKey(),
 	noPrefix: boolean("no_prefix").default(false),
+	noPrefixAllowed: boolean("no_prefix_allowed").default(false),
 	noPrefixExpiresAt: timestamp("no_prefix_expires_at", { withTimezone: true }),
 	level: integer("level").default(0),
 	xp: integer("xp").default(0),
@@ -270,6 +272,31 @@ export const users = pgTable("users", {
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$onUpdate(() => new Date()),
+});
+
+export const userProfiles = pgTable("user_profiles", {
+	userId: text("user_id")
+		.primaryKey()
+		.references(() => users.userId, { onDelete: "cascade", onUpdate: "cascade" }),
+	bio: text("bio"),
+	badges: text("badges").array().notNull().default([]),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const guildBotSettings = pgTable("guild_bot_settings", {
+	guildId: text("guild_id")
+		.primaryKey()
+		.references(() => guilds.guildId, { onDelete: "cascade", onUpdate: "cascade" }),
+	avatarUrl: text("avatar_url"),
+	bio: text("bio"),
+	bannerUrl: text("banner_url"),
+	baselineAvatarUrl: text("baseline_avatar_url"),
+	baselineBio: text("baseline_bio"),
+	baselineBannerUrl: text("baseline_banner_url"),
+	baselineCapturedAt: timestamp("baseline_captured_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const AFK = pgTable("afk", {

@@ -8,7 +8,7 @@ import { sendCommandHelp } from "../../utils/helper";
 import { isCommandIgnored } from "../../utils/functions/ignore";
 import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../utils/musicCommandSafety";
 import { compactReplyText } from "../../utils/compactReply";
-import { getCachedNoPrefix, getCachedPrefix } from "../../utils/commandStateCache";
+import { getCachedNoPrefix, getCachedPrefix, getCachedPrefixes } from "../../utils/commandStateCache";
 import { splitDiscordMessage, type AiRequestResult, type AiScope } from "../../service/aiService";
 import type { RagResult } from "../../service/ragService";
 import { LEGACY_COMMANDS_BY_NAME, replacementArguments, replacementRoot, type LegacyCommandMapping } from "../../config/legacyCommandMap";
@@ -45,16 +45,13 @@ export default class MessageCreate extends Event {
 			if (message.author.bot) return;
 			if (!(message.guild && message.guildId)) return;
 
-			const [configuredPrefix, noPrefix] = await Promise.all([
-				getCachedPrefix(this.client, message.guildId),
+			const [configuredPrefixes, noPrefix] = await Promise.all([
+				getCachedPrefixes(this.client, message.guildId),
 				getCachedNoPrefix(message.author.id),
 			]);
+			const configuredPrefix = configuredPrefixes[0] ?? await getCachedPrefix(this.client, message.guildId);
 			let prefix = configuredPrefix;
-			if (noPrefix) {
-				if (!message.content.startsWith(prefix)) {
-					prefix = "";
-				}
-			}
+			if (noPrefix && !configuredPrefixes.some((candidate) => message.content.startsWith(candidate))) prefix = "";
 
 			const mention = new RegExp(`^<@!?${this.client.user?.id}>( |)$`);
 			if (mention.test(message.content)) {
@@ -109,7 +106,7 @@ export default class MessageCreate extends Event {
 			const isKnownCommand = this.client.commands.has(firstWord);
 			const aiControl = wasMentioned && ["start", "stop", "status", "reset"].includes(mentionText.toLowerCase());
 			const canBeSessionMessage = !wasMentioned
-				&& !message.content.startsWith(configuredPrefix)
+				&& !configuredPrefixes.some((candidate) => message.content.startsWith(candidate))
 				&& !(noPrefix && isKnownCommand);
 			const aiScope: AiScope = { guildId: message.guildId, channelId: message.channelId, userId: message.author.id };
 			const activeAiSession = canBeSessionMessage ? await this.client.ai.isSessionActive(aiScope) : false;
@@ -148,7 +145,13 @@ export default class MessageCreate extends Event {
 
 			const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-			const prefixRegex = new RegExp(`^(<@!?${this.client.user?.id}>|${escapeRegex(prefix)})\\s*`);
+			const acceptedPrefixes = noPrefix && prefix === "" ? ["", ...configuredPrefixes] : configuredPrefixes;
+			const prefixAlternatives = acceptedPrefixes
+				.filter((candidate, index, values) => values.indexOf(candidate) === index)
+				.sort((a, b) => b.length - a.length)
+				.map(escapeRegex)
+				.join("|");
+			const prefixRegex = new RegExp(`^(<@!?${this.client.user?.id}>|${prefixAlternatives})\\s*`);
 			if (prefixRegex.test(message.content)) {
 				const match = message.content.match(prefixRegex);
 				if (!match) return;

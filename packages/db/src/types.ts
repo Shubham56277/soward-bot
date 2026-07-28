@@ -24,6 +24,8 @@ export type IgnoredChannelsType = typeof schema.ignoredChannels.$inferInsert;
 export type blacklistType = typeof schema.blacklist.$inferInsert;
 export type PremiumType = typeof schema.premium.$inferInsert;
 export type PremiumCodeType = typeof schema.premiumCodes.$inferInsert;
+export type UserProfileType = typeof schema.userProfiles.$inferInsert;
+export type GuildBotSettingsType = typeof schema.guildBotSettings.$inferInsert;
 
 export type Channel = {
 	channelId: string;

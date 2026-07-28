@@ -1,8 +1,21 @@
-import { ContainerBuilder, ApplicationCommandOptionType, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
+import {
+	ActionRowBuilder,
+	ApplicationCommandOptionType,
+	ButtonBuilder,
+	ButtonStyle,
+	ComponentType,
+	ContainerBuilder,
+	MessageFlags,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder,
+} from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { messageTracker } from "../../modules/MessageTracker";
-import { ContainerPagination } from "../../utils/Pagination";
+
+const V2 = MessageFlags.IsComponentsV2;
+const NO_PING = { parse: [] as const };
 
 function buildPanel(title: string, body: string): ContainerBuilder {
 	return new ContainerBuilder()
@@ -11,13 +24,17 @@ function buildPanel(title: string, body: string): ContainerBuilder {
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
 }
 
+/** Neutralize any user/role/@everyone mentions so sniped content never pings. */
+function noPing(text: string | null | undefined): string {
+	return String(text ?? "").replace(/@/g, "@\u200b");
+}
 
 export default class Snipe extends Command {
 	constructor() {
 		super({
 			name: "snipe",
 			description: {
-				content: "View recently deleted or edited messages with pagination",
+				content: "View recently deleted or edited messages",
 				examples: ["snipe", "snipe edit", "snipe deleted"],
 				usage: "snipe [type]",
 			},
@@ -47,90 +64,93 @@ export default class Snipe extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
-		// Handle arguments
 		let type = ctx.options?.getString("type", false) || "deleted";
-
-		// Handle text command
 		if (!ctx.isInteraction) {
-			const args = ctx.args;
-			if (args[0]?.toLowerCase() === "edit" || args[0]?.toLowerCase() === "edited") {
-				type = "edited";
-			} else if (args[0]?.toLowerCase() === "delete" || args[0]?.toLowerCase() === "deleted") {
-				type = "deleted";
-			}
+			const first = ctx.args[0]?.toLowerCase();
+			if (first === "edit" || first === "edited") type = "edited";
+			else if (first === "delete" || first === "deleted") type = "deleted";
 		}
 
 		try {
-			if (type === "edited") {
-				await this.handleEditedMessages(ctx);
-			} else {
-				await this.handleDeletedMessages(ctx);
-			}
+			if (type === "edited") return this.handleEditedMessages(ctx);
+			return this.handleDeletedMessages(ctx);
 		} catch (error) {
 			console.error("Snipe Error:", error);
 			await ctx.sendMessage({
-				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("An error occurred while trying to snipe messages"))],
-				flags: MessageFlags.IsComponentsV2,
+				components: [buildPanel("Snipe", "An error occurred while trying to snipe messages.")],
+				flags: V2,
+				allowedMentions: NO_PING,
 			});
 		}
 	}
 
 	private async handleEditedMessages(ctx: Context): Promise<any> {
-		const editedMessages = await messageTracker.getEditedMessages(ctx.client.redis, ctx.channel.id);
-
-		if (!editedMessages || editedMessages.length === 0) {
-			return await ctx.sendMessage({
-				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("No edited messages found in this channel"))],
-				flags: MessageFlags.IsComponentsV2,
-			});
+		const messages = await messageTracker.getEditedMessages(ctx.client.redis, ctx.channel.id);
+		if (!messages || messages.length === 0) {
+			return ctx.sendMessage({ components: [buildPanel("Snipe", "No edited messages found in this channel.")], flags: V2, allowedMentions: NO_PING });
 		}
 
-		const pages: ContainerBuilder[] = [];
-
-		editedMessages.forEach((message, index) => {
-			const lines = [
-				`👤 **Author:** **[${message.author}](https://discord.com/users/${message.authorId})**`,
-				`🆔 **Author ID:** \`${message.authorId}\``,
-				`📣 **Author Mention:** <@${message.authorId}>`,
-				`🕒 **Edited:** <t:${Math.floor(message.editTimestamp / 1000)}:R>`,
-			];
-			if (message.oldContent) lines.push(`\n📝 **Original Content:**\n${message.oldContent}`);
-			if (message.content) lines.push(`\n✏️ **Edited Content:**\n${message.content}`);
-			if (message.messageId) lines.push(`\n🔗 **Message Link:** [Jump to Message](https://discord.com/channels/${ctx.guild.id}/${ctx.channel.id}/${message.messageId})`);
-			lines.push(`\n-# Total Edited Messages: ${editedMessages.length} | Requested by ${ctx.author?.tag}`);
-			pages.push(buildPanel(`Edited Message ${index + 1}/${editedMessages.length}`, lines.join("\n")));
+		// Latest first.
+		const sorted = [...messages].sort((a, b) => b.editTimestamp - a.editTimestamp);
+		const pages = sorted.map((message, index) => {
+			const lines = [`**Sent by** ${noPing(message.author)} · <t:${Math.floor(message.editTimestamp / 1000)}:R>`];
+			if (message.oldContent) lines.push(`**Before:** ${noPing(message.oldContent)}`);
+			if (message.content) lines.push(`**After:** ${noPing(message.content)}`);
+			return buildPanel(`Edited ${index + 1}/${sorted.length}`, lines.join("\n"));
 		});
-
-		const pagination = new ContainerPagination(ctx, pages);
-		await pagination.start();
+		return this.paginate(ctx, pages);
 	}
 
 	private async handleDeletedMessages(ctx: Context): Promise<any> {
-		const deletedMessages = await messageTracker.getDeletedMessages(ctx.client.redis, ctx.channel.id);
-
-		if (!deletedMessages || deletedMessages.length === 0) {
-			return await ctx.sendMessage({
-				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("No deleted messages found in this channel"))],
-				flags: MessageFlags.IsComponentsV2,
-			});
+		const messages = await messageTracker.getDeletedMessages(ctx.client.redis, ctx.channel.id);
+		if (!messages || messages.length === 0) {
+			return ctx.sendMessage({ components: [buildPanel("Snipe", "No deleted messages found in this channel.")], flags: V2, allowedMentions: NO_PING });
 		}
 
-		const pages: ContainerBuilder[] = [];
+		// Latest first.
+		const sorted = [...messages].sort((a, b) => b.timestamp - a.timestamp);
+		const pages = sorted.map((message, index) => {
+			const lines = [`**Sent by** ${noPing(message.author)} · <t:${Math.floor(message.timestamp / 1000)}:R>`];
+			if (message.content) lines.push(noPing(message.content));
+			if (message.image) lines.push(`[Attachment](${message.image})`);
+			return buildPanel(`Deleted ${index + 1}/${sorted.length}`, lines.join("\n"));
+		});
+		return this.paginate(ctx, pages);
+	}
 
-		deletedMessages.forEach((message, index) => {
-			const lines = [
-				`👤 **Author:** **[${message.author}](https://discord.com/users/${message.authorId})**`,
-				`🆔 **Author ID:** \`${message.authorId}\``,
-				`📣 **Author Mention:** <@${message.authorId}>`,
-				`🕒 **Deleted:** <t:${Math.floor(message.timestamp / 1000)}:R>`,
-			];
-			if (message.content) lines.push(`\n📝 **Content:**\n${message.content}`);
-			if (message.image) lines.push(`\n📎 **Attachment:** [View Image](${message.image})`);
-			lines.push(`\n-# Total Deleted Messages: ${deletedMessages.length} | Requested by ${ctx.author?.tag}`);
-			pages.push(buildPanel(`Deleted Message ${index + 1}/${deletedMessages.length}`, lines.join("\n")));
+	/** Minimal paginator: left / delete / right, starting on the latest entry. */
+	private async paginate(ctx: Context, pages: ContainerBuilder[]): Promise<any> {
+		let index = 0;
+		const nav = (disabled = false) =>
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder().setCustomId("snipe_prev").setLabel("←").setStyle(ButtonStyle.Secondary).setDisabled(disabled || index === 0),
+				new ButtonBuilder().setCustomId("snipe_delete").setLabel("Delete").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("snipe_next").setLabel("→").setStyle(ButtonStyle.Secondary).setDisabled(disabled || index === pages.length - 1),
+			);
+
+		const message = await ctx.sendMessage({ components: [pages[0]!, nav()], flags: V2, allowedMentions: NO_PING });
+
+		const collector = message.createMessageComponentCollector({
+			componentType: ComponentType.Button,
+			time: 120_000,
+			filter: (interaction) => interaction.user.id === ctx.author?.id,
 		});
 
-		const pagination = new ContainerPagination(ctx, pages);
-		await pagination.start();
+		collector.on("collect", async (interaction) => {
+			if (interaction.customId === "snipe_delete") {
+				await interaction.deferUpdate().catch(() => {});
+				await message.delete().catch(() => {});
+				collector.stop("deleted");
+				return;
+			}
+			if (interaction.customId === "snipe_prev") index = Math.max(0, index - 1);
+			else if (interaction.customId === "snipe_next") index = Math.min(pages.length - 1, index + 1);
+			await interaction.update({ components: [pages[index]!, nav()] }).catch(() => {});
+		});
+
+		collector.on("end", (_collected, reason) => {
+			if (reason === "deleted") return;
+			if (message.editable) message.edit({ components: [pages[index]!, nav(true)] }).catch(() => {});
+		});
 	}
 }

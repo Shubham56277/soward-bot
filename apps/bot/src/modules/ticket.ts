@@ -1,4 +1,19 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChannelType, EmbedBuilder, Message, MessageFlags, PermissionFlagsBits, TextChannel } from "discord.js";
+import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonInteraction,
+	ButtonStyle,
+	ChannelType,
+	ContainerBuilder,
+	GuildMember,
+	Message,
+	MessageFlags,
+	PermissionFlagsBits,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextChannel,
+	TextDisplayBuilder,
+} from "discord.js";
 import BaseClient from "../base/Client";
 import { Ticket, TicketConfig } from "@repo/db";
 import { wait } from "../utils/helper";
@@ -31,6 +46,103 @@ const job = cron.schedule("0 0 * * *", async () => {
 });
 job.start();
 
+const TICKET_V2_FLAGS = MessageFlags.IsComponentsV2;
+
+/** Resolve the ticket configuration linked to a ticket via its connectionId. */
+export async function resolveTicketConfig(guildId: string, ticket: Ticket): Promise<TicketConfig | null> {
+	const data = await TicketConfig.getAllByGuildId(guildId);
+	if (!data) {
+		return null;
+	}
+	return data.find((config) => config.id === ticket.connectionId) ?? null;
+}
+
+/** Whether a member is ticket staff: an Administrator or a holder of a support role. */
+export function memberIsTicketStaff(member: GuildMember, config: TicketConfig): boolean {
+	if (member.permissions.has(PermissionFlagsBits.Administrator)) {
+		return true;
+	}
+	return config.supportRoles.some((role) => member.roles.cache.has(role));
+}
+
+/** Whether a member may manage (close/rename/add to) the given ticket. */
+export function memberCanManageTicket(member: GuildMember, ticket: Ticket, config: TicketConfig): boolean {
+	if (member.permissions.has(PermissionFlagsBits.Administrator)) {
+		return true;
+	}
+	if (config.supportRoles.some((role) => member.roles.cache.has(role))) {
+		return true;
+	}
+	if (ticket.userId === member.id) {
+		return true;
+	}
+	if (ticket.claimedBy && ticket.claimedBy === member.id) {
+		return true;
+	}
+	return false;
+}
+
+/** Build the live ticket container shown inside an opened ticket channel. */
+export function buildOpenedTicketPanel(ticket: Ticket): ContainerBuilder {
+	const ticketNumber = String(ticket.ticketNumber).padStart(4, "0");
+	const panel = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Ticket #${ticketNumber}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent("Support will be with you shortly. Please describe your issue in detail."))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Opened by**\n<@${ticket.userId}>`))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Status**\n${ticket.status === "closed" ? "Closed" : "Open"}`));
+
+	if (ticket.claimedBy) {
+		panel.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Claimed by**\n<@${ticket.claimedBy}>`));
+	}
+
+	return panel
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Ticket ID: ${ticket.id}`));
+}
+
+/** Build the action row for an opened ticket depending on claim state and support roles. */
+export function buildOpenedTicketButtons(ticket: Ticket, hasSupportRoles: boolean): ActionRowBuilder<ButtonBuilder> {
+	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("close_ticket").setLabel("Close Ticket").setStyle(ButtonStyle.Danger));
+	if (hasSupportRoles) {
+		if (ticket.claimedBy) {
+			row.addComponents(new ButtonBuilder().setCustomId("unclaim_ticket").setLabel("Unclaim Ticket").setStyle(ButtonStyle.Primary));
+		} else {
+			row.addComponents(new ButtonBuilder().setCustomId("claim_ticket").setLabel("Claim Ticket").setStyle(ButtonStyle.Primary));
+		}
+	}
+	return row;
+}
+
+/** Build the container shown after a ticket is closed, with delete + transcript controls. */
+export function buildClosedTicketPanel(ticket: Ticket): { components: ContainerBuilder[]; flags: number } {
+	const container = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent("## Ticket Closed"))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent("This ticket has been closed. Please let us know if you need further assistance."))
+		.addActionRowComponents(
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder().setCustomId("delete_ticket_channel").setLabel("Delete Channel").setStyle(ButtonStyle.Danger),
+				new ButtonBuilder().setCustomId("transcript_ticket").setLabel("Transcript").setStyle(ButtonStyle.Primary),
+			),
+		)
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Ticket ID: ${ticket.id}`));
+	return { components: [container], flags: TICKET_V2_FLAGS };
+}
+
+/** Mark a ticket closed in the database and post the closed panel to its channel. */
+export async function performTicketClose(channel: TextChannel, ticket: Ticket, closedById: string): Promise<void> {
+	await Ticket.update({
+		id: ticket.id,
+		closedBy: closedById,
+		closedAt: new Date(),
+		status: "closed",
+	});
+	await channel.send(buildClosedTicketPanel(ticket)).catch(() => {});
+}
+
 export class TicketModule {
 	private client: BaseClient;
 	private interaction: ButtonInteraction;
@@ -40,17 +152,17 @@ export class TicketModule {
 	}
 	public async handle() {
 		const { customId } = this.interaction;
-		
+
 		try {
 			switch (customId) {
 				case "create_ticket":
 					await this.handleCreateTicket();
 					break;
 				case "claim_ticket":
-					this.handleClaimTicket();
+					await this.handleClaimTicket();
 					break;
 				case "unclaim_ticket":
-					this.handleUnclaimTicket();
+					await this.handleUnclaimTicket();
 					break;
 				case "close_ticket":
 					await this.handleCloseTicket();
@@ -83,14 +195,7 @@ export class TicketModule {
 		if (member.permissions.has(PermissionFlagsBits.Administrator)) {
 			canClaim = true;
 		}
-		const data = await TicketConfig.getAllByGuildId(this.interaction.guildId!);
-		if (!data) {
-			return this.interaction.editReply({
-				content: "Ticket system is not configured for this server.",
-			});
-		}
-		const config = data.find((config) => config.id === ticket.connectionId);
-
+		const config = await resolveTicketConfig(this.interaction.guildId!, ticket);
 		if (!config) {
 			return this.interaction.editReply({
 				content: "Ticket system is not configured for this server.",
@@ -109,8 +214,8 @@ export class TicketModule {
 				content: "This ticket is already claimed.",
 			});
 		}
-		const claimedBy = ticket.claimedBy ? ticket.claimedBy : this.interaction.user.id;
-		await Ticket.updateClaimedBy(ticket.id, claimedBy);
+		await Ticket.updateClaimedBy(ticket.id, this.interaction.user.id);
+		ticket.claimedBy = this.interaction.user.id;
 
 		try {
 			// Prepare all permission updates at once
@@ -120,7 +225,7 @@ export class TicketModule {
 			for (const roleId of config.supportRoles) {
 				permissionUpdates.push({
 					id: roleId,
-					deny: [PermissionFlagsBits.ViewChannel], // Or use delete: true if you want to completely remove
+					deny: [PermissionFlagsBits.ViewChannel],
 				});
 			}
 
@@ -142,43 +247,20 @@ export class TicketModule {
 				deny: [PermissionFlagsBits.ViewChannel],
 			});
 
-			// Execute all permission updates in a single API call
 			await channel.edit({
 				permissionOverwrites: permissionUpdates,
 			});
 		} catch {}
 
-		// replace the claim button with a unclaim button
-		const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("close_ticket").setLabel("Close Ticket").setStyle(ButtonStyle.Danger));
-		if (config.supportRoles.length > 0) {
-			buttons.addComponents(new ButtonBuilder().setCustomId("unclaim_ticket").setLabel("Unclaim Ticket").setStyle(ButtonStyle.Primary));
+		const message = await channel.messages.fetch(this.interaction.message.id).catch(() => null);
+		if (message) {
+			await message
+				.edit({
+					components: [buildOpenedTicketPanel(ticket), buildOpenedTicketButtons(ticket, config.supportRoles.length > 0)],
+					flags: TICKET_V2_FLAGS,
+				})
+				.catch(() => {});
 		}
-		if (!config.messageId) {
-			return;
-		}
-		const message = await channel.messages.fetch(this.interaction.message.id);
-		if (!message) {
-			return;
-		}
-		const embed = message.embeds[0];
-		if (!embed) {
-			return;
-		}
-		const newEmbed = new EmbedBuilder(embed.data)
-			.setTitle(`Ticket #${ticket.ticketNumber}`)
-			.setDescription("Support will be with you shortly. Please describe your issue in detail.")
-			.setFields({ name: "Created by", value: `<@${this.interaction.user.id}> (\`${this.interaction.user.id}\`)`, inline: true }, { name: "Status", value: "Open", inline: true })
-			.setColor(this.client.config.colors.main)
-			.setFooter({
-				text: `Ticket ID: ${ticket?.id} | Claimed by: ${this.interaction.user.username}`,
-			});
-
-		await message
-			.edit({
-				embeds: [newEmbed],
-				components: [buttons],
-			})
-			.catch(() => {});
 		await this.interaction.editReply({
 			content: `Successfully claimed ticket #${ticket.ticketNumber}`,
 		});
@@ -197,19 +279,13 @@ export class TicketModule {
 		if (!member) {
 			return;
 		}
-		//  onkly claim if the user is the one who claimed the ticket
+		// only unclaim if the user is the one who claimed the ticket
 		if (ticket.claimedBy && ticket.claimedBy !== this.interaction.user.id) {
 			return this.interaction.editReply({
 				content: "You are not the one who claimed this ticket.",
 			});
 		}
-		const data = await TicketConfig.getAllByGuildId(this.interaction.guildId!);
-		if (!data) {
-			return this.interaction.editReply({
-				content: "Ticket system is not configured for this server.",
-			});
-		}
-		const config = data.find((config) => config.id === ticket.connectionId);
+		const config = await resolveTicketConfig(this.interaction.guildId!, ticket);
 		if (!config) {
 			return this.interaction.editReply({
 				content: "Ticket system is not configured for this server.",
@@ -218,20 +294,20 @@ export class TicketModule {
 		if (ticket.claimedBy) {
 			await Ticket.updateClaimedBy(ticket.id, null);
 		}
+		ticket.claimedBy = undefined;
 
 		// remove user permissions from the channel
 		await channel.permissionOverwrites.delete(this.interaction.user.id).catch((err) => {
 			this.client.logger.error("Error removing user permissions", err);
 		});
 		try {
-			// Prepare all permission updates at once
 			const permissionUpdates = [];
 
 			// 1. allow all support role accesses
 			for (const roleId of config.supportRoles) {
 				permissionUpdates.push({
 					id: roleId,
-					allow: [PermissionFlagsBits.ViewChannel], // Or use delete: true if you want to completely remove
+					allow: [PermissionFlagsBits.ViewChannel],
 				});
 			}
 
@@ -252,38 +328,15 @@ export class TicketModule {
 			});
 		} catch {}
 
-		// replace the claim button with a unclaim button
-		const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("close_ticket").setLabel("Close Ticket").setStyle(ButtonStyle.Danger));
-		if (config.supportRoles.length > 0) {
-			buttons.addComponents(new ButtonBuilder().setCustomId("claim_ticket").setLabel("Claim Ticket").setStyle(ButtonStyle.Primary));
+		const message = await channel.messages.fetch(this.interaction.message.id).catch(() => null);
+		if (message) {
+			await message
+				.edit({
+					components: [buildOpenedTicketPanel(ticket), buildOpenedTicketButtons(ticket, config.supportRoles.length > 0)],
+					flags: TICKET_V2_FLAGS,
+				})
+				.catch(() => {});
 		}
-		if (!config.messageId) {
-			return;
-		}
-
-		const message = await channel.messages.fetch(config.messageId).catch(() => {});
-
-		if (!message) {
-			return;
-		}
-		const embed = message.embeds[0];
-		if (!embed) {
-			return;
-		}
-		const newEmbed = new EmbedBuilder(embed.data)
-			.setTitle(`Ticket #${ticket.ticketNumber}`)
-			.setDescription("Support will be with you shortly. Please describe your issue in detail.")
-			.setFields({ name: "Created by", value: `<@${this.interaction.user.id}> (\`${this.interaction.user.id}\`)`, inline: true }, { name: "Status", value: "Open", inline: true })
-			.setColor(this.client.config.colors.main)
-			.setFooter({
-				text: `Ticket ID: ${ticket?.id}`,
-			});
-		await message
-			.edit({
-				embeds: [newEmbed],
-				components: [buttons],
-			})
-			.catch(() => {});
 		await this.interaction.editReply({
 			content: `Successfully unclaimed ticket #${ticket.ticketNumber}`,
 		});
@@ -302,11 +355,11 @@ export class TicketModule {
 			tickets = tickets.filter((ticket) => ticket.status === "open");
 			if (tickets.length >= config.openLimit) {
 				return this.interaction.editReply({
-					content: `You already have ${tickets.length} open tickets. You can only have ${config.openLimit} open tickets at once.`
-				})
+					content: `You already have ${tickets.length} open tickets. You can only have ${config.openLimit} open tickets at once.`,
+				});
 			}
 		}
-	
+
 		const permissions = [
 			{
 				id: this.interaction.guild!.roles.everyone.id,
@@ -329,7 +382,7 @@ export class TicketModule {
 		const ticketNumberString = String(ticketNumber).padStart(4, "0");
 
 		const channel = await this.interaction.guild!.channels.create({
-			name: `ticket-#${ticketNumberString}`,
+			name: `ticket-${ticketNumberString}`,
 			type: ChannelType.GuildText,
 			parent: config.openCategoryId,
 			permissionOverwrites: permissions,
@@ -342,24 +395,17 @@ export class TicketModule {
 			connectionId: config.id,
 			topic: `Ticket created by ${this.interaction.user.username}`,
 		});
-		const embed = new EmbedBuilder()
-			.setTitle(`Ticket #${ticketNumberString}`) // Use the auto-incremented number
-			.setDescription("Support will be with you shortly. Please describe your issue in detail.")
-			.addFields({ name: "Created by", value: `<@${this.interaction.user.id}> (\`${this.interaction.user.id}\`)`, inline: true }, { name: "Status", value: "Open", inline: true })
-			.setColor(this.client.config.colors.main)
-			.setFooter({
-				text: `Ticket ID: ${ticket?.id}`,
+		if (!ticket) {
+			return this.interaction.editReply({
+				content: "Failed to create the ticket. Please try again.",
 			});
-		const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("close_ticket").setLabel("Close Ticket").setStyle(ButtonStyle.Danger));
-		if (config.supportRoles.length > 0) {
-			buttons.addComponents(new ButtonBuilder().setCustomId("claim_ticket").setLabel("Claim Ticket").setStyle(ButtonStyle.Primary));
 		}
 
 		await channel
 			.send({
-				embeds: [embed],
-				content: `<@${this.interaction.user.id}>`,
-				components: [buttons],
+				components: [buildOpenedTicketPanel(ticket), buildOpenedTicketButtons(ticket, config.supportRoles.length > 0)],
+				flags: TICKET_V2_FLAGS,
+				allowedMentions: { users: [this.interaction.user.id] },
 			})
 			.catch(() => {});
 		return await this.interaction.editReply({
@@ -379,33 +425,13 @@ export class TicketModule {
 		if (!member) {
 			return;
 		}
-		const data = await TicketConfig.getAllByGuildId(this.interaction.guildId!);
-		if (!data) {
-			return this.interaction.editReply({
-				content: "Ticket system is not configured for this server.",
-			});
-		}
-		const config = data.find((config) => config.id === ticket.connectionId);
+		const config = await resolveTicketConfig(this.interaction.guildId!, ticket);
 		if (!config) {
 			return this.interaction.editReply({
 				content: "Ticket system is not configured for this server.",
 			});
 		}
-		let canClose = false;
-		if (member.permissions.has(PermissionFlagsBits.Administrator)) {
-			canClose = true;
-		}
-		if (config.supportRoles.some((role) => member.roles.cache.has(role))) {
-			canClose = true;
-		}
-		if (ticket.userId === this.interaction.user.id) {
-			canClose = true;
-		}
-		if (ticket.claimedBy && ticket.claimedBy === this.interaction.user.id) {
-			canClose = true;
-		}
-
-		if (!canClose) {
+		if (!memberCanManageTicket(member, ticket, config)) {
 			return this.interaction.editReply({
 				content: "You do not have permission to close this ticket.",
 			});
@@ -415,21 +441,20 @@ export class TicketModule {
 				content: "This ticket is already closed.",
 			});
 		}
-		const confim = new ActionRowBuilder<ButtonBuilder>().addComponents(
+		const confirm = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setCustomId("confirm_close_ticket").setLabel("Confirm").setStyle(ButtonStyle.Danger),
 			new ButtonBuilder().setCustomId("cancel_close_ticket").setLabel("Cancel").setStyle(ButtonStyle.Secondary),
 		);
-		const embed = new EmbedBuilder()
-			.setTitle("Are you sure?")
-			.setDescription("Are you sure you want to close this ticket? This action cannot be undone.")
-			.setColor(this.client.config.colors.main)
-			.setFooter({
-				text: `Ticket ID: ${ticket?.id}`,
-			});
+		const container = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## Close Ticket"))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("Are you sure you want to close this ticket? This action cannot be undone."))
+			.addActionRowComponents(confirm)
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Ticket ID: ${ticket.id}`));
 		await this.interaction.editReply({
-			content: "Are you sure you want to close this ticket? This action cannot be undone.",
-			embeds: [embed],
-			components: [confim],
+			components: [container],
+			flags: TICKET_V2_FLAGS,
 		});
 		const message = await this.interaction.fetchReply();
 		const collector = message.createMessageComponentCollector({
@@ -438,34 +463,14 @@ export class TicketModule {
 		});
 		collector.on("collect", async (i) => {
 			if (i.customId === "confirm_close_ticket") {
-				await Ticket.update({
-					id: ticket.id,
-					closedBy: i.user.id,
-					closedAt: new Date(),
-					status: "closed",
-				});
-				// message for deleting the channel or not
-				const deleteChannel = new ActionRowBuilder<ButtonBuilder>().addComponents(
-					new ButtonBuilder().setCustomId("delete_ticket_channel").setLabel("Delete Channel").setStyle(ButtonStyle.Danger),
-					new ButtonBuilder().setCustomId("transcript_ticket").setLabel("Transcript").setStyle(ButtonStyle.Primary),
-				);
-				const embed = new EmbedBuilder()
-					.setTitle("Ticket Closed")
-					.setDescription("This ticket has been closed. Please let us know if you need further assistance.")
-					.setColor(this.client.config.colors.main)
-					.setFooter({
-						text: `Ticket ID: ${ticket?.id}`,
-					});
 				await i.deferUpdate();
-				await channel.send({
-					embeds: [embed],
-					components: [deleteChannel],
-				});
+				await performTicketClose(channel, ticket, i.user.id);
+				collector.stop();
 			} else if (i.customId === "cancel_close_ticket") {
+				const cancelled = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("Ticket close cancelled."));
 				await i.update({
-					content: "Ticket close cancelled.",
-					embeds: [],
-					components: [],
+					components: [cancelled],
+					flags: TICKET_V2_FLAGS,
 				});
 				collector.stop();
 			}
@@ -486,32 +491,13 @@ export class TicketModule {
 			return;
 		}
 
-		const data = await TicketConfig.getAllByGuildId(this.interaction.guildId!);
-		if (!data) {
-			return this.interaction.editReply({
-				content: "Ticket system is not configured for this server.",
-			});
-		}
-		const config = data.find((config) => config.id === ticket.connectionId);
+		const config = await resolveTicketConfig(this.interaction.guildId!, ticket);
 		if (!config) {
 			return this.interaction.editReply({
 				content: "Ticket system is not configured for this server.",
 			});
 		}
-		let canDelete = false;
-		if (member.permissions.has(PermissionFlagsBits.Administrator)) {
-			canDelete = true;
-		}
-		if (config.supportRoles.some((role) => member.roles.cache.has(role))) {
-			canDelete = true;
-		}
-		if (ticket.userId === this.interaction.user.id) {
-			canDelete = true;
-		}
-		if (ticket.claimedBy && ticket.claimedBy === this.interaction.user.id) {
-			canDelete = true;
-		}
-		if (!canDelete) {
+		if (!memberCanManageTicket(member, ticket, config)) {
 			return this.interaction.editReply({
 				content: "You do not have permission to delete this ticket.",
 			});
@@ -545,26 +531,27 @@ export class TicketModule {
 			id: ticket.id,
 			transcript: JSON.stringify(transcript),
 		});
-		//NEXT_PUBLIC_BASE_URL
 		const baseUrl = env.NEXT_PUBLIC_BASE_URL;
-		const button = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel("View Transcript").setURL(`${baseUrl}/transcript/${ticket.id}`).setStyle(ButtonStyle.Link));
+		const transcriptUrl = `${baseUrl}/transcript/${ticket.id}`;
+		const button = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setLabel("View Transcript").setURL(transcriptUrl).setStyle(ButtonStyle.Link));
 
-		const embed = new EmbedBuilder()
-			.setTitle("Transcript")
-			.setDescription("The transcript has been generated. Click the button below to view it.")
-			.setColor(this.client.config.colors.main)
-			.setFooter({
-				text: `Ticket ID: ${ticket?.id}`,
-			});
-		await channel.send({
-			embeds: [embed],
-			components: [button],
-		});
+		const transcriptContainer = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## Transcript"))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("The transcript has been generated. Use the button below to view it."))
+			.addActionRowComponents(button)
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Ticket ID: ${ticket.id}`));
+		await channel
+			.send({
+				components: [transcriptContainer],
+				flags: TICKET_V2_FLAGS,
+			})
+			.catch(() => {});
 		// send to user dm
-		const user = await this.interaction.guild?.members.fetch(ticket.userId);
-		
-		const data = await TicketConfig.getAllByGuildId(this.interaction.guildId!);
-		const config = data.find((config) => config.id === ticket.connectionId);
+		const user = await this.interaction.guild?.members.fetch(ticket.userId).catch(() => null);
+
+		const config = await resolveTicketConfig(this.interaction.guildId!, ticket);
 		if (!config) {
 			return this.interaction.editReply({
 				content: "Ticket system is not configured for this server.",
@@ -573,46 +560,47 @@ export class TicketModule {
 		if (config.loggerChannelId) {
 			const loggerChannel = this.interaction.guild?.channels.cache.get(config.loggerChannelId) as TextChannel;
 
-			const embed = new EmbedBuilder()
-				.setTitle(`Ticket #${ticket.ticketNumber} Closed`)
-				.setDescription(
-					[
-						`**ID:** \`${ticket.id}\``,
-						`**Guild:** ${this.interaction.guild?.name}`,
-						`**Creator:** <@${ticket.userId}>`,
-						`**Closed By:** <@${ticket.closedBy}>`,
-						`**Created At:** <t:${Math.floor(ticket.createdAt.getTime() / 1000)}:F>`,
-						`**Closed At:** <t:${Math.floor(ticket.closedAt!.getTime() / 1000)}:F>`,
-						`**Transcript:** [View Transcript](${baseUrl}/transcript/${ticket.id})`,
-						`**Channel:** <#${ticket.channelId}>`,
-					].join("\n"),
+			const loggerContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Ticket #${ticket.ticketNumber} Closed`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(
+					new TextDisplayBuilder().setContent(
+						[
+							`**ID:** \`${ticket.id}\``,
+							`**Guild:** ${this.interaction.guild?.name}`,
+							`**Creator:** <@${ticket.userId}>`,
+							`**Closed By:** <@${ticket.closedBy ?? this.interaction.user.id}>`,
+							`**Created At:** <t:${Math.floor(ticket.createdAt.getTime() / 1000)}:F>`,
+							ticket.closedAt ? `**Closed At:** <t:${Math.floor(ticket.closedAt.getTime() / 1000)}:F>` : "**Closed At:** Just now",
+							`**Channel:** <#${ticket.channelId}>`,
+						].join("\n"),
+					),
 				)
-				.setColor(this.client.config.colors.main);
+				.addActionRowComponents(button);
 
 			await loggerChannel
-				.send({
-					embeds: [embed],
-					components: [button],
+				?.send({
+					components: [loggerContainer],
+					flags: TICKET_V2_FLAGS,
 				})
 				.catch(() => {});
 		}
 		if (!user) {
 			return;
 		}
-		await this.interaction.deferUpdate();
-		await user.send({
-			embeds: [
-				new EmbedBuilder()
-					.setTitle("Transcript")
-					.setDescription("The transcript has been generated. Click the button below to view it.")
-					.setColor(this.client.config.colors.main)
-					.setFooter({
-						text: `Ticket ID: ${ticket?.id}`,
-					}),
-			],
-			components: [button],
-		});
-		
+		const dmContainer = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## Transcript"))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("The transcript has been generated. Use the button below to view it."))
+			.addActionRowComponents(button)
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Ticket ID: ${ticket.id}`));
+		await user
+			.send({
+				components: [dmContainer],
+				flags: TICKET_V2_FLAGS,
+			})
+			.catch(() => {});
 	}
 	private static async fetchAllMessages(channel: TextChannel): Promise<Message[]> {
 		let messages: Message[] = [];

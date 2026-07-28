@@ -15,6 +15,20 @@
       "when": 1784666944204,
       "tag": "0001_watery_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784666944205,
+      "tag": "0003_bot_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784666944206,
+      "tag": "0004_no_prefix_allowed",
+      "breakpoints": true
     }
   ]
 }

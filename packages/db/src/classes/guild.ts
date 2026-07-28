@@ -37,6 +37,7 @@ const GUILD_CACHE_TTL_SECONDS = 300;
 export class Guild implements GuildType {
 	public guildId: string;
 	public prefix: string;
+	public prefixes: string[];
 	public language: string;
 	public twoFourSeven?: { channelId: string } | null;
 	public customRoles?: ID[];
@@ -46,6 +47,7 @@ export class Guild implements GuildType {
 	constructor(guildId: string, data: Partial<GuildType>) {
 		this.guildId = guildId;
 		this.prefix = data.prefix ?? env.PREFIX;
+		this.prefixes = data.prefixes?.length ? [...new Set(data.prefixes)] : [this.prefix];
 		this.language = data.language ?? "en";
 		this.twoFourSeven = data.twoFourSeven;
 		this.customRoles = data.customRoles ?? [];
@@ -64,6 +66,7 @@ export class Guild implements GuildType {
 			.values({
 				guildId,
 				prefix: data?.prefix ?? env.PREFIX,
+				prefixes: data?.prefixes?.length ? [...new Set(data.prefixes)] : [data?.prefix ?? env.PREFIX],
 				language: data?.language ?? "en",
 				twoFourSeven: data?.twoFourSeven ?? null,
 				createdAt: data?.createdAt ?? now,

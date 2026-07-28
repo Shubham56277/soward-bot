@@ -58,7 +58,7 @@ const implemented = new Set([
 	"autoresponder", "autoreact", "welcome", "customrole", "ticket", "media-only", "sticky",
 	"reaction-role", "variables", "embed", "voice", "voice-role",
 	"giveaway", "music", "fun", "bot", "prefix", "premium",
-	"ai", "record", "dev",
+	"ai", "record", "dev", "profile", "bio", "badge", "customize", "noprefix",
 ]);
 
 const seeds: RegistrySeed[] = [
@@ -131,7 +131,7 @@ const seeds: RegistrySeed[] = [
 	["customrole", "roles", "Configure managed custom roles"],
 
 	// === TICKETS (1) ===
-	["ticket", "tickets", "Configure and operate support tickets"],
+	["ticket", "tickets", "Configure and operate support tickets", { subcommands: ["setup", "edit", "delete", "info", "list"] }],
 
 	// === UTILITY (3) ===
 	["media-only", "utility", "Manage media-only channels", { subcommands: ["add", "remove", "list"] }],
@@ -159,9 +159,14 @@ const seeds: RegistrySeed[] = [
 	// === FUN (1) ===
 	["fun", "fun", "Run social and text activities"],
 
-	// === SETTINGS (3) ===
-	["bot", "settings", "Manage bot settings for this server"],
-	["prefix", "settings", "Manage server command prefixes"],
+	// === SETTINGS (6) ===
+	["bot", "settings", "Open the separate Bot Settings dashboard"],
+	["profile", "settings", "View a user's Elfaria profile"],
+	["bio", "settings", "View or manage your profile bio", { subcommands: ["show", "set", "clear"] }],
+	["badge", "settings", "Manage cosmetic profile badges", { subcommands: ["add", "list", "remove"] }],
+	["prefix", "settings", "Manage server command prefixes", { subcommands: ["show", "set", "add", "remove", "reset"] }],
+	["noprefix", "settings", "Manage no-prefix access for members", { premium: true, slash: false, subcommands: ["add", "remove", "enable", "disable", "list", "reset"] }],
+	["customize", "settings", "Customize premium bot account branding", { premium: true, subcommands: ["show", "avatar", "bio", "banner", "reset"] }],
 	["premium", "premium", "Manage premium access", { subcommands: ["status", "activate", "features"] }],
 
 	// === PREMIUM (2) ===
@@ -194,7 +199,6 @@ export function validateCommandRegistry(): string[] {
 	const errors: string[] = [];
 	const names = new Set<string>();
 	const nameSet = new Set<string>();
-	let rootCommandCount = 0;
 
 	for (const command of COMMAND_REGISTRY) {
 		// Validate name format
@@ -211,11 +215,6 @@ export function validateCommandRegistry(): string[] {
 		// Validate description - 100 char limit for Discord
 		if (!command.description || command.description.length > 100) {
 			errors.push(`Invalid description for "${command.name}": must be 1-100 characters`);
-		}
-
-		// Count root commands (only those with slash: true)
-		if (command.slash) {
-			rootCommandCount++;
 		}
 
 		// Check for duplicate names in nameSet (catch re-registrations)

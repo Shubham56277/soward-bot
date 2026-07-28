@@ -339,15 +339,13 @@ export default class Help extends Command {
 		} else {
 			// Command groups with separators between them
 			feature.groups.forEach((group, gi) => {
-				const cmds = group.commands
-					.filter(name => ctx.client.commands.has(name))
-					.map(name => {
-						const cmd = ctx.client.commands.get(name);
-						return cmd?.premium ? `\`${name}\` ⭐` : `\`${name}\``;
-					})
-					.join("  ");
+				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
+				const cmds = availableCommands.map(name => `\`${name}\``).join("  ");
 				if (!cmds) return;
-				const heading = group.heading === "Premium" ? `${group.heading} ⭐` : group.heading;
+				// Tag the heading as Premium when the group is premium (either an
+				// explicit "Premium" group or one whose commands are premium-only).
+				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
+				const heading = groupIsPremium ? `${group.heading} \`Premium\`` : group.heading;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${heading}**\n${cmds}`));
 				if (gi < feature.groups.length - 1) {
 					container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));

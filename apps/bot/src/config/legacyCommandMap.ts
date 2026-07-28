@@ -63,11 +63,9 @@ export const LEGACY_COMMANDS: readonly LegacyCommandMapping[] = [
 	migration("nowplaying", "/music now-playing", "Consolidated music commands"),
 
 	// Dev command consolidation
-	migration("np", "/dev no-prefix", "Owner tools belong under Dev"),
 	migration("premiumcode", "/dev premium-code", "Owner tools belong under Dev"),
 
 	// Duplicate root command consolidations
-	migration("profile", "/userinfo", "Removed duplicated member information"),
 	migration("users", "/list members", "Consolidated list commands"),
 	migration("boosters", "/list boosters", "Consolidated list commands"),
 	migration("emojilist", "/list emojis", "Consolidated list commands"),

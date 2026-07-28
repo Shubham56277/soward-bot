@@ -1,12 +1,12 @@
-import BaseClient from "../../base/Client";
-import Event from "../../abstract/Event";
-import { ApplicationCommandType, EmbedBuilder, Events, GuildMember, GuildMemberRoleManager, MessageFlags, PermissionFlagsBits, PermissionsBitField, TextChannel, WebhookClient } from "discord.js";
-import Context from "../../lib/Context";
+import { IgnoredChannel } from "@repo/db";
 import { env } from "@repo/env";
-import { IgnoredChannel, Premium } from "@repo/db";
-import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../utils/musicCommandSafety";
+import { ApplicationCommandType, EmbedBuilder, Events, GuildMember, GuildMemberRoleManager, MessageFlags, PermissionFlagsBits, PermissionsBitField, TextChannel, WebhookClient } from "discord.js";
+import Event from "../../abstract/Event";
+import BaseClient from "../../base/Client";
+import Context from "../../lib/Context";
 import { compactReply } from "../../utils/compactReply";
-import { handleInteractionError, ensureAcknowledged } from "../../utils/errorHandler";
+import { handleInteractionError } from "../../utils/errorHandler";
+import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../utils/musicCommandSafety";
 import { checkPremium } from "../../utils/premiumCheck";
 
 export default class InteractionCreate extends Event {
@@ -261,12 +261,19 @@ export default class InteractionCreate extends Event {
 								}
 							}
 						}
-						if (command.permissions?.dev && env.DEVELOPER_IDS) {
-							const isDev = env.DEVELOPER_IDS.includes(interaction.user.id);
-							if (!isDev) return safeInteractionReply(interaction, { content: "This command is restricted to bot developers." });
-						}
-
 						const isDev = env.DEVELOPER_IDS.includes(interaction.user.id);
+						if (command.permissions?.user?.length) {
+							const member = interaction.member as GuildMember;
+							if (!isDev && !member.permissions.has(command.permissions.user)) {
+								return await safeInteractionReply(interaction, {
+									content: `You need the following permissions to run this command: ${command.permissions.user.map((perm: any) => `\`${perm}\``).join(", ")}`,
+									flags: MessageFlags.Ephemeral,
+								});
+							}
+						}
+						if (command.permissions?.dev && !isDev) {
+							return safeInteractionReply(interaction, { content: "This command is restricted to bot developers." });
+						}
 						if (!isDev) {
 							const cooldown = await this.client.commandCooldowns.take(command.name, interaction.user.id, command.cooldown || 5);
 							if (!cooldown.allowed) {

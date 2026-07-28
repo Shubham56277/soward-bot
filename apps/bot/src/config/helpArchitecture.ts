@@ -50,6 +50,36 @@ export interface Category {
 
 export const HELP_CATEGORIES: Category[] = [
 	{
+		key: "bot-settings",
+		label: "Bot Settings",
+		emoji: "⚙️",
+		tagline: "Profiles, premium branding, and command prefixes.",
+		features: [
+			{
+				key: "profiles",
+				label: "Profiles",
+				description: "Personal bios and cosmetic profile badges.",
+				groups: [{ heading: "Profile", commands: ["bot", "profile", "bio", "badge"] }],
+			},
+			{
+				key: "branding",
+				label: "Premium Branding",
+				description: "Safely manage the bot account avatar, application bio, and banner.",
+				premium: true,
+				groups: [{ heading: "Customize", commands: ["customize"] }],
+			},
+			{
+				key: "prefixes",
+				label: "Prefixes",
+				description: "Manage the command prefixes accepted in this server.",
+				groups: [
+					{ heading: "Prefix", commands: ["prefix"] },
+					{ heading: "No Prefix", commands: ["noprefix"] },
+				],
+			},
+		],
+	},
+	{
 		key: "management",
 		label: "Management",
 		emoji: "🛡",
@@ -98,7 +128,7 @@ export const HELP_CATEGORIES: Category[] = [
 				label: "Server Configuration",
 				description: "Configure prefix, roles, and server behaviour.",
 				groups: [
-					{ heading: "General", commands: ["prefix", "customrole", "ignoredchannels", "autoresponder"] },
+					{ heading: "General", commands: ["customrole", "ignoredchannels", "autoresponder"] },
 				],
 			},
 		],
@@ -207,7 +237,7 @@ export const HELP_CATEGORIES: Category[] = [
 				description: "Look up users, roles, servers, and more.",
 				groups: [
 					{ heading: "Server", commands: ["guildinfo", "serverinfo", "membercount", "boostcount", "boosters", "servericon", "serverbanner", "emojilist", "firstmessage"] },
-					{ heading: "User", commands: ["userinfo", "avater", "banner", "profile", "joinedat"] },
+					{ heading: "User", commands: ["userinfo", "avater", "banner", "joinedat"] },
 					{ heading: "Lookup", commands: ["roleinfo", "channelinfo", "emojiinfo", "users", "lists"] },
 				],
 			},
@@ -226,7 +256,7 @@ export const HELP_CATEGORIES: Category[] = [
 				description: "Everyday utility commands.",
 				groups: [
 					{ heading: "Bot", commands: ["ping", "uptime", "botinfo", "stats", "invite", "vote", "help"] },
-					{ heading: "Personal", commands: ["afk", "noprefix", "remind", "calc"] },
+					{ heading: "Personal", commands: ["afk", "remind", "calc"] },
 					{ heading: "Premium", commands: ["ai", "premium"] },
 				],
 			},
