@@ -564,6 +564,13 @@ function clearStagedBuild() {
 
 function buildBotToStaging() {
   clearStagedBuild();
+  info("Building shared environment package...");
+  const envResult = runYarn(["workspace", "@repo/env", "build"]);
+  if (envResult.status !== 0) {
+    err("Environment package build failed. The current bot was left unchanged.");
+    return false;
+  }
+
   info("Building shared database package...");
   const dbResult = runYarn(["workspace", "@repo/db", "build"]);
   if (dbResult.status !== 0) {
