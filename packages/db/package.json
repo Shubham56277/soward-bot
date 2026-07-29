@@ -11,7 +11,8 @@
     "default": "./dist/index.js"
   },
   "scripts": {
-		"push": "drizzle-kit migrate",
+		"push": "node ../../scripts/db-migrate.js",
+		"drizzle:migrate": "drizzle-kit migrate",
 		"drop": "drizzle-kit drop",
 		"generate": "drizzle-kit generate",
 		"studio": "drizzle-kit studio",

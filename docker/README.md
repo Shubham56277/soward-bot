@@ -29,5 +29,10 @@ add the refresh token as a Railway Variable and update application.yml to read i
 
 - `Dockerfile` — Railway uses this to build the image
 - `application.yml` — Lavalink configuration
-- `docker-compose.yml` — For local testing only (Railway ignores this)
+- `docker-compose.yml` — For local Lavalink testing only (Railway ignores this)
+- `postgres-compose.yml` — Optional local PostgreSQL service, initialized with `yarn db:local`
 - `README.md` — This file
+
+## Optional local PostgreSQL
+
+After copying `.env.example` to `.env`, run `yarn db:local`. It generates unique local PostgreSQL credentials only when they are absent, writes a matching URL-encoded `DATABASE_URI`, and starts the database on `127.0.0.1:5432`. Run `yarn doctor` afterward to verify the database, Redis, Docker containers, environment JSON, and migration files without printing secrets.

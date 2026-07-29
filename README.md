@@ -27,10 +27,32 @@ cp .env.example .env
 
 ```
 
+# Verify configuration and services
+
+Before building or migrating, run the secret-safe preflight:
+
+```bash
+yarn doctor
+```
+
+It validates `.env` JSON, PostgreSQL authentication, Redis connectivity, Docker/container state when Docker is installed, and Drizzle migration integrity without printing credential values. Fix every reported failure before continuing.
+
+For a fresh clone that uses an existing PostgreSQL database:
+
+```bash
+yarn install
+yarn doctor
+yarn db:migrate
+yarn build
+yarn bot:start
+```
+
+For an optional local Docker PostgreSQL database, run `yarn db:local` once after creating `.env`; it generates non-default local credentials and writes a matching URL-encoded `DATABASE_URI`.
+
 # Running
 
 ```bash
-yarn start
+yarn bot:start
 ```
 
 # Premium AI

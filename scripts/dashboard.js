@@ -772,6 +772,14 @@ async function setupLinuxServer() {
     return;
   }
 
+  info("Running deployment health checks before building...");
+  const doctorResult = runYarn(["doctor"]);
+  if (doctorResult.status !== 0) {
+    err("Deployment health checks failed. Fix the reported configuration or service issue; the bot remains stopped.");
+    await pressEnter();
+    return;
+  }
+
   info("Building the project in an isolated staging directory...");
   if (!buildBotToStaging()) {
     err("Build failed. The bot remains stopped and the active build was not replaced.");
@@ -779,8 +787,8 @@ async function setupLinuxServer() {
     return;
   }
 
-  info("Applying database migrations for the configured DATABASE_URI...");
-  const migrationResult = runYarn(["workspace", "@repo/db", "push"]);
+  info("Checking the configured database and applying migrations...");
+  const migrationResult = runYarn(["db:migrate"]);
   if (migrationResult.status !== 0) {
     clearStagedBuild();
     err("Database migration failed. The staged build was discarded and the bot remains stopped.");

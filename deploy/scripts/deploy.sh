@@ -106,6 +106,10 @@ case "$PKG_MANAGER" in
         ;;
 esac
 
+# ─── Deployment Health Check ──────────────────────────────────────────────────
+log "Running deployment health checks..."
+yarn doctor
+
 # ─── Build ───────────────────────────────────────────────────────────────────
 log "Building project..."
 yarn build
@@ -123,9 +127,10 @@ log "Build validated: $BOT_ENTRY exists"
 
 # ─── Run Database Migrations ─────────────────────────────────────────────────
 if [[ -d "packages/db/drizzle" ]]; then
-    log "Running database migrations..."
-    yarn workspace @repo/db push || {
-        warn "Database migration failed, but continuing (may already be up to date)"
+    log "Checking database connectivity and running migrations..."
+    yarn db:migrate || {
+        error "Database migration failed. The service was not restarted."
+        exit 1
     }
 fi
 
