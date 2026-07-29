@@ -193,7 +193,7 @@ export const HELP_CATEGORIES: Category[] = [
 					{ heading: "Playback", commands: ["play", "search", "pause", "resume", "stop", "skip", "skipto", "replay", "seek"] },
 					{ heading: "Queue", commands: ["queue", "nowplaying", "loop", "shuffle", "remove", "clearqueue", "volume"] },
 					{ heading: "Session", commands: ["join", "leave", "music"] },
-					{ heading: "Premium", commands: ["autoplay", "247", "play-file", "record"] },
+					{ heading: "Premium", commands: ["autoplay", "247", "play-file", "record", "playlist"] },
 				],
 			},
 			{

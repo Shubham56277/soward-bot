@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "tsup --watch --onSuccess \"node dist/index.js\"",
+    "dev": "yarn build && yarn start",
     "start": "node dist/index.js",
     "build": "tsup",
     "lint": "biome lint --write ./src",

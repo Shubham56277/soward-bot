@@ -58,7 +58,7 @@ const implemented = new Set([
 	"autoresponder", "autoreact", "welcome", "customrole", "ticket", "media-only", "sticky",
 	"reaction-role", "variables", "embed", "voice", "voice-role",
 	"giveaway", "music", "fun", "bot", "prefix", "premium",
-	"ai", "record", "dev", "profile", "bio", "badge", "customize", "noprefix",
+	"ai", "record", "dev", "profile", "bio", "badge", "customize", "noprefix", "playlist",
 ]);
 
 const seeds: RegistrySeed[] = [
@@ -153,8 +153,9 @@ const seeds: RegistrySeed[] = [
 		subcommands: ["create", "end", "reroll", "list", "pause", "resume", "requirements"],
 	}],
 
-	// === MUSIC (1) ===
+	// === MUSIC (2) ===
 	["music", "music", "Play and manage music", { cooldownSeconds: 2 }],
+	["playlist", "music", "Create and manage personal playlists", { premium: true, subcommands: ["create", "delete", "rename", "list", "info", "add", "remove", "play"] }],
 
 	// === FUN (1) ===
 	["fun", "fun", "Run social and text activities"],

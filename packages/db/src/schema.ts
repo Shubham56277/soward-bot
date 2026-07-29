@@ -1,6 +1,6 @@
 import { env } from "@repo/env";
 import { relations } from "drizzle-orm";
-import { pgTable, json, text, integer, boolean, timestamp, bigint, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, json, text, integer, boolean, timestamp, bigint, jsonb, unique } from "drizzle-orm/pg-core";
 import { AntiNukeChannel, AntiNukeMember, EmbedType, ID, Roles } from "./types";
 
 export const moderationCases = pgTable("moderation_cases", {
@@ -297,6 +297,33 @@ export const guildBotSettings = pgTable("guild_bot_settings", {
 	baselineCapturedAt: timestamp("baseline_captured_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const playlists = pgTable(
+	"playlists",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.userId, { onDelete: "cascade", onUpdate: "cascade" }),
+		name: text("name").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [unique("playlists_user_id_name_unique").on(table.userId, table.name)],
+);
+
+export const playlistTracks = pgTable("playlist_tracks", {
+	id: text("id").primaryKey(),
+	playlistId: text("playlist_id")
+		.notNull()
+		.references(() => playlists.id, { onDelete: "cascade", onUpdate: "cascade" }),
+	title: text("title"),
+	uri: text("uri").notNull(),
+	author: text("author"),
+	duration: integer("duration"),
+	position: integer("position").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const AFK = pgTable("afk", {

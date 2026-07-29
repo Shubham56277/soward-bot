@@ -307,3 +307,18 @@ class VoiceRecordingService {
 }
 
 export const voiceRecordingService = new VoiceRecordingService();
+
+/**
+ * Whether the guild currently has an active recording session.
+ *
+ * Exported as a standalone function so the raw gateway handler can check it
+ * without importing the whole service instance graph. It reads the same
+ * globalThis-backed registry that every bundled service instance shares.
+ */
+export function isRecordingGuild(guildId: string): boolean {
+	try {
+		return sharedActiveRecordings.has(guildId);
+	} catch {
+		return false;
+	}
+}
