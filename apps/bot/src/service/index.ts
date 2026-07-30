@@ -148,7 +148,7 @@ export class Services {
 			}
 
 			for (const entry of responders) {
-				if (!entry.enabled) continue;
+				if (entry.enabled === false) continue;
 				if (entry.channelId && entry.channelId !== message.channel.id) {
 					continue;
 				}
@@ -168,11 +168,8 @@ export class Services {
 				} else {
 					const content = message.content.toLowerCase();
 					const trigger = entry.trigger.toLowerCase();
-					const wordMatch = new RegExp(
-						`\\b${escapeRegex(trigger)}\\b`,
-						"i",
-					);
-					match = wordMatch.test(content);
+					// Match if message contains the trigger (case-insensitive)
+					match = content.includes(trigger);
 				}
 				if (!match) continue;
 
@@ -181,7 +178,7 @@ export class Services {
 				if (await redis.get(cooldownKey)) continue;
 
 				await message.channel.send({ content: entry.response, allowedMentions: { parse: [] } });
-				await redis.setex(cooldownKey, entry.cooldown, "1");
+				await redis.setex(cooldownKey, entry.cooldown || 10, "1");
 				break;
 			}
 		});

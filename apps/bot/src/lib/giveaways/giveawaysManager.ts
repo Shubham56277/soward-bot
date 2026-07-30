@@ -166,7 +166,7 @@ export class giveawaysManager {
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 					`### ${giveaway.prize}\n\n` +
-					`🎁 **Giveaway Information**\n` +
+					`-# Giveaway Information\n` +
 					`Ended: <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n` +
 					`Winners: ${winnersText}\n` +
 					`Hosted by: <@${giveaway.hostedBy}>`
