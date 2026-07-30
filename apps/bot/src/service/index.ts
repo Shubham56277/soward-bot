@@ -134,52 +134,51 @@ export class Services {
 			}
 		});
 		client.on(Events.MessageCreate, async (message) => {
-			await handleMediaMessage(message);
-			await handleRoleAlias(message);
-			await handleAfk(message);
-			if (!message.guild || message.author.bot) return;
-			const redis = message.client.redis;
-			const cacheKey = `auto_responder:${message.guild.id}`;
-			let responders = JSON.parse((await redis.get(cacheKey)) || "null");
+			try {
+				await handleMediaMessage(message);
+				await handleRoleAlias(message);
+				await handleAfk(message);
+				if (!message.guild || message.author.bot) return;
+				const redis = client.redis;
+				const cacheKey = `auto_responder:${message.guild.id}`;
+				let responders = JSON.parse((await redis.get(cacheKey)) || "null");
 
-			if (!responders) {
-				responders = await AutoResponder.getAll(message.guild.id);
-				await redis.setex(cacheKey, 300, JSON.stringify(responders));
-			}
-
-			for (const entry of responders) {
-				if (entry.enabled === false) continue;
-				if (entry.channelId && entry.channelId !== message.channel.id) {
-					continue;
+				if (!responders) {
+					responders = await AutoResponder.getAll(message.guild.id);
+					await redis.setex(cacheKey, 300, JSON.stringify(responders));
 				}
 
-				let match = false;
-				function escapeRegex(str: string) {
-					return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-				}
-				if (entry.useRegex) {
-					try {
-						match = new RegExp(entry.trigger, "i").test(
-							message.content,
-						);
-					} catch (e) {
+				if (!responders || !Array.isArray(responders) || responders.length === 0) return;
+
+				for (const entry of responders) {
+					if (entry.enabled === false) continue;
+					if (entry.channelId && entry.channelId !== message.channel.id) {
 						continue;
 					}
-				} else {
-					const content = message.content.toLowerCase();
-					const trigger = entry.trigger.toLowerCase();
-					// Match if message contains the trigger (case-insensitive)
-					match = content.includes(trigger);
+
+					let match = false;
+					if (entry.useRegex) {
+						try {
+							match = new RegExp(entry.trigger, "i").test(message.content);
+						} catch {
+							continue;
+						}
+					} else {
+						const content = message.content.toLowerCase();
+						const trigger = entry.trigger.toLowerCase();
+						match = content.includes(trigger);
+					}
+					if (!match) continue;
+
+					const cooldownKey = `cooldown:auto_responder:${message.guild.id}:${entry.trigger}:${message.author.id}`;
+					if (await redis.get(cooldownKey)) continue;
+
+					await message.channel.send({ content: entry.response, allowedMentions: { parse: [] } });
+					await redis.setex(cooldownKey, entry.cooldown || 10, "1");
+					break;
 				}
-				if (!match) continue;
-
-				const cooldownKey =
-					`cooldown:auto_responder:${message.guild.id}:${entry.trigger}:${message.author.id}`;
-				if (await redis.get(cooldownKey)) continue;
-
-				await message.channel.send({ content: entry.response, allowedMentions: { parse: [] } });
-				await redis.setex(cooldownKey, entry.cooldown || 10, "1");
-				break;
+			} catch (err) {
+				client.logger?.error("[autoresponder] Error:", err);
 			}
 		});
 		client.on(Events.VoiceStateUpdate, async (oldState, newState) => {

@@ -180,17 +180,14 @@ export default class Help extends Command {
 		if (i.isButton()) {
 			switch (i.customId) {
 				case "help_home":
-					push();
-					state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null;
-					return;
-				case "help_close":
-					return "close";
 				case "help_back": {
 					const prev = state.history.pop();
 					if (prev) { state.level = prev.level; state.categoryKey = prev.categoryKey; state.featureKey = prev.featureKey; state.commandName = prev.commandName; }
 					else { state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null; }
 					return;
 				}
+				case "help_close":
+					return "close";
 				case "help_prev":
 				case "help_next": {
 					this.cycle(state, i.customId === "help_next" ? 1 : -1);
