@@ -1,5 +1,19 @@
 import { AFK } from "@repo/db";
-import { Message, EmbedBuilder } from "discord.js";
+import { Message } from "discord.js";
+
+/**
+ * Formats a relative time string like "20s ago", "5m ago", "2h ago"
+ */
+function timeAgo(date: Date): string {
+	const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+	if (seconds < 60) return `${seconds}s ago`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h ago`;
+	const days = Math.floor(hours / 24);
+	return `${days}d ago`;
+}
 
 export async function handleAfk(message: Message) {
 	if (message.author.bot || message.author.system || !message.guild) return;
@@ -13,21 +27,14 @@ export async function handleAfk(message: Message) {
 		if (applies) {
 			await AFK.delete(message.author.id);
 
-			const welcomeEmbed = new EmbedBuilder().setColor(message.client.config.colors.main).setAuthor({
-				name: `${message.author.username} is no longer AFK`,
-				iconURL: message.author.displayAvatarURL(),
-			});
-
+			let content = `**${message.author.username}** is no longer AFK.`;
 			if (userAfk.mentionBy?.length) {
-				const mentionList = userAfk.mentionBy.map((id) => `<@${id.id}>`).join(", ");
-				welcomeEmbed.setDescription(`You were mentioned **${userAfk.mentionBy.length} time(s)** while you were away.\n\n**Mentioned by:** ${mentionList}`);
-			} else {
-				welcomeEmbed.setDescription("Welcome back! You weren't mentioned while you were away.");
+				content += `\n-# You were mentioned ${userAfk.mentionBy.length} time(s) while away.`;
 			}
 
 			await message.reply({
-				embeds: [welcomeEmbed],
-				allowedMentions: { repliedUser: false },
+				content,
+				allowedMentions: { parse: [], repliedUser: false },
 			}).catch(() => {});
 			return;
 		}
@@ -49,18 +56,12 @@ export async function handleAfk(message: Message) {
 		const afkApplies = afkUser.global || afkUser.guildId === message.guild!.id;
 		if (!afkApplies) continue;
 
-		const afkEmbed = new EmbedBuilder()
-			.setColor(message.client.config.colors.main)
-			.setAuthor({
-				name: `${user.username} is currently AFK`,
-				iconURL: user.displayAvatarURL(),
-			})
-			.setDescription(afkUser.reason || "No reason provided")
-			.setFooter({ text: "They'll be notified you mentioned them" });
+		const reason = afkUser.reason || "No reason provided.";
+		const ago = afkUser.createdAt ? timeAgo(new Date(afkUser.createdAt)) : "just now";
 
 		await message.reply({
-			embeds: [afkEmbed],
-			allowedMentions: { repliedUser: false },
+			content: `**${user.username}** is AFK - ${reason}\n-# AFK ${ago}`,
+			allowedMentions: { parse: [], repliedUser: false },
 		}).catch(() => {});
 
 		await AFK.update(user.id, {
