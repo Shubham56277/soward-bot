@@ -48,10 +48,9 @@ export class giveawaysManager {
 		const container = new ContainerBuilder()
 			.addSectionComponents(section)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: 0`))
-			.addActionRowComponents(row);
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: 0`));
 
-		const message = await sendChannel.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
+		const message = await sendChannel.send({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
 
 		await Giveaway.create({
 			channelId: sendChannel.id,
@@ -273,9 +272,8 @@ export class giveawaysManager {
 					const leaveContainer = new ContainerBuilder()
 						.addSectionComponents(leaveSection)
 						.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-						.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${giveaway.participants?.length || 0}`))
-						.addActionRowComponents(leaveRow);
-					await giveawayMessage.edit({ components: [leaveContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
+						.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${giveaway.participants?.length || 0}`));
+					await giveawayMessage.edit({ components: [leaveContainer, leaveRow], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
 					return collector.stop();
 				}
 			});
@@ -302,10 +300,9 @@ export class giveawaysManager {
 		const updatedContainer = new ContainerBuilder()
 			.addSectionComponents(section)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${updatedGiveaway.participants?.length || 0}`))
-			.addActionRowComponents(row);
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${updatedGiveaway.participants?.length || 0}`));
 
-		await giveawayMessage.edit({ components: [updatedContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
+		await giveawayMessage.edit({ components: [updatedContainer, row], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
 		return interaction.reply({ content: "You have joined the giveaway", flags: MessageFlags.Ephemeral });
 	}
 
