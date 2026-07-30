@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, Message
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { Giveaway } from "@repo/db";
-import { hasGiveawayPerms } from "./giveawayPerms";
+import { hasGiveawayPerms } from "../../utils/giveawayPerms";
 
 function buildPanel(title: string, body: string): ContainerBuilder {
     return new ContainerBuilder()

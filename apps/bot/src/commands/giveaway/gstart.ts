@@ -4,7 +4,7 @@ import Context from "../../lib/Context";
 import { giveawaysManager } from "../../lib/giveaways/giveawaysManager";
 import { parse } from "@lukeed/ms";
 import { Giveaway } from "@repo/db";
-import { hasGiveawayPerms } from "./giveawayPerms";
+import { hasGiveawayPerms } from "../../utils/giveawayPerms";
 
 export default class GStartCommand extends Command {
     constructor() {

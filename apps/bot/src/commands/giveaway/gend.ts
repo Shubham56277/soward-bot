@@ -3,7 +3,7 @@ import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { giveawaysManager } from "../../lib/giveaways/giveawaysManager";
 import { Giveaway } from "@repo/db";
-import { hasGiveawayPerms } from "./giveawayPerms";
+import { hasGiveawayPerms } from "../../utils/giveawayPerms";
 
 export default class GEndCommand extends Command {
     constructor() {

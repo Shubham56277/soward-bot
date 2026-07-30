@@ -2,7 +2,7 @@ import { MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { Giveaway } from "@repo/db";
-import { hasGiveawayPerms } from "./giveawayPerms";
+import { hasGiveawayPerms } from "../../utils/giveawayPerms";
 
 export default class GPauseCommand extends Command {
     constructor() {
