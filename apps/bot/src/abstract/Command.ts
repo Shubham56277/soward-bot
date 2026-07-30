@@ -87,7 +87,7 @@ export default abstract class Command {
         };
 		// Canonical command names only. Alias metadata is intentionally disabled globally.
 		this.aliases = [];
-        this.cooldown = options.cooldown ?? 3;
+        this.cooldown = options.cooldown ?? 5;
         this.args = options.args ?? false;
         this.vote = options.vote ?? false;
         this.premium = options.premium ?? false;

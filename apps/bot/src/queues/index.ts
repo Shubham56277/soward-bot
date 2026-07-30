@@ -19,6 +19,7 @@ import type {
 	AnalyticsJob,
 	ScheduledMessageJob,
 } from "./types"
+import { initDiscordActionQueue, shutdownDiscordActionQueue } from "./discordActionQueue"
 
 // ─────────────────────────────────────────────────────────
 // Queue Instances (available after initQueues)
@@ -87,6 +88,9 @@ export async function initQueues(client: BaseClient): Promise<void> {
 	workers.push(createAnalyticsWorker(client, connection))
 	workers.push(createScheduledMessageWorker(client, connection))
 
+	// Discord API action queue (rate-limit safe bulk operations)
+	initDiscordActionQueue(client)
+
 	client.logger.success("[queues] All BullMQ queues and workers initialized")
 }
 
@@ -96,6 +100,7 @@ export async function initQueues(client: BaseClient): Promise<void> {
 
 export async function shutdownQueues(): Promise<void> {
 	await Promise.allSettled(workers.map((w) => w.close()))
+	await shutdownDiscordActionQueue()
 }
 
 // ─────────────────────────────────────────────────────────

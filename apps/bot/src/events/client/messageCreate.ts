@@ -214,6 +214,16 @@ export default class MessageCreate extends Event {
 					const cooldownAmount = command.cooldown || 5;
 
 					if (!isDev) {
+						// Global per-user rate limit: max 5 commands per 10 seconds
+						const globalRateKey = `cooldown:global:${message.author.id}`;
+						const globalCount = await this.client.redis.incr(globalRateKey).catch(() => 0);
+						if (globalCount === 1) {
+							await this.client.redis.expire(globalRateKey, 10).catch(() => undefined);
+						}
+						if (globalCount > 5) {
+							return; // Silently drop — user is spamming commands
+						}
+
 						const cooldown = await this.client.commandCooldowns.take(command.name, message.author.id, cooldownAmount);
 						if (!cooldown.allowed) {
 							// Only notify once per cooldown window — silently drop all subsequent spam
