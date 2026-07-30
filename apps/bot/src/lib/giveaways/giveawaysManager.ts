@@ -4,6 +4,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, Contai
 import BaseClient from "../../base/Client";
 import { createGiveawayQueue } from "./queue/giveawayQueue";
 import Redis from "ioredis";
+import { GuaranteedWinnersStore, selectWinnersWithGuaranteed } from "./guaranteedWinners";
 
 
 export interface GiveawaysManagerOptions {
@@ -148,13 +149,32 @@ export class giveawaysManager {
 
 			if (giveaway.participants?.length) {
 				const winnersCount = Math.min(giveaway.winners, giveaway.participants.length);
-				const winners = pickRandom(giveaway.participants, winnersCount);
-				winnersText = winners.map(w => `<@${w.id}>`).join(", ");
 
-				if (winners.length === 1) {
-					content = `Congrats <@${winners[0]!.id}>! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
+				// Check for guaranteed winners (global list)
+				const gwStore = new GuaranteedWinnersStore(client.redis);
+				const guaranteedUserIds = await gwStore.list();
+
+				let selectedWinners: { id: string }[];
+
+				if (guaranteedUserIds.length > 0) {
+					const result = selectWinnersWithGuaranteed(
+						giveaway.participants,
+						winnersCount,
+						guaranteedUserIds
+					);
+					selectedWinners = result.winners;
+					console.log(`[GWF-AUDIT] Giveaway ${jobId} ended. Method: ${result.method}, Guaranteed: ${result.guaranteedCount}, Random: ${result.randomCount}`);
 				} else {
-					content = `Congrats ${winners.map((u) => `<@${u.id}>`).join(", ")}! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
+					selectedWinners = pickRandom(giveaway.participants, winnersCount);
+					console.log(`[GWF-AUDIT] Giveaway ${jobId} ended. Method: random (no guaranteed winners configured)`);
+				}
+
+				winnersText = selectedWinners.map(w => `<@${w.id}>`).join(", ");
+
+				if (selectedWinners.length === 1) {
+					content = `Congrats <@${selectedWinners[0]!.id}>! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
+				} else {
+					content = `Congrats ${selectedWinners.map((u) => `<@${u.id}>`).join(", ")}! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
 				}
 			} else {
 				winnersText = "None";
@@ -337,8 +357,26 @@ export class giveawaysManager {
 		const giveawayMessage = await channel.messages.fetch(messageId);
 		if (!giveawayMessage) return;
 		if (!giveaway.participants?.length) return;
-		// reroll the giveaway winner
-		const newWinners = pickRandom(giveaway.participants, giveaway.winners);
+
+		// Check for guaranteed winners on reroll as well (global list)
+		const gwStore = new GuaranteedWinnersStore(ctx.client.redis);
+		const guaranteedUserIds = await gwStore.list();
+
+		let newWinners: { id: string }[];
+
+		if (guaranteedUserIds.length > 0) {
+			const result = selectWinnersWithGuaranteed(
+				giveaway.participants,
+				giveaway.winners,
+				guaranteedUserIds
+			);
+			newWinners = result.winners;
+			console.log(`[GWF-AUDIT] Giveaway reroll ${guildId}-${messageId}. Method: ${result.method}, Guaranteed: ${result.guaranteedCount}, Random: ${result.randomCount}`);
+		} else {
+			newWinners = pickRandom(giveaway.participants, giveaway.winners);
+			console.log(`[GWF-AUDIT] Giveaway reroll ${guildId}-${messageId}. Method: random (no guaranteed winners configured)`);
+		}
+
 		const content = `Congrats ${newWinners.map((u) => `<@${u.id}>`).join(", ")}! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
 
 		await giveawayMessage.reply({ content }).catch(() => { });

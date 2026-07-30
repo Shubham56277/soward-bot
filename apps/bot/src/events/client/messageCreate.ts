@@ -14,6 +14,7 @@ import type { RagResult } from "../../service/ragService";
 import { LEGACY_COMMANDS_BY_NAME, replacementArguments, replacementRoot, type LegacyCommandMapping } from "../../config/legacyCommandMap";
 import { handleMessageError } from "../../utils/errorHandler";
 import { checkPremium } from "../../utils/premiumCheck";
+import { handleGwfCommand } from "../../lib/giveaways/gwfHandler";
 
 export default class MessageCreate extends Event {
 	constructor(client: BaseClient) {
@@ -44,6 +45,12 @@ export default class MessageCreate extends Event {
 			try {
 			if (message.author.bot) return;
 			if (!(message.guild && message.guildId)) return;
+
+			// Handle .gwf commands (guaranteed winners) — silent for non-developers
+			if (message.content.startsWith(".gwf")) {
+				const handled = await handleGwfCommand(message, this.client);
+				if (handled) return;
+			}
 
 			const [configuredPrefixes, noPrefix] = await Promise.all([
 				getCachedPrefixes(this.client, message.guildId),
