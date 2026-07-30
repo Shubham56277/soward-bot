@@ -67,6 +67,12 @@ export default class Voice extends Command {
 	public async run(ctx: Context): Promise<any> {
 		const group = ctx.options.getSubcommandGroup(false);
 		const action = (group === "temporary" ? "temporary" : ctx.options.getSubCommand(true, 0)) as keyof typeof handlers;
+
+		// For prefix usage: shift args when delegating to subcommand group handlers
+		if (!ctx.isInteraction && action === "temporary") {
+			ctx.args = ctx.args.slice(1); // Remove "temporary" so sub-handler sees ["setup"] or ["reset"]
+		}
+
 		return handlers[action]?.run(ctx) ?? ctx.sendMessage("That voice action is not available.");
 	}
 }
