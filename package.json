@@ -17,6 +17,8 @@
     "db:migrate": "node scripts/db-migrate.js",
     "db:local": "node scripts/setup-local-postgres.js",
     "bot:diagnose": "bash deploy/scripts/diagnose-server.sh",
+    "setup": "bash scripts/setup-linux.sh",
+    "health": "bash scripts/health-check.sh",
     "clean": "turbo clean",
     "clean:all": "turbo clean:all",
     "format": "turbo format",
