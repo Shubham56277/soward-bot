@@ -37,7 +37,7 @@ export class giveawaysManager {
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(`### ${prize}`),
 				new TextDisplayBuilder().setContent(
-					`🎁 **Giveaway Information**\n` +
+					`-# Giveaway Information\n` +
 					`Ends: <t:${Math.floor((Date.now() + duration) / 1000)}:F> (<t:${Math.floor((Date.now() + duration) / 1000)}:R>)\n` +
 					`Winners: **${winnerCount}**\n` +
 					`Hosted by: ${ctx.author?.toString()}`
