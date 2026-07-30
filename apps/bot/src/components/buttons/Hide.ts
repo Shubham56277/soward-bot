@@ -13,9 +13,9 @@ export default class Hide extends Button {
 	public async execute(interaction: ButtonInteraction): Promise<any> {
 		if (!interaction.guild) return;
 		const voice = interaction.guild?.members.cache.get(interaction.user.id)?.voice.channel;
-		if (!voice) return;
+		if (!voice) return interaction.reply({ content: "You must be in a voice channel.", flags: MessageFlags.Ephemeral });
 		const room = await Room.get(voice.id);
-		if (!room) return;
+		if (!room) return interaction.reply({ content: "This is not a managed voice room.", flags: MessageFlags.Ephemeral });
 		if (room.ownerId !== interaction.user.id) {
 			return interaction.reply({
 				content: "You are not the owner of this room.",
@@ -23,13 +23,12 @@ export default class Hide extends Button {
 			});
 		}
 		if (voice instanceof VoiceChannel) {
-			// lock the channel
 			await voice.permissionOverwrites.edit(interaction.guild.roles.everyone, {
 				ViewChannel: false,
 			});
 			const userVoiceSetting = await VoiceSettings.get(interaction.guild.id!, interaction.user.id);
-			userVoiceSetting.visible = false;
-            await VoiceSettings.update(interaction.guild.id!, interaction.user.id, userVoiceSetting);
+			userVoiceSetting.visible = true; // visible=true means "has been toggled" (hidden state)
+			await VoiceSettings.update(interaction.guild.id!, interaction.user.id, userVoiceSetting);
 			return interaction.reply({
 				content: "Hidden the room.",
 				flags: MessageFlags.Ephemeral,
