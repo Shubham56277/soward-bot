@@ -54,14 +54,14 @@ const WL_STATE_KEY = (guildId: string, userId: string) => `wl:actions:${guildId}
 export default class WhitelistCommand extends Command {
 	constructor() {
 		super({
-			name: "whitelist",
+			name: "wl",
 			description: {
 				content: "Manage antinuke whitelist with per-action controls",
-				examples: ["whitelist", "whitelist add @user", "whitelist remove @user", "whitelist list"],
-				usage: "whitelist [add|remove|list|reset] [user]",
+				examples: ["wl", "wl add @user", "wl remove @user", "wl list"],
+				usage: "wl [add|remove|list|reset] [user]",
 			},
 			category: "security",
-			aliases: ["wl"],
+			aliases: ["whitelist"],
 			cooldown: 5,
 			args: false,
 			permissions: {
@@ -115,10 +115,10 @@ export default class WhitelistCommand extends Command {
 			"## Whitelist",
 			"Manage which users are exempted from antinuke protection.",
 			"",
-			"`whitelist add @user` — Add user with action selection panel",
-			"`whitelist remove @user` — Remove user from whitelist",
-			"`whitelist list` — Show all whitelisted users",
-			"`whitelist reset` — Clear all whitelisted users",
+			"`wl add @user` — Add user with action selection panel",
+			"`wl remove @user` — Remove user from whitelist",
+			"`wl list` — Show all whitelisted users",
+			"`wl reset` — Clear all whitelisted users",
 			"",
 			"-# Whitelisted users can perform up to 25 actions per 10 minutes.",
 		].join("\n");
@@ -131,7 +131,7 @@ export default class WhitelistCommand extends Command {
 		if (!settings.enabled) return ctx.sendMessage("Antinuke must be enabled first.");
 
 		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return ctx.sendMessage("Mention a user: `whitelist add @user`");
+		if (!member) return ctx.sendMessage("Mention a user: `wl add @user`");
 
 		// Load existing action state for this user (or default all disabled)
 		const stateKey = WL_STATE_KEY(ctx.guild.id, member.id);
@@ -273,7 +273,7 @@ export default class WhitelistCommand extends Command {
 	private async removeUser(ctx: Context): Promise<any> {
 		const settings = await AntiNuke.get(ctx.guild.id!);
 		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return ctx.sendMessage("Mention a user: `whitelist remove @user`");
+		if (!member) return ctx.sendMessage("Mention a user: `wl remove @user`");
 
 		if (!settings.trustedUsers.some(u => u.id === member.id)) {
 			return ctx.sendMessage(`**${member.user.username}** is not whitelisted.`);
