@@ -12,8 +12,11 @@ export async function hasGiveawayPerms(member: GuildMember | null | undefined, g
     if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
 
     const guild = await Guild.get(guildId);
-    // Check configured giveaway manager role
+    // Check configured giveaway manager (user ID or role ID)
     if (guild.giveawaysManagerRole) {
+        // Check if it's the user's ID directly
+        if (member.id === guild.giveawaysManagerRole) return true;
+        // Also check if it's a role they have
         if (member.roles.cache.has(guild.giveawaysManagerRole)) return true;
     }
     return false;

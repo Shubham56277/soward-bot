@@ -29,7 +29,7 @@ export class giveawaysManager {
 			ctx.editOrReply("Channel must be a text channel");
 			return;
 		}
-		const button = new ButtonBuilder().setCustomId("giveaway_join").setEmoji("<:featured_seasonal_and_gifts_200d:1367474029556138045>").setStyle(ButtonStyle.Secondary);
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Join").setStyle(ButtonStyle.Success);
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 
 		const container = new ContainerBuilder()
@@ -246,7 +246,7 @@ export class giveawaysManager {
 						components: [],
 					});
 
-					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setEmoji("<:featured_seasonal_and_gifts_200d:1367474029556138045>").setStyle(ButtonStyle.Secondary);
+					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Join").setStyle(ButtonStyle.Success);
 					const leaveRow = new ActionRowBuilder<ButtonBuilder>().addComponents(leaveButton);
 					const leaveContainer = new ContainerBuilder()
 						.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎉 ${giveaway.prize}`))
@@ -267,8 +267,8 @@ export class giveawaysManager {
 
 		if (!updatedGiveaway) return;
 
-		const button = new ButtonBuilder().setCustomId("giveaway_join").setEmoji("<:featured_seasonal_and_gifts_200d:1367474029556138045>").setStyle(ButtonStyle.Secondary);
-		const view = new ButtonBuilder().setCustomId("giveaway_view").setEmoji("<:supervisor_account_200dp_E3E3E3_:1367483410364371014>").setStyle(ButtonStyle.Secondary);
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Join").setStyle(ButtonStyle.Success);
+		const view = new ButtonBuilder().setCustomId("giveaway_view").setLabel("👥 Entries").setStyle(ButtonStyle.Secondary);
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button, view);
 
 		const updatedContainer = new ContainerBuilder()

@@ -8,9 +8,9 @@ export default class GPerms extends Command {
         super({
             name: "gperms",
             description: {
-                content: "Set or view the giveaway manager role",
-                examples: ["gperms @Events Team", "gperms reset"],
-                usage: "gperms <@role | reset>",
+                content: "Grant or revoke giveaway manager access for a user",
+                examples: ["gperms @user", "gperms reset"],
+                usage: "gperms <@user | reset>",
             },
             category: "giveaway",
             aliases: ["giveawayperms", "gmanager"],
@@ -36,36 +36,43 @@ export default class GPerms extends Command {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent("## 🎉 Giveaway Permissions"))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent("Giveaway manager role has been **removed**.\n\nOnly users with `Manage Server` or `Administrator` can manage giveaways now."));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent("Giveaway manager has been **removed**.\n\nOnly users with `Manage Server` or `Administrator` can manage giveaways now."));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
-        // Set role
-        const role = ctx.message?.mentions?.roles?.first() || (ctx.args[0] ? ctx.guild.roles.cache.get(ctx.args[0]) : null);
+        // Set user
+        const user = ctx.message?.mentions?.users?.first() || (ctx.args[0] ? await ctx.client.users.fetch(ctx.args[0]).catch(() => null) : null);
 
-        if (role) {
-            await Guild.update(ctx.guild.id, { giveawaysManagerRole: role.id });
+        if (user) {
+            await Guild.update(ctx.guild.id, { giveawaysManagerRole: user.id });
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent("## 🎉 Giveaway Permissions"))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Giveaway manager role set to ${role.toString()}.\n\nUsers with this role can now manage giveaways.`));
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Giveaway manager set to ${user.toString()}.\n\nThis user can now manage giveaways.`));
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
         // Show current config
-        const currentRole = guild.giveawaysManagerRole ? ctx.guild.roles.cache.get(guild.giveawaysManagerRole) : null;
+        const currentManager = guild.giveawaysManagerRole;
+        let managerDisplay = "None";
+        if (currentManager) {
+            const member = ctx.guild.members.cache.get(currentManager);
+            managerDisplay = member ? member.toString() : `<@${currentManager}>`;
+        }
+
         const container = new ContainerBuilder()
             .addTextDisplayComponents(new TextDisplayBuilder().setContent("## 🎉 Giveaway Permissions"))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                `**Current Manager Role:** ${currentRole ? currentRole.toString() : "None"}\n\n` +
+                `**Current Giveaway Manager:** ${managerDisplay}\n\n` +
                 `**Who can manage giveaways:**\n` +
+                `• Developers\n` +
                 `• Users with \`Administrator\` permission\n` +
                 `• Users with \`Manage Server\` permission\n` +
-                (currentRole ? `• Users with the ${currentRole.toString()} role\n` : "") +
+                (currentManager ? `• ${managerDisplay}\n` : "") +
                 `\n**Usage:**\n` +
-                `\`?gperms @role\` — Set giveaway manager role\n` +
-                `\`?gperms reset\` — Remove giveaway manager role`
+                `\`?gperms @user\` — Grant giveaway access to a user\n` +
+                `\`?gperms reset\` — Remove giveaway manager`
             ));
         return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
