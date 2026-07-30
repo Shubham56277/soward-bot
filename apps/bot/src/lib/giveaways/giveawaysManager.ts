@@ -1,6 +1,6 @@
 import { Giveaway } from "@repo/db";
 import Context from "../Context";
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ContainerBuilder, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ContainerBuilder, MessageFlags, SectionBuilder, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, ThumbnailBuilder } from "discord.js";
 import BaseClient from "../../base/Client";
 import { createGiveawayQueue } from "./queue/giveawayQueue";
 import Redis from "ioredis";
@@ -29,18 +29,26 @@ export class giveawaysManager {
 			ctx.editOrReply("Channel must be a text channel");
 			return;
 		}
-		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Join").setStyle(ButtonStyle.Success);
+		const serverIcon = ctx.guild.iconURL() || "https://cdn.discordapp.com/embed/avatars/0.png";
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Participate").setStyle(ButtonStyle.Primary);
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 
+		const section = new SectionBuilder()
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(`### ${prize}`),
+				new TextDisplayBuilder().setContent(
+					`🎁 **Giveaway Information**\n` +
+					`Ends: <t:${Math.floor((Date.now() + duration) / 1000)}:F> (<t:${Math.floor((Date.now() + duration) / 1000)}:R>)\n` +
+					`Winners: **${winnerCount}**\n` +
+					`Hosted by: ${ctx.author?.toString()}`
+				),
+			)
+			.setThumbnailAccessory(new ThumbnailBuilder().setURL(serverIcon).setDescription("Server icon"));
+
 		const container = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎉 ${prize}`))
+			.addSectionComponents(section)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				`**Ends:** <t:${Math.floor((Date.now() + duration) / 1000)}:R> (<t:${Math.floor((Date.now() + duration) / 1000)}>)\n` +
-				`**Hosted by:** ${ctx.author?.toString()}\n` +
-				`**Entries:** \`0\`\n` +
-				`**Winners:** \`${winnerCount}\``
-			))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: 0`))
 			.addActionRowComponents(row);
 
 		const message = await sendChannel.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -155,14 +163,17 @@ export class giveawaysManager {
 			}
 
 			const endContainer = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎉 ${giveaway.prize}`))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎊 GIVEAWAY ENDED 🎊`))
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`**Ended:** <t:${Math.floor(Date.now() / 1000)}:R>\n` +
-					`**Hosted by:** <@${giveaway.hostedBy}>\n` +
-					`**Entries:** \`${giveaway.participants?.length || 0}\`\n` +
-					`**Winners:** ${winnersText}`
-				));
+					`### ${giveaway.prize}\n\n` +
+					`🎁 **Giveaway Information**\n` +
+					`Ended: <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n` +
+					`Winners: ${winnersText}\n` +
+					`Hosted by: <@${giveaway.hostedBy}>`
+				))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${giveaway.participants?.length || 0}`));
 			await message.edit({ components: [endContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
 			await message.reply({ content }).catch(() => { });
 
@@ -246,17 +257,23 @@ export class giveawaysManager {
 						components: [],
 					});
 
-					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Join").setStyle(ButtonStyle.Success);
+					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setLabel(`🎉 Participate (${giveaway.participants?.length || 0})`).setStyle(ButtonStyle.Primary);
 					const leaveRow = new ActionRowBuilder<ButtonBuilder>().addComponents(leaveButton);
+					const leaveSection = new SectionBuilder()
+						.addTextDisplayComponents(
+							new TextDisplayBuilder().setContent(`### ${giveaway.prize}`),
+							new TextDisplayBuilder().setContent(
+								`🎁 **Giveaway Information**\n` +
+								`Ends: <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:F> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R>)\n` +
+								`Winners: **${giveaway.winners}**\n` +
+								`Hosted by: <@${giveaway.hostedBy}>`
+							),
+						)
+						.setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild?.iconURL() || "https://cdn.discordapp.com/embed/avatars/0.png").setDescription("Server icon"));
 					const leaveContainer = new ContainerBuilder()
-						.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎉 ${giveaway.prize}`))
+						.addSectionComponents(leaveSection)
 						.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-						.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-							`**Ends:** <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}>)\n` +
-							`**Hosted by:** <@${giveaway.hostedBy}>\n` +
-							`**Entries:** \`${giveaway.participants?.length}\`\n` +
-							`**Winners:** \`${giveaway.winners}\``
-						))
+						.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${giveaway.participants?.length || 0}`))
 						.addActionRowComponents(leaveRow);
 					await giveawayMessage.edit({ components: [leaveContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
 					return collector.stop();
@@ -267,19 +284,25 @@ export class giveawaysManager {
 
 		if (!updatedGiveaway) return;
 
-		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Join").setStyle(ButtonStyle.Success);
-		const view = new ButtonBuilder().setCustomId("giveaway_view").setLabel("👥 Entries").setStyle(ButtonStyle.Secondary);
-		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button, view);
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel(`🎉 Participate (${updatedGiveaway.participants?.length || 0})`).setStyle(ButtonStyle.Primary);
+		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+
+		const section = new SectionBuilder()
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(`### ${giveaway.prize}`),
+				new TextDisplayBuilder().setContent(
+					`🎁 **Giveaway Information**\n` +
+					`Ends: <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:F> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R>)\n` +
+					`Winners: **${giveaway.winners}**\n` +
+					`Hosted by: <@${giveaway.hostedBy}>`
+				),
+			)
+			.setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild?.iconURL() || "https://cdn.discordapp.com/embed/avatars/0.png").setDescription("Server icon"));
 
 		const updatedContainer = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎉 ${giveaway.prize}`))
+			.addSectionComponents(section)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				`**Ends:** <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}>)\n` +
-				`**Hosted by:** <@${giveaway.hostedBy}>\n` +
-				`**Entries:** \`${updatedGiveaway.participants?.length}\`\n` +
-				`**Winners:** \`${updatedGiveaway.winners}\``
-			))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${updatedGiveaway.participants?.length || 0}`))
 			.addActionRowComponents(row);
 
 		await giveawayMessage.edit({ components: [updatedContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
