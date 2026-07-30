@@ -256,7 +256,7 @@ export class giveawaysManager {
 						components: [],
 					});
 
-					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setLabel(`🎉 Participate (${giveaway.participants?.length || 0})`).setStyle(ButtonStyle.Primary);
+					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Participate").setStyle(ButtonStyle.Primary);
 					const leaveRow = new ActionRowBuilder<ButtonBuilder>().addComponents(leaveButton);
 					const leaveSection = new SectionBuilder()
 						.addTextDisplayComponents(
@@ -282,7 +282,7 @@ export class giveawaysManager {
 
 		if (!updatedGiveaway) return;
 
-		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel(`🎉 Participate (${updatedGiveaway.participants?.length || 0})`).setStyle(ButtonStyle.Primary);
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Participate").setStyle(ButtonStyle.Primary);
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 
 		const section = new SectionBuilder()
