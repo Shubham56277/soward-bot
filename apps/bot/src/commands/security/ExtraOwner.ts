@@ -63,7 +63,7 @@ const DEFAULT_ENFORCEMENT: ExtraOwnerConfig["enforcement"] = "rolestrip";
 function panel(title: string, body: string): ContainerBuilder {
 	return new ContainerBuilder()
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
 }
 

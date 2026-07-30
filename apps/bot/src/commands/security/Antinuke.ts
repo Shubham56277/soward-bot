@@ -56,7 +56,7 @@ const EMOJI = {
 function panel(title: string, body: string): ContainerBuilder {
 	return new ContainerBuilder()
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${EMOJI.shield} ${title}`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
 }
 
@@ -64,7 +64,7 @@ function panel(title: string, body: string): ContainerBuilder {
 function plainPanel(title: string, body: string): ContainerBuilder {
 	return new ContainerBuilder()
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
 }
 
