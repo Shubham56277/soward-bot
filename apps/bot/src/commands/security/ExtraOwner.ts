@@ -42,18 +42,18 @@ interface ExtraOwnerConfig {
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const REDIS_KEY = (guildId: string) => `extraowners:${guildId}`;
-const MAX_EXTRA_OWNERS = 10;
+const MAX_EXTRA_OWNERS = 20;
 const COLLECTOR_TIMEOUT = 120_000;
 
 const DEFAULT_LIMITS: ExtraOwnerLimits = {
-	memberBan: 10,
-	memberKick: 10,
-	roleAction: 10,
-	channelAction: 10,
-	webhookAction: 10,
-	emojiAction: 10,
-	mentionLimit: 10,
-	timeWindow: 60,
+	memberBan: 20,
+	memberKick: 20,
+	roleAction: 20,
+	channelAction: 20,
+	webhookAction: 20,
+	emojiAction: 20,
+	mentionLimit: 20,
+	timeWindow: 600,
 };
 
 const DEFAULT_ENFORCEMENT: ExtraOwnerConfig["enforcement"] = "rolestrip";
@@ -302,7 +302,6 @@ export default class ExtraOwnerCommand extends Command {
 	private async handleAdd(ctx: Context): Promise<any> {
 		const user = ctx.options.getUser("user", true, 1);
 		if (!user) return reply(ctx, "Missing User", "Specify a user: `extraowner add @user`");
-		if (user.bot) return reply(ctx, "Invalid User", "Bots cannot be added as extra owners.");
 		if (user.id === ctx.guild.ownerId) return reply(ctx, "Invalid User", "The server owner cannot be added as an extra owner.");
 
 		const owners = await getExtraOwners(ctx);

@@ -231,8 +231,13 @@ export class RagService {
 				// (f) Build LLM messages
 				const messages: LlmMessage[] = [];
 
-				// System message
-				messages.push({ role: "system", content: RAG_SYSTEM_PROMPT });
+				// System message with guild prefix context
+				const { Guild: GuildDb } = require("@repo/db");
+				const guildData = await GuildDb.get(query.scope.guildId).catch(() => null);
+				const guildPrefix = guildData?.prefix ?? "?";
+				const prefixContext = `\n\nIMPORTANT: The current server's command prefix is \`${guildPrefix}\`. When showing command examples or usage, always use this prefix. For example: \`${guildPrefix}help\`, \`${guildPrefix}ban @user\`, \`${guildPrefix}antinuke enable\`.`;
+
+				messages.push({ role: "system", content: RAG_SYSTEM_PROMPT + prefixContext });
 
 				// Context message with retrieved docs
 				if (searchResults.length > 0) {

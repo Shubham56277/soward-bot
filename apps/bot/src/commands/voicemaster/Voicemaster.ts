@@ -45,12 +45,27 @@ export default class Voicemaster extends Command {
 		const subcommand = ctx.options.getSubCommand(true);
 
 		if (subcommand === "setup") {
-			const voiceCreator = await VoiceCreator.getByGuildId(ctx.guild.id!);
-			if (voiceCreator) {
-				return ctx.sendMessage("VoiceMaster is already configured.\nIf you want to reset it, use `voicemaster reset`");
-			}
-
 			const guild = ctx.guild;
+			const existingCreator = await VoiceCreator.getByGuildId(guild.id!);
+
+			if (existingCreator) {
+				// Validate the existing setup — check if channels still exist
+				const voiceChannel = await guild.channels.fetch(existingCreator.voiceChannelId).catch(() => null);
+				const categoryChannel = await guild.channels.fetch(existingCreator.categoryId).catch(() => null);
+
+				if (voiceChannel && categoryChannel) {
+					// Existing setup is still valid
+					return ctx.sendMessage("VoiceMaster is already configured.\nIf you want to reset it, use `voicemaster reset`");
+				}
+
+				// Stale record — channels were deleted manually. Clean up and re-create.
+				await VoiceCreator.delete(guild.id, existingCreator.categoryId);
+				// Also try to clean up any remaining channels from old setup
+				const oldText = await guild.channels.fetch(existingCreator.textChannelId).catch(() => null);
+				await oldText?.delete().catch(() => {});
+				await voiceChannel?.delete().catch(() => {});
+				await categoryChannel?.delete().catch(() => {});
+			}
 
 			try {
 				const category = await guild.channels.create({ name: "Private channels", type: ChannelType.GuildCategory });

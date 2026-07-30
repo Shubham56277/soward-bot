@@ -697,6 +697,52 @@ export async function evaluateAntiNukeAction(
   }
 
   if (isExtraOwner(config, executorId)) {
+    // Extra owners bypass antinuke but are rate-tracked (20 actions per 10 minutes)
+    // If they exceed the limit, they get punished + role-stripped (same as whitelist)
+    const EXTRA_OWNER_LIMIT = 20;
+    const EXTRA_OWNER_WINDOW_MS = 10 * 60_000; // 10 minutes
+    const eoKey = `${guild.id}:${executorId}:extraowner`;
+    const now = Date.now();
+    const eoTimestamps = actionCountersWhitelist.get(eoKey) || [];
+    const cutoff = now - EXTRA_OWNER_WINDOW_MS;
+
+    // Prune old timestamps
+    let lo = 0;
+    while (lo < eoTimestamps.length && eoTimestamps[lo] < cutoff) lo++;
+    if (lo > 0) eoTimestamps.splice(0, lo);
+
+    eoTimestamps.push(now);
+    actionCountersWhitelist.set(eoKey, eoTimestamps);
+
+    if (eoTimestamps.length > EXTRA_OWNER_LIMIT) {
+      // Exceeded limit — punish, strip roles, revoke extra owner status
+      const executorMember = await getExecutorMemberCached(guild, executorId);
+      const actionLabel = ACTION_LABELS[action] ?? action;
+
+      // Send incident log
+      sendIncidentLog(
+        guild,
+        config.logChannelId,
+        "Extra Owner Limit Exceeded",
+        `<@${executorId}> exceeded the extra owner limit (**${eoTimestamps.length}/${EXTRA_OWNER_LIMIT}** actions in 10 mins).\n` +
+        `Latest: **${actionLabel}**\n` +
+        `Action: Role-strip + extra owner revoked.`,
+        { executorId, action, punishment: "rolestrip" },
+      ).catch(() => {});
+
+      // Return shouldEnforce: true so the main enforcement runs (punishment + recovery)
+      return {
+        shouldEnforce: true,
+        executorId,
+        executorMember,
+        config,
+        isWhitelistViolation: true,
+        whitelistViolationReason: "Extra owner action limit exceeded (20 per 10 mins)",
+        whitelistLimitThreshold: EXTRA_OWNER_LIMIT,
+        whitelistLimitWindow: 600,
+      };
+    }
+
     return { shouldEnforce: false, executorId, executorMember: null, config };
   }
 
@@ -715,8 +761,8 @@ export async function evaluateAntiNukeAction(
 
   if (hasActionWhitelist && !isExpired) {
     if (!hasBypassRole && config.whitelistLimitsEnabled && config.whitelistLimitsActions?.includes(action)) {
-      const globalThreshold = config.whitelistLimitsThreshold ?? 5;
-      const globalWindow = config.whitelistLimitsWindow ?? 60;
+      const globalThreshold = config.whitelistLimitsThreshold ?? 25;
+      const globalWindow = config.whitelistLimitsWindow ?? 600;
       const count = countActionWithinWindow(
         actionCountersWhitelist,
         `${guild.id}:${executorId}:global`,
@@ -809,8 +855,8 @@ export async function evaluateAntiNukeAction(
     if (matchedRoleProfile) {
       // Role-whitelisted users are also subject to whitelist limits
       if (!hasBypassRole && config.whitelistLimitsEnabled && config.whitelistLimitsActions?.includes(action)) {
-        const globalThreshold = config.whitelistLimitsThreshold ?? 5;
-        const globalWindow = config.whitelistLimitsWindow ?? 60;
+        const globalThreshold = config.whitelistLimitsThreshold ?? 25;
+        const globalWindow = config.whitelistLimitsWindow ?? 600;
         const count = countActionWithinWindow(
           actionCountersWhitelist,
           `${guild.id}:${executorId}:global`,
@@ -1713,8 +1759,8 @@ export async function runAntiNukeProtectionDetailed(
     // ── Normal mode — threshold-based enforcement ──────────────────────────
 
     if (evaluation.isWhitelistViolation) {
-      const violationThreshold = evaluation.whitelistLimitThreshold ?? config.whitelistLimitsThreshold ?? 5;
-      const violationWindow = evaluation.whitelistLimitWindow ?? config.whitelistLimitsWindow ?? 60;
+      const violationThreshold = evaluation.whitelistLimitThreshold ?? config.whitelistLimitsThreshold ?? 25;
+      const violationWindow = evaluation.whitelistLimitWindow ?? config.whitelistLimitsWindow ?? 600;
       const violationReason = evaluation.whitelistViolationReason ?? "Whitelist rate limit exceeded";
       const punishment = config.whitelistLimitsPunishment ?? "ban";
       const reason = `[ANTINUKE] ${violationReason} (${violationThreshold} actions in ${violationWindow}s)`;

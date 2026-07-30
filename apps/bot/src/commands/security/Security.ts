@@ -1,13 +1,5 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
-
-function panel(title: string, body: string): ContainerBuilder {
-	return new ContainerBuilder()
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🛡 ${title}`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
-}
 
 export default class SecurityCommand extends Command {
 	constructor() {
@@ -27,34 +19,35 @@ export default class SecurityCommand extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		const { Guild: GuildDb } = await import("@repo/db");
+		const guildData = await GuildDb.get(ctx.guild.id);
+		const prefix = guildData?.prefix ?? ctx.client.config.prefix;
+
 		const body = [
-			"**Server Security**",
+			"## 🛡 Security",
 			"*Manage AntiNuke protection, extra owners, and whitelist settings.*",
 			"",
 			"**AntiNuke**",
-			"`antinuke` — Open the security dashboard",
-			"`antinuke enable` — Enable protection",
-			"`antinuke disable` — Disable protection",
-			"`antinuke config` — Configure protection modules",
-			"`antinuke punishment <ban|kick|rolestrip>` — Set enforcement action",
+			`\`${prefix}antinuke\` — Open the security dashboard`,
+			`\`${prefix}antinuke enable\` — Enable protection`,
+			`\`${prefix}antinuke disable\` — Disable protection`,
+			`\`${prefix}antinuke config\` — Configure protection modules`,
+			`\`${prefix}antinuke punishment <ban|kick|rolestrip>\` — Set enforcement action`,
 			"",
 			"**Extra Owners**",
-			"`extraowner` — Open the extra owners dashboard",
-			"`extraowner add @user` — Add an extra owner",
-			"`extraowner remove @user` — Remove an extra owner",
-			"`extraowner config @user` — Configure an extra owner",
-			"`extraowner reset` — Remove all extra owners",
+			`\`${prefix}extraowner\` — Open the extra owners dashboard`,
+			`\`${prefix}extraowner add @user\` — Add an extra owner`,
+			`\`${prefix}extraowner remove @user\` — Remove an extra owner`,
+			`\`${prefix}extraowner config @user\` — Configure an extra owner`,
+			`\`${prefix}extraowner reset\` — Remove all extra owners`,
 			"",
 			"**Whitelist**",
-			"`antinuke whitelist add @user` — Add a whitelist exemption",
-			"`antinuke whitelist remove @user` — Remove a whitelist exemption",
-			"`antinuke whitelist list` — View all whitelisted users",
-			"`antinuke whitelist reset` — Clear the whitelist",
+			`\`${prefix}antinuke whitelist add @user\` — Add a whitelist exemption`,
+			`\`${prefix}antinuke whitelist remove @user\` — Remove a whitelist exemption`,
+			`\`${prefix}antinuke whitelist list\` — View all whitelisted users`,
+			`\`${prefix}antinuke whitelist reset\` — Clear the whitelist`,
 		].join("\n");
 
-		return ctx.editOrReply({
-			components: [panel("Security", body)],
-			flags: MessageFlags.IsComponentsV2,
-		});
+		return ctx.sendMessage({ content: body });
 	}
 }

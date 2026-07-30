@@ -167,9 +167,21 @@ export default class AntiNukeCommand extends Command {
 
 	// ─── Authorization ────────────────────────────────────────────────────
 
-	private isAuthorized(ctx: Context, settings: AntiNuke): boolean {
+	private async isAuthorized(ctx: Context, settings: AntiNuke): Promise<boolean> {
 		const userId = ctx.author?.id ?? "";
-		return userId === ctx.guild.ownerId || userId === settings.admin || env.DEVELOPER_IDS.includes(userId);
+		if (userId === ctx.guild.ownerId || userId === settings.admin || env.DEVELOPER_IDS.includes(userId)) return true;
+		// Extra owners from the legacy trustedUsers field
+		const trustedIds = settings.trustedUsers?.map(u => u.id) ?? [];
+		if (trustedIds.includes(userId)) return true;
+		// Extra owners from Redis-based extra owner system
+		const raw = await ctx.client.redis.get(`extraowners:${ctx.guild.id}`).catch(() => null);
+		if (raw) {
+			try {
+				const owners = JSON.parse(raw) as { userId: string }[];
+				if (owners.some(o => o.userId === userId)) return true;
+			} catch {}
+		}
+		return false;
 	}
 
 	// ─── Entry Point ──────────────────────────────────────────────────────
@@ -189,7 +201,7 @@ export default class AntiNukeCommand extends Command {
 				return reply(ctx, "Error", "Could not load antinuke settings. Please try again.");
 			}
 
-			if (!this.isAuthorized(ctx, settings)) {
+			if (!(await this.isAuthorized(ctx, settings))) {
 				return reply(ctx, "Access Denied", `${EMOJI.lock} Only the server owner or antinuke admin can use this command.`);
 			}
 
@@ -534,8 +546,7 @@ export default class AntiNukeCommand extends Command {
 		if (!settings.enabled) return reply(ctx, "Not Enabled", `${EMOJI.warn} Enable antinuke first.`);
 
 		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return reply(ctx, "Missing User", "Mention a user: `antinuke whitelist add @user`");
-		if (member.user.bot) return reply(ctx, "Invalid User", "Bots cannot be whitelisted.");
+		if (!member) return reply(ctx, "Missing User", "Mention a user or bot: `antinuke whitelist add @user`");
 		if (settings.trustedUsers.some((u) => u.id === member.id)) {
 			return reply(ctx, "Already Whitelisted", `**${member.user.username}** is already on the whitelist.`);
 		}
