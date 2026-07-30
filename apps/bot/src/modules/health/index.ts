@@ -5,7 +5,7 @@ import { LatencyMonitor } from "./latencyMonitor";
 let healthServer: ReturnType<typeof createServer> | null = null;
 let latencyMonitor: LatencyMonitor | null = null;
 let botReadyTime: number | null = null;
-let botStartTime = Date.now();
+const botStartTime = Date.now();
 
 export function getLatencyMonitor(): LatencyMonitor | null {
     return latencyMonitor;

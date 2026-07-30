@@ -69,7 +69,7 @@ describe("parseQueryIntent", () => {
     it("normalizes lowercase and strips punctuation for comparison", () => {
         const q = parseQueryIntent("Humsafar - Saiyaara!!");
         assert.strictEqual(q.versionFlags.size, 0);
-        assert.strictEqual(q.normalized, "humsafar  saiyaara"); // punctuation → space
+        assert.strictEqual(q.normalized, "humsafar saiyaara"); // punctuation → space collapsed
         assert.strictEqual(q.original, "Humsafar - Saiyaara!!");
     });
 
