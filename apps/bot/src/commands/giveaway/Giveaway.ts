@@ -52,7 +52,12 @@ export default class Giveaway extends Command {
 			const sub = ctx.args[0]?.toLowerCase();
 			if (!sub) return this.showHelp(ctx);
 			const mapped = handlers[sub as keyof typeof handlers];
-			if (mapped) return mapped.run(ctx);
+			if (mapped) {
+				// Shift args so the sub-handler sees the correct arguments
+				// e.g. "?giveaway create 1m 1 prize" → args become ["1m", "1", "prize"]
+				ctx.args = ctx.args.slice(1);
+				return mapped.run(ctx);
+			}
 			return this.showHelp(ctx);
 		}
 
