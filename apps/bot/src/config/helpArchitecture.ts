@@ -1,80 +1,49 @@
 /**
  * helpArchitecture.ts
  *
- * Defines the premium, product-style information architecture for the help
- * system. Six top-level categories, each containing feature cards, each feature
- * containing grouped command sets.
- *
- * Home → Category → Feature → Command
- *
- * This structure is data-driven so new modules (AI, Economy, Leveling,
- * Verification, Starboard, Analytics) can be added without touching Help.ts.
+ * Data-driven help menu structure.
+ * Home → Category (one page showing all commands grouped by section)
  */
 
 export interface CommandGroup {
-	/** Section heading shown on the feature page (e.g. "Setup", "Configuration") */
 	heading: string;
-	/** Command names belonging to this group, in display order */
 	commands: string[];
 }
 
 export interface Feature {
-	/** Unique key used in select menu values */
 	key: string;
-	/** Display label */
 	label: string;
-	/** One-line description shown on the category page */
 	description: string;
-	/** Grouped commands shown on the feature page */
 	groups: CommandGroup[];
-	/** Whether this feature is premium-only */
 	premium?: boolean;
-	/** Optional "coming soon" flag — shows in UI but not selectable */
 	comingSoon?: boolean;
 }
 
 export interface Category {
-	/** Unique key used in select menu values */
 	key: string;
-	/** Display label */
 	label: string;
-	/** Emoji prefix — used in the category select menu shown on the Home page, keep in sync with homeView */
 	emoji: string;
-	/** Short tagline shown on home + category header */
 	tagline: string;
-	/** Features contained in this category */
 	features: Feature[];
 }
 
-// ─── Category & Feature definitions ──────────────────────────────────────────
+// ─── Categories ──────────────────────────────────────────────────────────────
 
 export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "bot-settings",
 		label: "Bot Settings",
 		emoji: "⚙️",
-		tagline: "Profiles, premium branding, and command prefixes.",
+		tagline: "Personalization, branding, and command prefixes.",
 		features: [
 			{
-				key: "profiles",
-				label: "Profiles",
-				description: "Personal bios and cosmetic profile badges.",
-				groups: [{ heading: "Profile", commands: ["bot", "profile", "bio", "badge"] }],
-			},
-			{
-				key: "branding",
-				label: "Premium Branding",
-				description: "Safely manage the bot account avatar, application bio, and banner.",
-				premium: true,
-				groups: [{ heading: "Customize", commands: ["customize"] }],
-			},
-			{
-				key: "prefixes",
-				label: "Prefixes",
-				description: "Manage the command prefixes accepted in this server.",
+				key: "settings-all",
+				label: "Bot Settings",
+				description: "Personalization, branding, and command prefixes.",
 				groups: [
-					{ heading: "Prefix", commands: ["prefix"] },
-					{ heading: "No Prefix", commands: ["noprefix"] },
+					{ heading: "Identity", commands: ["bot", "profile", "bio", "badge"] },
+					{ heading: "Branding", commands: ["customize"] },
+					{ heading: "Prefixes", commands: ["prefix", "noprefix"] },
 				],
 			},
 		],
@@ -86,50 +55,15 @@ export const HELP_CATEGORIES: Category[] = [
 		tagline: "Moderate, protect, and configure your server.",
 		features: [
 			{
-				key: "moderation",
-				label: "Moderation",
-				description: "Manage members, punishments, and enforcement.",
+				key: "management-all",
+				label: "Management",
+				description: "Moderate, protect, and configure your server.",
 				groups: [
-					{ heading: "Punishments", commands: ["ban", "kick", "mute", "unmute", "timeout", "softban", "tempban", "massban", "unban", "unbanall"] },
-					{ heading: "Warnings & Notes", commands: ["warn", "warns", "clearwarn", "note"] },
-					{ heading: "Channel Control", commands: ["lock", "unlock", "lockall", "unlockall", "hide", "unhide", "hideall", "unhideall", "lockdown", "slowmode", "unslowmode", "nuke"] },
-					{ heading: "Members & Roles", commands: ["nick", "nickname", "role", "roleall", "roleicon"] },
-					{ heading: "Purge", commands: ["purge", "clear", "clone", "media"] },
-					{ heading: "Sniping", commands: ["snipe"] },
-				],
-			},
-			{
-				key: "security",
-				label: "Security",
-				description: "Protect against nukes, raids, and permission abuse.",
-				groups: [
-					{ heading: "Core", commands: ["antinuke", "security"] },
-					{ heading: "Extra Owners", commands: ["extraowner"] },
-				],
-			},
-			{
-				key: "automod",
-				label: "Automod",
-				description: "Automatic spam, link, and word filtering.",
-				groups: [
-					{ heading: "Configuration", commands: ["automod", "antiswear"] },
-					{ heading: "Word Filter", commands: ["badword", "filter"] },
-				],
-			},
-			{
-				key: "logging",
-				label: "Logging",
-				description: "Server audit and event logging.",
-				groups: [
-					{ heading: "Setup", commands: ["logging", "logger"] },
-				],
-			},
-			{
-				key: "settings",
-				label: "Server Configuration",
-				description: "Configure prefix, roles, and server behaviour.",
-				groups: [
-					{ heading: "General", commands: ["customrole", "ignoredchannels", "autoresponder"] },
+					{ heading: "Member Moderation", commands: ["ban", "unban", "softban", "kick", "timeout", "mute", "unmute", "massban", "unbanall", "warn", "warns", "clearwarn", "note", "snipe"] },
+					{ heading: "Channel & Server Control", commands: ["lock", "unlock", "lockall", "unlockall", "hide", "unhide", "hideall", "unhideall", "lockdown", "slowmode", "unslowmode", "nuke", "purge", "clear", "clone", "media"] },
+					{ heading: "Roles & Members", commands: ["nick", "nickname", "role", "roleall", "roleicon"] },
+					{ heading: "Protection", commands: ["security", "antinuke", "extraowner", "wl", "automod", "antiswear", "badword", "filter"] },
+					{ heading: "Configuration", commands: ["logging", "logger", "customrole", "ignoredchannels", "autoresponder"] },
 				],
 			},
 		],
@@ -138,45 +72,18 @@ export const HELP_CATEGORIES: Category[] = [
 		key: "community",
 		label: "Community",
 		emoji: "👥",
-		tagline: "Engage and grow your members.",
+		tagline: "Engage, reward, and grow your members.",
 		features: [
 			{
-				key: "tickets",
-				label: "Tickets",
-				description: "Support ticket panels and management.",
+				key: "community-all",
+				label: "Community",
+				description: "Engage, reward, and grow your members.",
 				groups: [
+					{ heading: "Welcome System", commands: ["welcome", "autorole", "autonick"] },
 					{ heading: "Tickets", commands: ["ticket"] },
-				],
-			},
-			{
-				key: "giveaways",
-				label: "Giveaways",
-				description: "Host and manage giveaways.",
-				groups: [
 					{ heading: "Giveaways", commands: ["giveaway", "gstart", "gend", "greroll", "glist"] },
+					{ heading: "Community Features", commands: ["reaction-role", "leveling"] },
 				],
-			},
-			{
-				key: "greetings",
-				label: "Welcome & Farewell",
-				description: "Greet new members and say goodbye.",
-				groups: [
-					{ heading: "Greetings", commands: ["welcome", "autorole", "autonick"] },
-				],
-			},
-			{
-				key: "reactionroles",
-				label: "Reaction Roles",
-				description: "Self-assignable roles via reactions.",
-				comingSoon: true,
-				groups: [],
-			},
-			{
-				key: "leveling",
-				label: "Leveling",
-				description: "Reward active members with levels.",
-				comingSoon: true,
-				groups: [],
 			},
 		],
 	},
@@ -187,41 +94,14 @@ export const HELP_CATEGORIES: Category[] = [
 		tagline: "Music, voice, and fun for everyone.",
 		features: [
 			{
-				key: "music",
-				label: "Music",
-				description: "High-quality music playback.",
+				key: "entertainment-all",
+				label: "Entertainment",
+				description: "Music, voice, and fun for everyone.",
 				groups: [
-					{ heading: "Playback", commands: ["play", "search", "pause", "resume", "stop", "skip", "skipto", "replay", "seek"] },
-					{ heading: "Queue", commands: ["queue", "nowplaying", "loop", "shuffle", "remove", "clearqueue", "volume"] },
-					{ heading: "Session", commands: ["join", "leave", "music"] },
-					{ heading: "Premium", commands: ["autoplay", "247", "play-file", "record", "playlist"] },
-				],
-			},
-			{
-				key: "voice",
-				label: "Voice",
-				description: "Voice channel controls.",
-				groups: [
-					{ heading: "Voice", commands: ["voice", "voice-role"] },
-					{ heading: "Moderation", commands: ["deafen", "undeafen", "moveall"] },
-				],
-			},
-			{
-				key: "voicemaster",
-				label: "Voice Master",
-				description: "Temporary auto-managed voice rooms.",
-				groups: [
-					{ heading: "Voice Master", commands: ["voicemaster"] },
-				],
-			},
-			{
-				key: "fun",
-				label: "Fun",
-				description: "Games, reactions, and playful commands.",
-				groups: [
-					{ heading: "Reactions", commands: ["hug", "kiss", "slap", "pat", "poke", "wink", "cry", "nom", "facepalm"] },
-					{ heading: "Games", commands: ["8ball", "rps", "coinflip", "ship", "gay"] },
-					{ heading: "Random", commands: ["meme", "fact", "aniquote", "animal", "color", "reverse"] },
+					{ heading: "Music Playback", commands: ["play", "search", "pause", "resume", "stop", "skip", "skipto", "replay", "seek", "autoplay", "247", "play-file", "record", "playlist"] },
+					{ heading: "Queue & Controls", commands: ["queue", "nowplaying", "loop", "shuffle", "remove", "clearqueue", "volume", "join", "leave", "music"] },
+					{ heading: "Voice", commands: ["voice", "voice-role", "voicemaster", "deafen", "undeafen", "moveall"] },
+					{ heading: "Fun & Social", commands: ["hug", "kiss", "slap", "pat", "poke", "wink", "cry", "nom", "facepalm", "8ball", "rps", "coinflip", "ship", "gay", "meme", "fact", "aniquote", "animal", "color", "reverse"] },
 				],
 			},
 		],
@@ -230,47 +110,26 @@ export const HELP_CATEGORIES: Category[] = [
 		key: "utilities",
 		label: "Utilities",
 		emoji: "🛠",
-		tagline: "Tools and information at your fingertips.",
+		tagline: "Information, tools, and server assets.",
 		features: [
 			{
-				key: "information",
-				label: "Information",
-				description: "Look up users, roles, servers, and more.",
+				key: "utilities-all",
+				label: "Utilities",
+				description: "Information, tools, and server assets.",
 				groups: [
-					{ heading: "Server", commands: ["guildinfo", "serverinfo", "membercount", "boostcount", "boosters", "servericon", "serverbanner", "emojilist"] },
-					{ heading: "User", commands: ["info", "pfp", "banner"] },
-					{ heading: "Lookup", commands: ["roleinfo", "channelinfo", "emojiinfo", "users", "lists"] },
-				],
-			},
-			{
-				key: "tools",
-				label: "Server Tools",
-				description: "Emojis, stickers, media, and management helpers.",
-				groups: [
-					{ heading: "Emojis", commands: ["steal", "cloneemoji", "deleteemoji", "renameemoji", "zipemoji"] },
-					{ heading: "Stickers", commands: ["steal", "stickerinfo", "stickerurl", "deletesticker", "zipsticker"] },
-					{ heading: "Server Assets", commands: ["servericon", "serverbanner", "serversplash"] },
+					{ heading: "Server Information", commands: ["serverinfo", "guildinfo", "membercount", "boostcount", "boosters", "emojilist"] },
+					{ heading: "User & Lookup", commands: ["info", "pfp", "banner", "roleinfo", "channelinfo", "emojiinfo", "users", "lists"] },
+					{ heading: "Server Assets", commands: ["servericon", "serverbanner", "serversplash", "steal", "cloneemoji", "deleteemoji", "renameemoji", "zipemoji", "stickerinfo", "stickerurl", "deletesticker", "zipsticker"] },
 					{ heading: "Media", commands: ["messageurl", "attachments"] },
-				],
-			},
-			{
-				key: "general",
-				label: "General",
-				description: "Everyday utility commands.",
-				groups: [
-					{ heading: "Bot", commands: ["ping", "uptime", "botinfo", "stats", "invite", "vote", "help"] },
-					{ heading: "Personal", commands: ["afk", "remind", "calc"] },
-					{ heading: "Premium", commands: ["ai", "premium"] },
+					{ heading: "General", commands: ["ping", "uptime", "botinfo", "stats", "invite", "vote", "help", "afk", "remind", "calc", "ai", "premium"] },
 				],
 			},
 		],
 	},
-
 ];
 
 // ─── Lookup helpers ──────────────────────────────────────────────────────────
 
-/** Map of command name → { category, feature } for fast reverse lookup */
 export const COMMAND_LOCATION: Record<string, { categoryKey: string; featureKey: string }> = (() => {
 	const map: Record<string, { categoryKey: string; featureKey: string }> = {};
 	for (const category of HELP_CATEGORIES) {
