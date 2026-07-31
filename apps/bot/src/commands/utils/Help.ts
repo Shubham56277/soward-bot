@@ -492,18 +492,15 @@ export default class Help extends Command {
 				.setDisabled(disabled)
 				.addOptions(
 					HELP_CATEGORIES.map(c => {
-						// Parse custom emoji format <:name:id> or <a:name:id>
-						const emojiMatch = c.emoji.match(/<(a)?:(\w+):(\d+)>/);
-						const option: any = {
+						// Parse custom emoji: <:name:id> or <a:name:id>
+						const m = c.emoji.match(/<(a)?:(\w+):(\d+)>/);
+						return {
 							label: c.label,
-							description: c.tagline.slice(0, 90),
+							description: c.tagline.slice(0, 100),
 							value: c.key,
 							default: selected === c.key,
+							emoji: m ? { id: m[3]!, name: m[2]!, animated: m[1] === "a" } : undefined,
 						};
-						if (emojiMatch) {
-							option.emoji = { id: emojiMatch[3], name: emojiMatch[2], animated: emojiMatch[1] === "a" };
-						}
-						return option;
 					}),
 				),
 		);
