@@ -231,9 +231,9 @@ export default class Help extends Command {
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(`## Hey, I'm ${botName}`),
 				new TextDisplayBuilder().setContent(
-					`\u203a **Prefix** \`${prefix}\`\n` +
-					`\u203a **Help** \`${prefix}help <command>\`\n` +
-					`\u203a **Commands** \`${totalCommands}\``,
+					`-# <a:dot:1532821300773388299> **My prefix is :** \`${prefix}\`\n` +
+					`-# <a:dot:1532821300773388299> **Type** : \`${prefix}help <command>\`\n` +
+					`-# <a:dot:1532821300773388299> **Total commands** : \`${totalCommands}\``,
 				),
 			)
 			.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription(`${botName} avatar`));
@@ -286,7 +286,7 @@ export default class Help extends Command {
 		const premiumEmoji = "<:elf_4008:1532801782462414988>";
 
 		const container = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${cat.label}`))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${cat.emoji} **${cat.label}**`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`));
 
 		// Show ALL features and their commands on one page
