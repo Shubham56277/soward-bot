@@ -115,10 +115,10 @@ export default class StealCommand extends Command {
 
 			try {
 				const emoji = await ctx.guild.emojis.create({ attachment: url, name, reason: `Stolen by ${ctx.author?.username}` });
-				results.push(`✅ **${emoji.name}** ${emoji.toString()}`);
+				results.push(`**${emoji.name}** ${emoji.toString()}`);
 				success++;
 			} catch {
-				results.push(`❌ Could not add emoji \`${e.name}\``);
+				results.push(`Could not add \`${e.name}\``);
 				failed++;
 			}
 
