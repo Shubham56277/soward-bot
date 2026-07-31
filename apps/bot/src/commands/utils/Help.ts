@@ -24,7 +24,6 @@ import {
 	getCategory,
 	getFeature,
 	type Category,
-	type Feature,
 } from "../../config/helpArchitecture";
 
 const HELP_TIMEOUT_MS = 5 * 60_000;
