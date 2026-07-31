@@ -41,7 +41,7 @@ export default class StealCommand extends Command {
 			// Check if the replied message has stickers
 			if (refMsg.stickers.size > 0) {
 				const sticker = refMsg.stickers.first()!;
-				const customName = ctx.args[0] ?? sticker.name;
+				const stickerName = ctx.args[0] || this.generateName(ctx.guild.name);
 
 				// Only PNG/APNG stickers can be added (not Lottie)
 				if (sticker.format === StickerFormatType.Lottie) {
@@ -51,7 +51,7 @@ export default class StealCommand extends Command {
 				try {
 					const created = await ctx.guild.stickers.create({
 						file: sticker.url,
-						name: customName,
+						name: stickerName,
 						tags: sticker.tags ?? "emoji",
 						reason: `Stolen by ${ctx.author?.username}`,
 					});
@@ -86,7 +86,7 @@ export default class StealCommand extends Command {
 		if (urlMatch) {
 			const id = urlMatch[1];
 			const ext = urlMatch[2];
-			const name = ctx.args[1] ?? `stolen_${id}`;
+			const name = ctx.args[1] || this.generateName(ctx.guild.name);
 			const url = `https://cdn.discordapp.com/emojis/${id}.${ext}`;
 
 			try {
@@ -100,7 +100,7 @@ export default class StealCommand extends Command {
 		// Try sticker URL
 		const stickerUrlMatch = input.match(/https:\/\/media\.discordapp\.net\/stickers\/(\d+)\.(png|webp|gif)/);
 		if (stickerUrlMatch) {
-			const name = ctx.args[1] ?? `stolen_sticker`;
+			const name = ctx.args[1] || this.generateName(ctx.guild.name);
 			try {
 				const created = await ctx.guild.stickers.create({
 					file: input,
@@ -119,16 +119,31 @@ export default class StealCommand extends Command {
 
 	private async stealEmoji(ctx: Context, match: RegExpMatchArray): Promise<any> {
 		const animated = match[1] === "a";
-		const emojiName = ctx.args[1] ?? match[2];
+		const originalName = match[2]!;
 		const emojiId = match[3];
 		const ext = animated ? "gif" : "png";
 		const url = `https://cdn.discordapp.com/emojis/${emojiId}.${ext}`;
 
+		// Use custom name from args[1] if available, otherwise use original emoji name
+		const emojiName = ctx.args[1] || originalName;
+
 		try {
-			const emoji = await ctx.guild.emojis.create({ attachment: url, name: emojiName!, reason: `Stolen by ${ctx.author?.username}` });
+			const emoji = await ctx.guild.emojis.create({ attachment: url, name: emojiName, reason: `Stolen by ${ctx.author?.username}` });
 			return ctx.sendMessage(`✅ Added emoji **${emoji.name}** ${emoji.toString()}`);
 		} catch (e: any) {
 			return ctx.sendMessage(`Failed to add emoji: ${e.message ?? "Unknown error"}`);
 		}
+	}
+
+	/**
+	 * Generate a default name from the server name.
+	 * Takes first 2 words, replaces non-alphanumeric with _, appends 2 random digits.
+	 * e.g. "Developer Verse Community" → "Developer_Verse_47"
+	 */
+	private generateName(guildName: string): string {
+		const words = guildName.trim().split(/\s+/).slice(0, 2);
+		const base = words.join("_").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 20);
+		const rand = Math.floor(Math.random() * 90 + 10); // 10-99
+		return `${base}_${rand}`;
 	}
 }
