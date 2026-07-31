@@ -46,6 +46,7 @@ interface NavState {
 /**
  * Parse a Discord custom emoji string into the format required by select menu options.
  * Accepts: <:name:id> or <a:name:id>
+ * For application emojis, only the `id` is required — name is optional.
  * Returns: { id, name, animated } or undefined if parsing fails.
  */
 function parseCustomEmoji(emojiStr: string | undefined): { id: string; name: string; animated: boolean } | undefined {
@@ -498,7 +499,12 @@ export default class Help extends Command {
 	}
 
 	private categorySelect(selected: string | null, disabled: boolean): ActionRowBuilder<StringSelectMenuBuilder> {
-		const options = HELP_CATEGORIES.map(c => {
+		const menu = new StringSelectMenuBuilder()
+			.setCustomId("help_category_select")
+			.setPlaceholder("↝ Please select a module.")
+			.setDisabled(disabled);
+
+		for (const c of HELP_CATEGORIES) {
 			const emoji = parseCustomEmoji(c.emoji);
 			const opt: any = {
 				label: c.label,
@@ -506,17 +512,12 @@ export default class Help extends Command {
 				value: c.key,
 				default: selected === c.key,
 			};
-			if (emoji) opt.emoji = emoji;
-			return opt;
-		});
+			// For application emojis, pass only the id to avoid name mismatch issues
+			if (emoji) opt.emoji = { id: emoji.id, animated: emoji.animated };
+			menu.addOptions(opt);
+		}
 
-		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-			new StringSelectMenuBuilder()
-				.setCustomId("help_category_select")
-				.setPlaceholder("↝ Please select a module.")
-				.setDisabled(disabled)
-				.addOptions(options),
-		);
+		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 	}
 
 	private featureSelect(cat: Category, selected: string | null, disabled: boolean): ActionRowBuilder<StringSelectMenuBuilder> {
