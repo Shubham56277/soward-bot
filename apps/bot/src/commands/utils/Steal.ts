@@ -13,7 +13,7 @@ export default class StealCommand extends Command {
 			},
 			category: "utils",
 			cooldown: 10,
-			args: false,
+			args: true,
 			permissions: {
 				dev: false,
 				client: ["SendMessages", "ManageGuildExpressions"],

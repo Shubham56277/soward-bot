@@ -313,7 +313,7 @@ export default class MessageCreate extends Event {
 							}
 						}
 					}
-					if (command.args && args.length === 0) {
+					if (command.args && args.length === 0 && !message.reference) {
 						await sendCommandHelp(message, command); // sendCommandHelp
 						return;
 					}
