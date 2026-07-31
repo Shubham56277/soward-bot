@@ -1,12 +1,30 @@
-import { ChannelType, ContainerBuilder, MessageFlags, TextDisplayBuilder } from "discord.js";
+import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	ChannelType,
+	ComponentType,
+	ContainerBuilder,
+	GuildFeature,
+	MessageFlags,
+	SectionBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder,
+	ThumbnailBuilder,
+} from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
-const TIER_NAMES = ["None", "Tier 1", "Tier 2", "Tier 3"] as const;
-const EMOJI_LIMITS = [50, 100, 150, 250] as const;
-const STICKER_LIMITS = [5, 15, 30, 60] as const;
-const UPLOAD_LIMITS = ["25MB", "25MB", "50MB", "100MB"] as const;
-const NEXT_BOOST_LEVEL = [2, 7, 14, null] as const;
+const VERIFICATION_LEVELS = ["None", "Low", "Medium", "High", "Very High"] as const;
+
+function formatDuration(seconds: number): string {
+	if (seconds < 60) return `${seconds}s`;
+	const mins = Math.floor(seconds / 60);
+	if (mins < 60) return `${mins} mins`;
+	const hours = Math.floor(mins / 60);
+	return `${hours}h ${mins % 60}m`;
+}
 
 export default class Guildinfo extends Command {
 	public constructor() {
@@ -21,7 +39,7 @@ export default class Guildinfo extends Command {
 			args: false,
 			permissions: {
 				dev: false,
-				client: ["SendMessages", "ReadMessageHistory", "ViewChannel", "EmbedLinks"],
+				client: ["SendMessages", "ReadMessageHistory", "ViewChannel"],
 				user: [],
 			},
 			slashCommand: true,
@@ -31,84 +49,196 @@ export default class Guildinfo extends Command {
 
 	public async run(ctx: Context): Promise<any> {
 		const guild = ctx.guild;
+		const pages = ["main", "channels", "members", "boost", "features"] as const;
+		let currentPage = 0;
+
 		const owner = await guild.members.fetch(guild.ownerId).catch(() => null);
-		const tier = Math.max(0, Math.min(3, Number(guild.premiumTier))) as 0 | 1 | 2 | 3;
-		const boosts = guild.premiumSubscriptionCount ?? 0;
-		const nextLevel = NEXT_BOOST_LEVEL[tier];
-		const staticEmojis = guild.emojis.cache.filter((emoji) => !emoji.animated).size;
-		const animatedEmojis = guild.emojis.cache.filter((emoji) => emoji.animated).size;
-		const voiceChannels = guild.channels.cache.filter(
-			(channel) => channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice,
-		);
-		const activeVoiceChannels = voiceChannels.filter((channel) => channel.members.size > 0);
-		const activeVoiceUsers = guild.voiceStates.cache.filter((state) => Boolean(state.channelId)).size;
-		const hotSpot = [...activeVoiceChannels.values()].sort((a, b) => b.members.size - a.members.size)[0];
-		const topRoles = [...guild.roles.cache.values()]
-			.filter((role) => role.id !== guild.id)
-			.sort((a, b) => b.position - a.position)
-			.slice(0, 10);
+		const bans = await guild.bans.fetch().catch(() => null);
+		const invites = await guild.invites.fetch().catch(() => null);
+		const icon = guild.iconURL({ size: 512 }) ?? "https://cdn.discordapp.com/embed/avatars/0.png";
 
-		const verification = ["None", "Low", "Medium", "High", "Very High"][guild.verificationLevel] ?? "Unknown";
-		const explicitFilter = ["Disabled", "Members without roles", "All members"][guild.explicitContentFilter] ?? "Unknown";
-		const notifications = guild.defaultMessageNotifications === 1 ? "Only mentions" : "All messages";
-		const inactive = guild.afkChannel ? `${guild.afkChannel} after ${formatDuration(guild.afkTimeout)}` : "None";
-		const welcomeMessages = guild.systemChannel
-			? !guild.systemChannelFlags.has("SuppressJoinNotifications")
-			: false;
-		const boostMessages = guild.systemChannel
-			? !guild.systemChannelFlags.has("SuppressPremiumSubscriptions")
-			: false;
-		const progress = nextLevel === null ? `${boosts} / Maximum tier` : `${boosts} / ${nextLevel}`;
-		const soundboardCount = guild.soundboardSounds.cache.size;
+		const buildPage = (page: string): ContainerBuilder => {
+			const container = new ContainerBuilder();
 
-		const description = [
-			"**Server Information**",
-			`> **Owner:** ${owner ?? `<@${guild.ownerId}>`}`,
-			`> **Created:** <t:${Math.floor(guild.createdTimestamp / 1_000)}:R>`,
-			`> **Guild ID:** \`${guild.id}\``,
-			"",
-			"**Statistics**",
-			`> **Members:** \`${guild.memberCount}\``,
-			`> **Channels:** \`${guild.channels.cache.size}\``,
-			`> **Roles:** \`${guild.roles.cache.size - 1}\``,
-			"",
-			"**Voice Stats**",
-			`> **Active Users:** \`${activeVoiceUsers}\``,
-			`> **Active Channels:** \`${activeVoiceChannels.size}\``,
-			`> **Hot Spot:** ${hotSpot ? `${hotSpot} \`${hotSpot.members.size}\`` : "`None`"}`,
-			"",
-			"**Boost Status**",
-			`> **Tier:** \`${TIER_NAMES[tier]}\``,
-			`> **Progress:** \`${progress}\``,
-			`> **Uploads:** \`${UPLOAD_LIMITS[tier]}\``,
-			`> **Emojis:** \`${staticEmojis}\` / \`${EMOJI_LIMITS[tier]}\` static · \`${animatedEmojis}\` / \`${EMOJI_LIMITS[tier]}\` animated`,
-			`> **Stickers:** \`${guild.stickers.cache.size}\` / \`${STICKER_LIMITS[tier]}\``,
-			`> **Soundboard:** \`${soundboardCount}\``,
-			`> **Banner:** \`${guild.banner ? "Enabled" : "Disabled"}\``,
-			"",
-			"**Security & Settings**",
-			`> **Verification:** \`${verification}\``,
-			`> **Explicit Content:** \`${explicitFilter}\``,
-			`> **2FA Requirement:** \`${guild.mfaLevel ? "Enabled" : "Disabled"}\``,
-			`> **Notifications:** \`${notifications}\``,
-			`> **Inactive Timeout:** ${inactive}`,
-			`> **System Channel:** ${guild.systemChannel ?? "`None`"}`,
-			`> **Welcome Messages:** \`${welcomeMessages ? "Enabled" : "Disabled"}\` · **Boost Messages:** \`${boostMessages ? "Enabled" : "Disabled"}\``,
-			"",
-			`**Top Roles (${topRoles.length})**`,
-			topRoles.length ? topRoles.map((role) => role.toString()).join(" ") : "-# **No displayable roles.**",
-		].join("\n");
+			// Header with server icon
+			container.addSectionComponents(
+				new SectionBuilder()
+					.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${guild.name}'s Information`))
+					.setThumbnailAccessory(new ThumbnailBuilder().setURL(icon).setDescription("Server icon")),
+			);
+			container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
 
-		const panel = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder()
-				.setContent(`## ${guild.name}'s Info\n${description}\n\n-# ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · Powered by ${ctx.client.user?.username || "Soward"}`));
+			switch (page) {
+				case "main": {
+					const vanityCode = guild.vanityURLCode;
+					const vanityUses = guild.vanityURLUses ?? "N/A";
+					const body = [
+						"**About**",
+						`**Name**: ${guild.name}`,
+						`**ID**: ${guild.id}`,
+						`**Owner**: ${owner?.user.username ?? "Unknown"} (\`${guild.ownerId}\`)`,
+						`**Created**: <t:${Math.floor(guild.createdTimestamp / 1000)}:R>`,
+						`**Description**: ${guild.description || "No description set."}`,
+						`**Locale**: ${guild.preferredLocale}`,
+						`**Members**: ${guild.memberCount}`,
+						`**Banned Members**: ${bans?.size ?? "N/A"}`,
+						"",
+						"**Server Settings**",
+						`**Verification Level**: ${VERIFICATION_LEVELS[guild.verificationLevel] ?? "Unknown"}`,
+						`**AFK Channel**: ${guild.afkChannel?.name ?? "None"}`,
+						`**AFK Timeout**: ${formatDuration(guild.afkTimeout)}`,
+						`**System Channel**: ${guild.systemChannel ? `#${guild.systemChannel.name}` : "None"}`,
+						`**Boost Bar**: ${guild.premiumProgressBarEnabled ? "Enabled" : "Disabled"}`,
+						`**Active Invites**: ${invites?.size ?? "N/A"}`,
+						`**Vanity URL**: ${vanityCode ? `discord.gg/${vanityCode}` : "No vanity URL"}`,
+						`**Vanity Uses**: ${vanityCode ? vanityUses : "N/A"}`,
+					].join("\n");
+					container.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+					break;
+				}
 
-		return ctx.editOrReply({ components: [panel], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [], repliedUser: false } });
+				case "channels": {
+					const text = guild.channels.cache.filter(c => c.type === ChannelType.GuildText).size;
+					const voice = guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice).size;
+					const stage = guild.channels.cache.filter(c => c.type === ChannelType.GuildStageVoice).size;
+					const categories = guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).size;
+					const forums = guild.channels.cache.filter(c => c.type === ChannelType.GuildForum).size;
+					const announcements = guild.channels.cache.filter(c => c.type === ChannelType.GuildAnnouncement).size;
+					const threads = guild.channels.cache.filter(c => c.isThread()).size;
+					const total = guild.channels.cache.size;
+
+					const body = [
+						"**Channels**",
+						`**Total**: ${total}`,
+						`**Text**: ${text}`,
+						`**Voice**: ${voice}`,
+						`**Stage**: ${stage}`,
+						`**Categories**: ${categories}`,
+						`**Forums**: ${forums}`,
+						`**Announcements**: ${announcements}`,
+						`**Threads**: ${threads}`,
+						"",
+						`**Rules Channel**: ${guild.rulesChannel ? `#${guild.rulesChannel.name}` : "None"}`,
+						`**System Channel**: ${guild.systemChannel ? `#${guild.systemChannel.name}` : "None"}`,
+						`**AFK Channel**: ${guild.afkChannel ? `#${guild.afkChannel.name}` : "None"}`,
+					].join("\n");
+					container.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+					break;
+				}
+
+				case "members": {
+					const humans = guild.members.cache.filter(m => !m.user.bot).size;
+					const bots = guild.members.cache.filter(m => m.user.bot).size;
+					const online = guild.members.cache.filter(m => m.presence?.status === "online").size;
+					const idle = guild.members.cache.filter(m => m.presence?.status === "idle").size;
+					const dnd = guild.members.cache.filter(m => m.presence?.status === "dnd").size;
+					const offline = guild.memberCount - online - idle - dnd;
+
+					const body = [
+						"**Members**",
+						`**Total**: ${guild.memberCount}`,
+						`**Humans**: ${humans}`,
+						`**Bots**: ${bots}`,
+						"",
+						"**Presence**",
+						`**Online**: ${online}`,
+						`**Idle**: ${idle}`,
+						`**DND**: ${dnd}`,
+						`**Offline**: ${offline}`,
+						"",
+						`**Roles**: ${guild.roles.cache.size}`,
+					].join("\n");
+					container.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+					break;
+				}
+
+				case "boost": {
+					const tier = guild.premiumTier;
+					const boosts = guild.premiumSubscriptionCount ?? 0;
+					const tierNames = ["None", "Tier 1", "Tier 2", "Tier 3"];
+
+					const body = [
+						"**Boost Status**",
+						`**Tier**: ${tierNames[tier]}`,
+						`**Boosts**: ${boosts}`,
+						`**Boosters**: ${guild.members.cache.filter(m => m.premiumSince).size}`,
+						"",
+						"**Perks**",
+						`**Emoji Slots**: ${[50, 100, 150, 250][tier]}`,
+						`**Sticker Slots**: ${[5, 15, 30, 60][tier]}`,
+						`**Upload Limit**: ${["25MB", "25MB", "50MB", "100MB"][tier]}`,
+						`**Audio Quality**: ${["96kbps", "128kbps", "256kbps", "384kbps"][tier]}`,
+						`**Stream Quality**: ${tier >= 2 ? "1080p 60fps" : tier >= 1 ? "720p 60fps" : "720p 30fps"}`,
+					].join("\n");
+					container.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+					break;
+				}
+
+				case "features": {
+					const featureList = guild.features.length > 0
+						? guild.features.map(f => `\`${f.replace(/_/g, " ").toLowerCase()}\``).join(", ")
+						: "None";
+
+					const body = [
+						"**Server Features**",
+						featureList,
+						"",
+						`**Emojis**: ${guild.emojis.cache.size} (${guild.emojis.cache.filter(e => e.animated).size} animated)`,
+						`**Stickers**: ${guild.stickers.cache.size}`,
+					].join("\n");
+					container.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+					break;
+				}
+			}
+
+			// Footer
+			container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+			container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+				`-# Requested For ${ctx.author?.username} · Today at ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+			));
+
+			return container;
+		};
+
+		const buildButtons = (disabled = false): ActionRowBuilder<ButtonBuilder> => {
+			return new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder().setCustomId("si_main").setLabel("Main Info").setStyle(currentPage === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("si_channels").setLabel("Channels").setStyle(currentPage === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("si_members").setLabel("Members").setStyle(currentPage === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("si_boost").setLabel("Boost").setStyle(currentPage === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("si_features").setLabel("Features").setStyle(currentPage === 4 ? ButtonStyle.Primary : ButtonStyle.Secondary).setDisabled(disabled),
+			);
+		};
+
+		const msg = await ctx.sendMessage({
+			components: [buildPage(pages[currentPage]!), buildButtons()],
+			flags: MessageFlags.IsComponentsV2,
+			allowedMentions: { parse: [] },
+		});
+
+		const collector = msg.createMessageComponentCollector({
+			componentType: ComponentType.Button,
+			time: 120_000,
+			filter: (i) => i.user.id === ctx.author?.id,
+		});
+
+		collector.on("collect", async (i) => {
+			switch (i.customId) {
+				case "si_main": currentPage = 0; break;
+				case "si_channels": currentPage = 1; break;
+				case "si_members": currentPage = 2; break;
+				case "si_boost": currentPage = 3; break;
+				case "si_features": currentPage = 4; break;
+			}
+			await i.update({
+				components: [buildPage(pages[currentPage]!), buildButtons()],
+			}).catch(() => {});
+		});
+
+		collector.on("end", () => {
+			msg.edit({
+				components: [buildPage(pages[currentPage]!), buildButtons(true)],
+			}).catch(() => {});
+		});
 	}
-}
-
-function formatDuration(seconds: number): string {
-	if (seconds < 60) return `${seconds} seconds`;
-	if (seconds < 3_600) return `${Math.round(seconds / 60)} minutes`;
-	return `${Math.round(seconds / 3_600)} hours`;
 }
