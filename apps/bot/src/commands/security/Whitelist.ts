@@ -32,7 +32,7 @@ const WHITELIST_ACTIONS = [
 	{ key: "roleCreate", label: "Role Create" },
 	{ key: "roleDelete", label: "Role Delete" },
 	{ key: "roleUpdate", label: "Role Update" },
-	{ key: "everyoneHerePing", label: "Mention @everyone" },
+	{ key: "everyoneHerePing", label: "Mention Everyone/Here" },
 	{ key: "webhookCreate", label: "Webhook Create" },
 	{ key: "webhookUpdate", label: "Webhook Update" },
 	{ key: "webhookDelete", label: "Webhook Delete" },
@@ -164,7 +164,7 @@ export default class WhitelistCommand extends Command {
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(lines.join("\n")))
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`**Executor**\u2003\u2003**Target**\n<@${ctx.author!.id}>\u2003\u2003<@${member.id}>`
+					`**Executor**\u2003\u2003**Target**\n\`${ctx.author!.username}\`\u2003\u2003\`${member.user.username}\``
 				))
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by Elfaria`));
@@ -200,6 +200,7 @@ export default class WhitelistCommand extends Command {
 		const msg = await ctx.sendMessage({
 			components: [buildPanel(), buildSelectMenu(), buildButtons()],
 			flags: MessageFlags.IsComponentsV2,
+			allowedMentions: { parse: [] },
 		});
 
 		const collector = msg.createMessageComponentCollector({

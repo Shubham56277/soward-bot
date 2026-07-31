@@ -38,7 +38,7 @@ const badges: Record<UserFlagsString, string> = {
 export default class Userinfo extends Command {
     constructor() {
         super({
-            name: 'userinfo',
+            name: 'info',
             description: {
                 content: 'Get information about a user',
                 examples: ['userinfo @user'],

@@ -95,6 +95,7 @@ export const HELP_CATEGORIES: Category[] = [
 					{ heading: "Channel Control", commands: ["lock", "unlock", "lockall", "unlockall", "hide", "unhide", "hideall", "unhideall", "lockdown", "slowmode", "unslowmode", "nuke"] },
 					{ heading: "Members & Roles", commands: ["nick", "nickname", "role", "roleall", "roleicon"] },
 					{ heading: "Purge", commands: ["purge", "clear", "clone", "media"] },
+					{ heading: "Sniping", commands: ["snipe"] },
 				],
 			},
 			{
@@ -236,18 +237,20 @@ export const HELP_CATEGORIES: Category[] = [
 				label: "Information",
 				description: "Look up users, roles, servers, and more.",
 				groups: [
-					{ heading: "Server", commands: ["guildinfo", "serverinfo", "membercount", "boostcount", "boosters", "servericon", "serverbanner", "emojilist", "firstmessage"] },
-					{ heading: "User", commands: ["userinfo", "avater", "banner", "joinedat"] },
+					{ heading: "Server", commands: ["guildinfo", "serverinfo", "membercount", "boostcount", "boosters", "servericon", "serverbanner", "emojilist"] },
+					{ heading: "User", commands: ["info", "pfp", "banner", "joinedat"] },
 					{ heading: "Lookup", commands: ["roleinfo", "channelinfo", "emojiinfo", "users", "lists"] },
 				],
 			},
 			{
 				key: "tools",
 				label: "Server Tools",
-				description: "Emojis, media, and management helpers.",
+				description: "Emojis, stickers, media, and management helpers.",
 				groups: [
-					{ heading: "Emojis", commands: ["addemoji", "zipemoji"] },
-					{ heading: "Media", commands: ["mediaonly", "snipe"] },
+					{ heading: "Emojis", commands: ["steal", "cloneemoji", "deleteemoji", "renameemoji", "zipemoji"] },
+					{ heading: "Stickers", commands: ["steal", "stickerinfo", "stickerurl", "deletesticker", "zipsticker"] },
+					{ heading: "Server Assets", commands: ["servericon", "serverbanner", "serversplash"] },
+					{ heading: "Media", commands: ["messageurl", "attachments"] },
 				],
 			},
 			{

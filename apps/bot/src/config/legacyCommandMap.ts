@@ -71,7 +71,7 @@ export const LEGACY_COMMANDS: readonly LegacyCommandMapping[] = [
 	migration("emojilist", "/list emojis", "Consolidated list commands"),
 	migration("purge", "/clear", "Consolidated message cleanup"),
 	migration("serverbanner", "/banner server", "Merged banner commands"),
-	migration("servericon", "/avatar server", "Merged avatar commands"),
+	migration("servericon", "/pfp server", "Merged avatar commands"),
 	migration("unslowmode", "/slowmode disable", "Consolidated slowmode commands"),
 	migration("mute", "/timeout", "Mute is now timeout"),
 	migration("unmute", "/untimeout", "Unmute is now untimeout"),

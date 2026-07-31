@@ -38,14 +38,14 @@ export default class Snipe extends Command {
 				examples: ["snipe", "snipe edit", "snipe deleted"],
 				usage: "snipe [type]",
 			},
-			category: "utils",
+			category: "moderation",
 			aliases: ["sniped", "snipeedit"],
 			cooldown: 5,
 			args: false,
 			permissions: {
 				dev: false,
 				client: ["ViewChannel", "EmbedLinks", "SendMessages"],
-				user: [],
+				user: ["ManageMessages"],
 			},
 			slashCommand: false,
 			options: [

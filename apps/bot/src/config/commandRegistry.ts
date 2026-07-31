@@ -50,7 +50,7 @@ const entry = (seed: RegistrySeed): CommandRegistryEntry => ({
 });
 
 const implemented = new Set([
-	"help", "ping", "uptime", "botinfo", "serverinfo", "userinfo", "avatar", "banner", "membercount", "boostcount",
+	"help", "ping", "uptime", "botinfo", "serverinfo", "info", "pfp", "banner", "membercount", "boostcount",
 	"joinedat", "roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
 	"timeout", "untimeout", "warn", "warnings", "nickname", "slowmode", "lock", "unlock", "hide", "unhide", "clear",
 	"channel", "role", "quarantine", "security", "antinuke", "mainrole", "extraowner", "ignore", "coowner",
@@ -59,6 +59,7 @@ const implemented = new Set([
 	"reaction-role", "variables", "embed", "voice", "voice-role",
 	"giveaway", "music", "fun", "bot", "prefix", "premium",
 	"ai", "record", "dev", "profile", "bio", "badge", "customize", "noprefix", "playlist",
+	"steal", "cloneemoji", "deleteemoji", "renameemoji", "stickerinfo", "stickerurl", "deletesticker", "serversplash", "messageurl", "attachments", "zipsticker",
 ]);
 
 const seeds: RegistrySeed[] = [
@@ -68,8 +69,8 @@ const seeds: RegistrySeed[] = [
 	["uptime", "general", "Show how long the bot has been online"],
 	["botinfo", "general", "Show information about the bot"],
 	["serverinfo", "general", "Show detailed server information"],
-	["userinfo", "general", "Show information about a member"],
-	["avatar", "general", "Show a user or server avatar"],
+	["info", "general", "Show information about a member"],
+	["pfp", "general", "Show a user avatar"],
 	["banner", "general", "Show a user or server banner"],
 	["membercount", "general", "Show the server member count"],
 	["boostcount", "general", "Show server boost information"],
@@ -81,6 +82,17 @@ const seeds: RegistrySeed[] = [
 	["vote", "general", "Open bot voting links"],
 	["list", "general", "Browse server members and resources", { subcommands: ["members", "boosters", "emojis", "roles", "bots", "bans"] }],
 	["afk", "general", "Manage your AFK status"],
+	["steal", "general", "Steal an emoji or sticker and add to server"],
+	["cloneemoji", "general", "Clone a custom emoji to this server"],
+	["deleteemoji", "general", "Delete an emoji from this server"],
+	["renameemoji", "general", "Rename an emoji in this server"],
+	["stickerinfo", "general", "Get information about a sticker"],
+	["stickerurl", "general", "Get the URL of a sticker"],
+	["deletesticker", "general", "Delete a sticker from this server"],
+	["serversplash", "general", "Get the server splash image"],
+	["messageurl", "general", "Get the link to a message"],
+	["attachments", "general", "Get all attachments from a message"],
+	["zipsticker", "general", "Download all server stickers as a zip to DMs"],
 
 	// === MODERATION (18) ===
 	["ban", "moderation", "Ban a member safely"],

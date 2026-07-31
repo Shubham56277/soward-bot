@@ -7,11 +7,11 @@ import { UserContextMenuCommandInteraction } from "discord.js";
 export default class Avater extends Command {
     constructor() {
         super({
-            name: 'avatar',
+            name: 'pfp',
             description: {
                 content: 'Get the avatar of a user.',
-                examples: ['avatar', 'avatar @user'],
-                usage: 'avatar',
+                examples: ['pfp', 'pfp @user'],
+                usage: 'pfp',
             },
             category: 'utils',
             context: {
