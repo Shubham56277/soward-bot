@@ -51,7 +51,7 @@ const entry = (seed: RegistrySeed): CommandRegistryEntry => ({
 
 const implemented = new Set([
 	"help", "ping", "uptime", "botinfo", "serverinfo", "info", "pfp", "banner", "membercount", "boostcount",
-	"joinedat", "roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
+	"roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
 	"timeout", "untimeout", "warn", "warnings", "nickname", "slowmode", "lock", "unlock", "hide", "unhide", "clear",
 	"channel", "role", "quarantine", "security", "antinuke", "mainrole", "extraowner", "ignore", "coowner",
 	"logging", "automod", "filter", "autorole", "notifier", "autodelete",
@@ -74,7 +74,6 @@ const seeds: RegistrySeed[] = [
 	["banner", "general", "Show a user or server banner"],
 	["membercount", "general", "Show the server member count"],
 	["boostcount", "general", "Show server boost information"],
-	["joinedat", "general", "Show when a member joined"],
 	["roleinfo", "general", "Show information about a role"],
 	["channelinfo", "general", "Show information about a channel"],
 	["invite", "general", "Get the bot invite link"],

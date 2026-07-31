@@ -238,7 +238,7 @@ export const HELP_CATEGORIES: Category[] = [
 				description: "Look up users, roles, servers, and more.",
 				groups: [
 					{ heading: "Server", commands: ["guildinfo", "serverinfo", "membercount", "boostcount", "boosters", "servericon", "serverbanner", "emojilist"] },
-					{ heading: "User", commands: ["info", "pfp", "banner", "joinedat"] },
+					{ heading: "User", commands: ["info", "pfp", "banner"] },
 					{ heading: "Lookup", commands: ["roleinfo", "channelinfo", "emojiinfo", "users", "lists"] },
 				],
 			},
