@@ -188,6 +188,22 @@ export default class Help extends Command {
 				}
 				case "help_close":
 					return "close";
+				case "help_cat_prev": {
+					if (state.categoryKey) {
+						const idx = HELP_CATEGORIES.findIndex(c => c.key === state.categoryKey);
+						const prev = (idx - 1 + HELP_CATEGORIES.length) % HELP_CATEGORIES.length;
+						state.categoryKey = HELP_CATEGORIES[prev]!.key;
+					}
+					return;
+				}
+				case "help_cat_next": {
+					if (state.categoryKey) {
+						const idx = HELP_CATEGORIES.findIndex(c => c.key === state.categoryKey);
+						const next = (idx + 1) % HELP_CATEGORIES.length;
+						state.categoryKey = HELP_CATEGORIES[next]!.key;
+					}
+					return;
+				}
 			}
 		}
 	}
@@ -263,6 +279,12 @@ export default class Help extends Command {
 		const cat = getCategory(categoryKey);
 		if (!cat) return this.homeView(ctx, prefix, disabled);
 
+		const catIdx = HELP_CATEGORIES.findIndex(c => c.key === categoryKey);
+		const pageLabel = `${catIdx + 1}/${HELP_CATEGORIES.length}`;
+
+		// Premium emoji from env or fallback to text
+		const premiumEmoji = process.env.PREMIUM_EMOJI_ID ? `<:pro:${process.env.PREMIUM_EMOJI_ID}>` : "`PRO`";
+
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${cat.label}`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`));
@@ -278,9 +300,9 @@ export default class Help extends Command {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
 				if (availableCommands.length === 0) continue;
 
-				const cmds = availableCommands.map(name => `\`${prefix}${name}\``).join(" , ");
+				const cmds = availableCommands.map(name => `\`${prefix}${name}\``).join(" . ");
 				const isPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
-				const heading = isPremium ? `**${group.heading}** \`PRO\`` : `**${group.heading}**`;
+				const heading = isPremium ? `**${group.heading}** ${premiumEmoji}` : `**${group.heading}**`;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
@@ -288,17 +310,18 @@ export default class Help extends Command {
 		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
 		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by Elfaria`));
 
-		container.addActionRowComponents(this.categorySelect(categoryKey, disabled));
-		container.addActionRowComponents(this.simpleNavRow(disabled));
-		return container;
-	}
-
-	/** Simple nav row: Home + Close only (no prev/next) */
-	private simpleNavRow(disabled: boolean): ActionRowBuilder<ButtonBuilder> {
-		return new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder().setCustomId("help_home").setLabel("⌂").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-			new ButtonBuilder().setCustomId("help_close").setLabel("🗑").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+		// Navigation: ◀ 🗑 ▶ ⌂ pageLabel + category dropdown
+		container.addActionRowComponents(
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder().setCustomId("help_cat_prev").setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("help_close").setLabel("🗑").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("help_cat_next").setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("help_home").setLabel("⌂").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("help_page_label").setLabel(pageLabel).setStyle(ButtonStyle.Secondary).setDisabled(true),
+			),
 		);
+		container.addActionRowComponents(this.categorySelect(categoryKey, disabled));
+		return container;
 	}
 
 	// ─── FEATURE ───────────────────────────────────────────────────────────────────
