@@ -282,8 +282,8 @@ export default class Help extends Command {
 		const catIdx = HELP_CATEGORIES.findIndex(c => c.key === categoryKey);
 		const pageLabel = `${catIdx + 1}/${HELP_CATEGORIES.length}`;
 
-		// Premium emoji from env or fallback to text
-		const premiumEmoji = process.env.PREMIUM_EMOJI_ID ? `<:pro:${process.env.PREMIUM_EMOJI_ID}>` : "`PRO`";
+		// Premium emoji
+		const premiumEmoji = "<:elf_4008:1532801782462414988>";
 
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${cat.label}`))
