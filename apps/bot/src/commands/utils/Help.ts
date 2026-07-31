@@ -165,12 +165,18 @@ export default class Help extends Command {
 			const value = i.values[0]!;
 			if (i.customId === "help_category_select") {
 				push();
-				if (value === "home") { state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null; }
-				else if (value === "bot-settings") {
-					// Skip the intermediate category page — go directly to first feature (Profiles)
-					state.level = "feature"; state.categoryKey = value; state.featureKey = "profiles"; state.commandName = null;
+				if (value === "home") {
+					state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null;
+				} else {
+					// Skip intermediate category landing — go directly to first feature
+					const cat = getCategory(value);
+					const firstFeature = cat?.features.filter(f => !f.comingSoon)[0];
+					if (firstFeature) {
+						state.level = "feature"; state.categoryKey = value; state.featureKey = firstFeature.key; state.commandName = null;
+					} else {
+						state.level = "category"; state.categoryKey = value; state.featureKey = null; state.commandName = null;
+					}
 				}
-				else { state.level = "category"; state.categoryKey = value; state.featureKey = null; state.commandName = null; }
 				return;
 			}
 			if (i.customId === "help_feature_select") {
