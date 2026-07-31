@@ -91,11 +91,11 @@ export default class Help extends Command {
 				level: "category", categoryKey: cat.key, featureKey: null, commandName: null, history: [],
 			});
 
-			// 3. Feature match
+			// 3. Feature match — redirect to category page
 			for (const c of HELP_CATEGORIES) {
 				const f = c.features.find(f => f.key === query || f.label.toLowerCase() === query);
 				if (f) return this.startSession(ctx, prefix, {
-					level: "feature", categoryKey: c.key, featureKey: f.key, commandName: null, history: [],
+					level: "category", categoryKey: c.key, featureKey: null, commandName: null, history: [],
 				});
 			}
 
@@ -164,30 +164,16 @@ export default class Help extends Command {
 
 	/** Mutates state based on the interaction. Returns "close" to end the session. */
 	private applyInteraction(i: MessageComponentInteraction, state: NavState): "close" | void {
-		const push = () => state.history.push({ level: state.level, categoryKey: state.categoryKey, featureKey: state.featureKey, commandName: state.commandName });
-
 		// Dropdowns
 		if (i.isStringSelectMenu()) {
 			const value = i.values[0]!;
 			if (i.customId === "help_category_select") {
-				push();
 				if (value === "home") {
 					state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null;
 				} else {
-					// Skip intermediate category landing — go directly to first feature
-					const cat = getCategory(value);
-					const firstFeature = cat?.features.filter(f => !f.comingSoon)[0];
-					if (firstFeature) {
-						state.level = "feature"; state.categoryKey = value; state.featureKey = firstFeature.key; state.commandName = null;
-					} else {
-						state.level = "category"; state.categoryKey = value; state.featureKey = null; state.commandName = null;
-					}
+					// Show all features of this category on one page
+					state.level = "category"; state.categoryKey = value; state.featureKey = null; state.commandName = null;
 				}
-				return;
-			}
-			if (i.customId === "help_feature_select") {
-				push();
-				state.level = "feature"; state.featureKey = value; state.commandName = null;
 				return;
 			}
 		}
@@ -197,38 +183,12 @@ export default class Help extends Command {
 			switch (i.customId) {
 				case "help_home":
 				case "help_back": {
-					const prev = state.history.pop();
-					if (prev) { state.level = prev.level; state.categoryKey = prev.categoryKey; state.featureKey = prev.featureKey; state.commandName = prev.commandName; }
-					else { state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null; }
+					state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null;
 					return;
 				}
 				case "help_close":
 					return "close";
-				case "help_prev":
-				case "help_next": {
-					this.cycle(state, i.customId === "help_next" ? 1 : -1);
-					return;
-				}
 			}
-		}
-	}
-
-	/** Cycle Previous/Next within the current level (categories or features). */
-	private cycle(state: NavState, dir: 1 | -1): void {
-		if (state.level === "category" && state.categoryKey) {
-			const idx = HELP_CATEGORIES.findIndex(c => c.key === state.categoryKey);
-			const next = (idx + dir + HELP_CATEGORIES.length) % HELP_CATEGORIES.length;
-			state.categoryKey = HELP_CATEGORIES[next]!.key;
-		} else if (state.level === "feature" && state.categoryKey && state.featureKey) {
-			const cat = getCategory(state.categoryKey)!;
-			const feats = cat.features.filter(f => !f.comingSoon);
-			const idx = feats.findIndex(f => f.key === state.featureKey);
-			const next = (idx + dir + feats.length) % feats.length;
-			state.featureKey = feats[next]!.key;
-		} else if (state.level === "home") {
-			// From home, next enters the first category
-			state.level = "category";
-			state.categoryKey = HELP_CATEGORIES[dir === 1 ? 0 : HELP_CATEGORIES.length - 1]!.key;
 		}
 	}
 
@@ -238,7 +198,6 @@ export default class Help extends Command {
 		switch (state.level) {
 			case "home":     return this.homeView(ctx, prefix, disabled);
 			case "category": return this.categoryView(ctx, prefix, state.categoryKey!, disabled);
-			case "feature":  return this.featureView(ctx, prefix, state.categoryKey!, state.featureKey!, disabled);
 			case "command":  return this.commandView(ctx, prefix, state.commandName!, disabled);
 			default:         return this.homeView(ctx, prefix, disabled);
 		}
@@ -304,25 +263,42 @@ export default class Help extends Command {
 		const cat = getCategory(categoryKey);
 		if (!cat) return this.homeView(ctx, prefix, disabled);
 
-		const idx = HELP_CATEGORIES.findIndex(c => c.key === categoryKey) + 1;
-
-		const cards = cat.features.map(f => {
-			const tag = f.comingSoon ? " `Soon`" : f.premium ? " `Premium`" : "";
-			return `**${f.label}**${tag}\n-# ${f.description}`;
-		}).join("\n\n");
-
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${cat.label}`))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`))
-			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(cards))
-			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Category ${idx}/${HELP_CATEGORIES.length}  ·  Select a feature to explore.`));
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`));
 
-		container.addActionRowComponents(this.featureSelect(cat, null, disabled));
+		// Show ALL features and their commands on one page
+		for (const feature of cat.features) {
+			if (feature.comingSoon) {
+				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${feature.label}** \`Soon\`\n-# Coming soon`));
+				continue;
+			}
+
+			for (const group of feature.groups) {
+				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
+				if (availableCommands.length === 0) continue;
+
+				const cmds = availableCommands.map(name => `\`${prefix}${name}\``).join(" , ");
+				const isPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
+				const heading = isPremium ? `**${group.heading}** \`PRO\`` : `**${group.heading}**`;
+				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
+			}
+		}
+
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by Elfaria`));
+
 		container.addActionRowComponents(this.categorySelect(categoryKey, disabled));
-		container.addActionRowComponents(this.navRow(disabled, { back: true, prevNext: true }));
+		container.addActionRowComponents(this.simpleNavRow(disabled));
 		return container;
+	}
+
+	/** Simple nav row: Home + Close only (no prev/next) */
+	private simpleNavRow(disabled: boolean): ActionRowBuilder<ButtonBuilder> {
+		return new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder().setCustomId("help_home").setLabel("⌂").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+			new ButtonBuilder().setCustomId("help_close").setLabel("🗑").setStyle(ButtonStyle.Danger).setDisabled(disabled),
+		);
 	}
 
 	// ─── FEATURE ───────────────────────────────────────────────────────────────────
