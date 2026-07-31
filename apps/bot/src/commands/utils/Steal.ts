@@ -7,8 +7,8 @@ export default class StealCommand extends Command {
 		super({
 			name: "steal",
 			description: {
-				content: "Steal emojis or stickers and add them to this server. Reply to a message to steal all emojis/stickers from it.",
-				examples: ["steal :emoji:", "steal (reply to message with emojis)"],
+				content: "Steal emojis or stickers and add them to this server.",
+				examples: ["steal :emoji:", "steal (reply to message)"],
 				usage: "steal [emoji] [name]",
 			},
 			category: "utils",
@@ -22,15 +22,15 @@ export default class StealCommand extends Command {
 			slashCommand: false,
 			options: [
 				{ name: "emoji", description: "Emoji to steal", type: ApplicationCommandOptionType.String, required: false },
-				{ name: "name", description: "Custom name", type: ApplicationCommandOptionType.String, required: false },
 			],
 		});
 	}
 
 	public async run(ctx: Context): Promise<any> {
-		const input = ctx.args[0];
+		// Get the full raw message content to find all custom emojis
+		const rawContent = ctx.message?.content || "";
 
-		// Case 1: Reply to a message — steal ALL emojis and/or sticker from it
+		// Case 1: Reply to a message — steal from replied message
 		if (ctx.message?.reference?.messageId) {
 			const channel = ctx.channel;
 			if (!("messages" in channel)) return ctx.sendMessage("Cannot fetch messages in this channel.");
@@ -40,174 +40,178 @@ export default class StealCommand extends Command {
 
 			// Steal sticker if present
 			if (refMsg.stickers.size > 0) {
-				const sticker = refMsg.stickers.first()!;
-				const name = input || this.genName(ctx.guild.name);
-
-				if (sticker.format === StickerFormatType.Lottie) {
-					return ctx.sendMessage("Cannot steal Lottie stickers. Only PNG/APNG stickers are supported.");
-				}
-
-				try {
-					const created = await ctx.guild.stickers.create({
-						file: sticker.url,
-						name,
-						tags: sticker.tags ?? "emoji",
-						reason: `Stolen by ${ctx.author?.username}`,
-					});
-					return ctx.sendMessage(`✅ Added sticker **${created.name}** to the server.`);
-				} catch (e: any) {
-					return ctx.sendMessage(`Failed to add sticker: ${e.message ?? "Unknown error"}`);
-				}
+				return this.stealSticker(ctx, refMsg);
 			}
 
-			// Steal ALL custom emojis from the replied message
-			const emojiRegex = /<(a?):(\w+):(\d+)>/g;
-			const matches = [...refMsg.content.matchAll(emojiRegex)];
-
-			if (matches.length === 0) {
-				return ctx.sendMessage("The replied message has no **custom** emojis or stickers to steal. Default emojis can't be added.");
+			// Steal custom emojis from the replied message
+			const emojis = this.extractCustomEmojis(refMsg.content);
+			if (emojis.length > 0) {
+				return this.stealMultiple(ctx, emojis);
 			}
 
-			// Deduplicate by emoji ID
-			const seen = new Set<string>();
-			const uniqueEmojis: RegExpMatchArray[] = [];
-			for (const m of matches) {
-				if (!seen.has(m[3]!)) {
-					seen.add(m[3]!);
-					uniqueEmojis.push(m);
-				}
-			}
-
-			if (uniqueEmojis.length === 1) {
-				// Single emoji — use custom name if provided, otherwise use server name
-				const name = input || this.genName(ctx.guild.name);
-				return this.stealOneEmoji(ctx, uniqueEmojis[0]!, name);
-			}
-
-			// Multiple emojis — steal all with unique server-based names
-			await ctx.sendMessage(`Stealing **${uniqueEmojis.length}** emojis...`);
-
-			let success = 0;
-			let failed = 0;
-			const results: string[] = [];
-
-			for (const match of uniqueEmojis) {
-				const name = this.genName(ctx.guild.name);
-				const animated = match[1] === "a";
-				const emojiId = match[3]!;
-				const ext = animated ? "gif" : "png";
-				const url = `https://cdn.discordapp.com/emojis/${emojiId}.${ext}`;
-
-				try {
-					const emoji = await ctx.guild.emojis.create({ attachment: url, name, reason: `Stolen by ${ctx.author?.username}` });
-					results.push(`✅ **${emoji.name}** ${emoji.toString()}`);
-					success++;
-				} catch (e: any) {
-					results.push(`❌ Failed: ${e.message?.slice(0, 50) ?? "error"}`);
-					failed++;
-				}
-
-				// Small delay between each to avoid rate limits (500ms)
-				if (uniqueEmojis.indexOf(match) < uniqueEmojis.length - 1) {
-					await new Promise(r => setTimeout(r, 500));
-				}
-			}
-
-			const summary = results.join("\n");
-			return ctx.sendMessage(`${summary}\n\n-# ${success} added, ${failed} failed`);
+			return ctx.sendMessage("The replied message has no custom emojis or stickers to steal.");
 		}
 
-		// Case 2: Direct emoji argument
-		if (!input) {
-			return ctx.sendMessage("Reply to a message with emojis/stickers, or provide an emoji: `steal :emoji:`");
+		// Case 2: Emojis in the command message itself (e.g. "?steal :pepe: :kek:")
+		const emojisInMessage = this.extractCustomEmojis(rawContent);
+		if (emojisInMessage.length > 0) {
+			return this.stealMultiple(ctx, emojisInMessage);
 		}
 
-		// Parse custom emoji format
-		const emojiMatch = input.match(/<(a?):(\w+):(\d+)>/);
-		if (emojiMatch) {
-			const name = ctx.args[1] || this.genName(ctx.guild.name);
-			return this.stealOneEmoji(ctx, emojiMatch, name);
+		// Case 3: URL-based steal
+		const input = ctx.args[0] || "";
+		const emojiUrl = input.match(/https:\/\/cdn\.discordapp\.com\/emojis\/(\d+)\.(png|gif|webp)/);
+		if (emojiUrl) {
+			const name = this.safeName(ctx.args[1]) || this.genName(ctx.guild.name);
+			return this.addEmoji(ctx, `https://cdn.discordapp.com/emojis/${emojiUrl[1]}.${emojiUrl[2]}`, name);
 		}
 
-		// Check if user sent Unicode emojis (can't be stolen)
-		const unicodeEmojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}]/u;
-		if (unicodeEmojiRegex.test(input)) {
-			return ctx.sendMessage("Those are default Unicode emojis — they can't be stolen. Only **custom server emojis** (with a `:name:` format) can be added.");
+		const stickerUrl = input.match(/https:\/\/media\.discordapp\.net\/stickers\/(\d+)\.(png|webp|gif)/);
+		if (stickerUrl) {
+			const name = this.safeName(ctx.args[1]) || this.genName(ctx.guild.name);
+			return this.addSticker(ctx, input, name);
 		}
 
-		// Try emoji URL
-		const urlMatch = input.match(/https:\/\/cdn\.discordapp\.com\/emojis\/(\d+)\.(png|gif|webp)/);
-		if (urlMatch) {
-			const name = ctx.args[1] || this.genName(ctx.guild.name);
-			const url = `https://cdn.discordapp.com/emojis/${urlMatch[1]}.${urlMatch[2]}`;
-			try {
-				const emoji = await ctx.guild.emojis.create({ attachment: url, name, reason: `Stolen by ${ctx.author?.username}` });
-				return ctx.sendMessage(`✅ Added emoji **${emoji.name}** ${emoji.toString()}`);
-			} catch (e: any) {
-				return ctx.sendMessage(`Failed to add emoji: ${e.message ?? "Unknown error"}`);
-			}
-		}
-
-		// Try sticker URL
-		const stickerUrlMatch = input.match(/https:\/\/media\.discordapp\.net\/stickers\/(\d+)\.(png|webp|gif)/);
-		if (stickerUrlMatch) {
-			const name = ctx.args[1] || this.genName(ctx.guild.name);
-			try {
-				const created = await ctx.guild.stickers.create({ file: input, name, tags: "emoji", reason: `Stolen by ${ctx.author?.username}` });
-				return ctx.sendMessage(`✅ Added sticker **${created.name}** to the server.`);
-			} catch (e: any) {
-				return ctx.sendMessage(`Failed to add sticker: ${e.message ?? "Unknown error"}`);
-			}
-		}
-
-		return ctx.sendMessage("Provide a valid custom emoji, emoji URL, or reply to a message with emojis/stickers.");
+		return ctx.sendMessage("Reply to a message with custom emojis/stickers, or send custom emojis after the command.\nDefault emojis (💚🐸) can't be stolen — only custom server emojis work.");
 	}
 
-	private async stealOneEmoji(ctx: Context, match: RegExpMatchArray, name: string): Promise<any> {
-		const animated = match[1] === "a";
-		const emojiId = match[3]!;
-		const ext = animated ? "gif" : "png";
-		const url = `https://cdn.discordapp.com/emojis/${emojiId}.${ext}`;
+	// ─── Extract all custom emojis from text ────────────────────────────────
 
+	private extractCustomEmojis(text: string): Array<{ animated: boolean; name: string; id: string }> {
+		const regex = /<(a?):(\w+):(\d+)>/g;
+		const results: Array<{ animated: boolean; name: string; id: string }> = [];
+		const seen = new Set<string>();
+		let match: RegExpExecArray | null;
+
+		while ((match = regex.exec(text)) !== null) {
+			if (!seen.has(match[3]!)) {
+				seen.add(match[3]!);
+				results.push({ animated: match[1] === "a", name: match[2]!, id: match[3]! });
+			}
+		}
+		return results;
+	}
+
+	// ─── Steal multiple emojis with delay ───────────────────────────────────
+
+	private async stealMultiple(ctx: Context, emojis: Array<{ animated: boolean; name: string; id: string }>): Promise<any> {
+		if (emojis.length === 1) {
+			const e = emojis[0]!;
+			const name = this.genName(ctx.guild.name);
+			const ext = e.animated ? "gif" : "png";
+			return this.addEmoji(ctx, `https://cdn.discordapp.com/emojis/${e.id}.${ext}`, name);
+		}
+
+		// Multiple emojis
+		let success = 0;
+		let failed = 0;
+		const results: string[] = [];
+
+		for (let i = 0; i < emojis.length; i++) {
+			const e = emojis[i]!;
+			const name = this.genName(ctx.guild.name);
+			const ext = e.animated ? "gif" : "png";
+			const url = `https://cdn.discordapp.com/emojis/${e.id}.${ext}`;
+
+			try {
+				const emoji = await ctx.guild.emojis.create({ attachment: url, name, reason: `Stolen by ${ctx.author?.username}` });
+				results.push(`✅ **${emoji.name}** ${emoji.toString()}`);
+				success++;
+			} catch {
+				results.push(`❌ Could not add emoji \`${e.name}\``);
+				failed++;
+			}
+
+			// Delay between each to avoid rate limits
+			if (i < emojis.length - 1) await this.delay(600);
+		}
+
+		return ctx.sendMessage(`${results.join("\n")}\n-# ${success} added${failed > 0 ? `, ${failed} failed` : ""}`);
+	}
+
+	// ─── Steal sticker from replied message ─────────────────────────────────
+
+	private async stealSticker(ctx: Context, refMsg: Message): Promise<any> {
+		const sticker = refMsg.stickers.first()!;
+		const name = this.genName(ctx.guild.name);
+
+		if (sticker.format === StickerFormatType.Lottie) {
+			return ctx.sendMessage("Cannot steal Lottie stickers — only PNG/APNG are supported.");
+		}
+
+		return this.addSticker(ctx, sticker.url, name);
+	}
+
+	// ─── Add emoji helper ───────────────────────────────────────────────────
+
+	private async addEmoji(ctx: Context, url: string, name: string): Promise<any> {
 		try {
 			const emoji = await ctx.guild.emojis.create({ attachment: url, name, reason: `Stolen by ${ctx.author?.username}` });
 			return ctx.sendMessage(`✅ Added emoji **${emoji.name}** ${emoji.toString()}`);
 		} catch (e: any) {
-			return ctx.sendMessage(`Failed to add emoji: ${e.message ?? "Unknown error"}`);
+			// If name error, retry with a safe fallback name
+			if (e.message?.includes("name") || e.code === 50035) {
+				const fallback = "emoji_" + Math.floor(1000 + Math.random() * 9000);
+				try {
+					const emoji = await ctx.guild.emojis.create({ attachment: url, name: fallback, reason: `Stolen by ${ctx.author?.username}` });
+					return ctx.sendMessage(`✅ Added emoji **${emoji.name}** ${emoji.toString()}`);
+				} catch (e2: any) {
+					return ctx.sendMessage(`Failed to add emoji: ${e2.message?.slice(0, 100) ?? "Unknown error"}`);
+				}
+			}
+			return ctx.sendMessage(`Failed to add emoji: ${e.message?.slice(0, 100) ?? "Unknown error"}`);
 		}
 	}
 
+	// ─── Add sticker helper ─────────────────────────────────────────────────
+
+	private async addSticker(ctx: Context, url: string, name: string): Promise<any> {
+		try {
+			const created = await ctx.guild.stickers.create({ file: url, name, tags: "emoji", reason: `Stolen by ${ctx.author?.username}` });
+			return ctx.sendMessage(`✅ Added sticker **${created.name}** to the server.`);
+		} catch (e: any) {
+			if (e.message?.includes("name") || e.code === 50035) {
+				const fallback = "sticker_" + Math.floor(1000 + Math.random() * 9000);
+				try {
+					const created = await ctx.guild.stickers.create({ file: url, name: fallback, tags: "emoji", reason: `Stolen by ${ctx.author?.username}` });
+					return ctx.sendMessage(`✅ Added sticker **${created.name}** to the server.`);
+				} catch (e2: any) {
+					return ctx.sendMessage(`Failed to add sticker: ${e2.message?.slice(0, 100) ?? "Unknown error"}`);
+				}
+			}
+			return ctx.sendMessage(`Failed to add sticker: ${e.message?.slice(0, 100) ?? "Unknown error"}`);
+		}
+	}
+
+	// ─── Name generator ─────────────────────────────────────────────────────
+
 	/**
-	 * Generate a unique name from server name.
-	 * Discord emoji names must: be 2-32 chars, only a-z A-Z 0-9 _, start with a letter.
-	 * e.g. "Developer Verse" → "Dev_Ver_3847"
-	 * e.g. "~` LuCiFeR." → "LuC_iFe_9214"
-	 * e.g. "서버" → "emoji_2847"
+	 * Generate a valid Discord emoji/sticker name from server name.
+	 * Rules: 2-32 chars, only [a-zA-Z0-9_], must start with a letter.
 	 */
 	private genName(guildName: string): string {
-		// Strip non-alphanumeric except spaces, then split into words
-		const cleaned = guildName.replace(/[^a-zA-Z0-9\s]/g, "").trim();
-		const words = cleaned.split(/\s+/).filter(w => w.length > 0);
-
-		let prefix: string;
-		if (words.length >= 2) {
-			prefix = words[0]!.slice(0, 3) + "_" + words[1]!.slice(0, 3);
-		} else if (words.length === 1) {
-			prefix = words[0]!.slice(0, 5);
-		} else {
-			prefix = "emoji";
-		}
-
-		// Ensure starts with a letter
-		if (!/^[a-zA-Z]/.test(prefix)) {
-			prefix = "e" + prefix;
-		}
-
-		// 4 random digits
+		// Extract only letters from server name
+		const letters = guildName.replace(/[^a-zA-Z]/g, "");
+		const prefix = letters.length >= 3 ? letters.slice(0, 3) : (letters || "emj");
+		// 4 random digits for uniqueness
 		const rand = Math.floor(1000 + Math.random() * 9000);
-		const name = `${prefix}_${rand}`;
+		return `${prefix}_${rand}`;
+	}
 
-		// Final safety: ensure 2-32 chars, only valid chars
-		return name.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 32) || "emoji_" + rand;
+	/**
+	 * Sanitize a user-provided name to be valid for Discord.
+	 * Returns null if the input can't be made valid.
+	 */
+	private safeName(input: string | undefined): string | null {
+		if (!input) return null;
+		const cleaned = input.replace(/[^a-zA-Z0-9_]/g, "");
+		if (cleaned.length < 2) return null;
+		// Must start with letter
+		if (!/^[a-zA-Z]/.test(cleaned)) return null;
+		return cleaned.slice(0, 32);
+	}
+
+	private delay(ms: number): Promise<void> {
+		return new Promise(r => setTimeout(r, ms));
 	}
 }
