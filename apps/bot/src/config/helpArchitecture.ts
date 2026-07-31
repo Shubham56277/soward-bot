@@ -109,7 +109,7 @@ export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "utilities",
 		label: "Utilities",
-		emoji: "<a:emoji_1:1532800066283114687>",
+		emoji: "<:utility:1532817994726637847>",
 		tagline: "Information, tools, and server assets.",
 		features: [
 			{
