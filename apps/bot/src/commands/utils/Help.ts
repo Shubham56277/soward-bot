@@ -122,8 +122,30 @@ export default class Help extends Command {
 			flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
 		});
 
-		const msg = await ctx.editOrReply(render());
-		const message = ctx.isInteraction ? await ctx.interaction!.fetchReply() : msg;
+		let msg: any;
+		let message: any;
+		let dmMode = false;
+
+		if (ctx.isInteraction) {
+			// Slash command — ephemeral reply (only visible to the user)
+			msg = await ctx.editOrReply(render());
+			message = await ctx.interaction!.fetchReply();
+		} else {
+			// Prefix command — send in DMs for privacy
+			try {
+				const dmChannel = await ctx.author!.createDM();
+				msg = await dmChannel.send({ components: [this.buildView(ctx, prefix, state, false)], flags: MessageFlags.IsComponentsV2 });
+				message = msg;
+				dmMode = true;
+				// Notify in channel that help was sent to DMs
+				await ctx.sendMessage("-# Help sent to your DMs.").catch(() => {});
+			} catch {
+				// DMs closed — fall back to channel reply
+				msg = await ctx.sendMessage({ components: [this.buildView(ctx, prefix, state, false)], flags: MessageFlags.IsComponentsV2 });
+				message = msg;
+			}
+		}
+
 		const collector = message.createMessageComponentCollector({ time: HELP_TIMEOUT_MS });
 
 		collector.on("collect", async (i: MessageComponentInteraction) => {
@@ -139,18 +161,22 @@ export default class Help extends Command {
 				const handled = this.applyInteraction(i, state);
 				if (handled === "close") {
 					collector.stop("closed");
-					await message.delete().catch(() => undefined);
+					// For ephemeral/DM — edit to show closed state instead of deleting
+					await message.edit({ components: [], content: "-# Help session closed." }).catch(() => message.delete().catch(() => undefined));
 					return;
 				}
-				await message.edit(render()).catch(() => undefined);
+				await message.edit({ components: [this.buildView(ctx, prefix, state, false)], flags: MessageFlags.IsComponentsV2 }).catch(() => undefined);
 			} catch (err) {
 				await reportError(ctx.client, err, { source: "menu", command: "help", userId: ctx.author?.id, guildId: ctx.guild?.id, interactionId: i.id });
 			}
 		});
 
-		collector.on("end", async (_c, reason) => {
-			if (reason === "closed" || !message.editable) return;
-			await message.edit(render(true)).catch(() => undefined);
+		collector.on("end", async (_c: any, reason: string) => {
+			if (reason === "closed") return;
+			// Disable components when session expires
+			try {
+				await message.edit({ components: [this.buildView(ctx, prefix, state, true)], flags: MessageFlags.IsComponentsV2 }).catch(() => undefined);
+			} catch {}
 		});
 
 		return msg;
