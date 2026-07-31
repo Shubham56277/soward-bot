@@ -7,6 +7,7 @@ import Logger from "./lib/Logger";
 import { startHealthServer, stopHealthServer, markBotReady, getLatencyMonitor, type HealthClientState } from "./modules/health";
 import { handleProcessError } from "./utils/errorHandler";
 import { shutdownQueues } from "./queues";
+import { installHotReloadHandlers, restoreMusicSessions } from "./modules/hotReload";
 
 const logger = new Logger();
 const HEALTH_PORT = Number(process.env.HEALTH_PORT) || 9090;
@@ -52,7 +53,19 @@ let client: BaseClient | null = null;
         client.once("clientReady", () => {
             markBotReady();
             logger.success(`[bot-entry] Discord READY: ${client?.user?.tag} | Guilds: ${client?.guilds.cache.size} | Gateway ping: ${client?.ws.ping}ms`);
+
+            // Restore music sessions if any were saved before restart
+            setTimeout(() => {
+                restoreMusicSessions(client!).then(result => {
+                    if (result.restored > 0) logger.success(`[bot-entry] Restored ${result.restored} music session(s) from pre-restart save.`);
+                    if (result.failed > 0) logger.warn(`[bot-entry] Failed to restore ${result.failed} music session(s).`);
+                }).catch(err => logger.warn("[bot-entry] Music restore skipped:", err));
+            }, 8000); // Wait 8s for Lavalink to fully connect
         });
+
+        // Install hot-reload signal handlers
+        installHotReloadHandlers(client);
+        logStep("hot-reload handlers installed");
 
         // Record gateway ping samples
         setInterval(() => {

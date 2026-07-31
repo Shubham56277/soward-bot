@@ -568,6 +568,32 @@ async function pm2Setup() {
   await pressEnter();
 }
 
+// ─── Action: Smart Reload ───────────────────────────────────────────────────
+async function smartReloadAction() {
+  printHeader();
+  info("Pull, Build & Smart Reload\n");
+  dlog("INFO", "Smart reload requested");
+
+  if (!pm2Available()) { err("PM2 is not installed. Run: npm install -g pm2"); await pressEnter(); return; }
+
+  console.log(`  ${C.cyan}(1)${C.reset} Deploy (pull, build, reload/restart)`);
+  console.log(`  ${C.cyan}(2)${C.reset} Dry run (preview changes only)`);
+  console.log(`  ${C.cyan}(0)${C.reset} Cancel\n`);
+  const choice = await ask("Select");
+  if (choice === "0" || (choice !== "1" && choice !== "2")) { return; }
+
+  try {
+    delete require.cache[require.resolve("./smart-reload.js")];
+    const { smartReload } = require("./smart-reload.js");
+    await smartReload({ dryRun: choice === "2" });
+  } catch (e) {
+    err(`Smart reload error: ${e.message || e}`);
+    dlog("ERROR", e.stack || e.message || String(e));
+  }
+
+  await pressEnter();
+}
+
 // ─── Main Menu ──────────────────────────────────────────────────────────────
 const MENU = [
   { num: "1",  label: "Status & Health Overview",   fn: showStatus },
@@ -576,12 +602,13 @@ const MENU = [
   { num: "4",  label: "Restart Bot",                fn: restartBot },
   { num: "5",  label: "Git Pull",                   fn: gitPull },
   { num: "6",  label: "Build & Restart",            fn: buildAndRestart },
-  { num: "7",  label: "View Logs",                  fn: viewLogs },
-  { num: "8",  label: "Health Check",               fn: healthCheck },
-  { num: "9",  label: "System Info",                fn: systemInfo },
-  { num: "10", label: "DB Migrate",                 fn: dbMigrate },
-  { num: "11", label: "Doctor (preflight)",         fn: runDoctor },
-  { num: "12", label: "PM2 Setup",                  fn: pm2Setup },
+  { num: "7",  label: "Pull, Build & Smart Reload", fn: smartReloadAction },
+  { num: "8",  label: "View Logs",                  fn: viewLogs },
+  { num: "9",  label: "Health Check",               fn: healthCheck },
+  { num: "10", label: "System Info",                fn: systemInfo },
+  { num: "11", label: "DB Migrate",                 fn: dbMigrate },
+  { num: "12", label: "Doctor (preflight)",         fn: runDoctor },
+  { num: "13", label: "PM2 Setup",                  fn: pm2Setup },
   { num: "0",  label: "Exit",                       fn: null },
 ];
 

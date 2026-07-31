@@ -9,22 +9,17 @@ export default class LavalinkClient extends LavalinkManager {
         super({
             nodes: env.NODES.map(node => ({
                 ...node,
-                // Retry indefinitely so the bot reconnects after any transient
-                // network blip or Lavalink restart without manual intervention.
                 retryAmount: node.retryAmount ?? Infinity,
-                // Direct connection (Azure VM) — 3s between retries is fast enough
-                // without flooding the server on repeated failures.
                 retryDelay: node.retryDelay ?? 3_000,
-                // Window for retry tracking — 1 hour ensures retries never expire.
                 retryTimespan: 3_600_000,
                 requestSignalTimeoutMS: node.requestSignalTimeoutMS ?? 10_000,
-                // Heartbeat every 30s — direct connections are stable, no proxy
-                // timeout to worry about. Just enough to detect silent TCP drops.
                 heartBeatInterval: node.heartBeatInterval ?? 30_000,
-                // Ping via /stats endpoint to verify node health beyond WebSocket.
                 enablePingOnStatsCheck: node.enablePingOnStatsCheck ?? true,
-                // Do not close the connection on a node error — let retries handle it.
                 closeOnError: node.closeOnError ?? false,
+                // Session resume: lavalink-client sends the session ID on reconnect
+                // so Lavalink server can restore players without re-creating them.
+                // Requires Lavalink server v4+ with session resume enabled.
+                sessionId: (node as any).sessionId ?? undefined,
             })) as LavalinkNodeOptions[],
             sendToShard: (guildId, payload) => client.guilds.cache.get(guildId)?.shard?.send(payload),
             queueOptions: {
@@ -33,11 +28,7 @@ export default class LavalinkClient extends LavalinkManager {
             playerOptions: {
                 defaultSearchPlatform: "scsearch",
                 onDisconnect: {
-                    // When the node comes back, automatically reconnect the
-                    // player to the voice channel and resume playback.
                     autoReconnect: true,
-                    // Only reconnect players that had something in the queue —
-                    // avoids pointlessly reconnecting idle players.
                     autoReconnectOnlyWithTracks: true,
                     destroyPlayer: false,
                 },
