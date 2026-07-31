@@ -262,6 +262,12 @@ export default class Help extends Command {
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
+					HELP_CATEGORIES.map(c => `${c.emoji} ∙ **${c.label}**\n-# ${c.tagline}`).join("\n\n"),
+				),
+			)
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(
 					"__**Pro Tip**__\nExplore Elfaria Premium for exclusive features",
 				),
 			);
