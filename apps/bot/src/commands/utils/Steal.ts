@@ -65,7 +65,7 @@ export default class StealCommand extends Command {
 			const matches = [...refMsg.content.matchAll(emojiRegex)];
 
 			if (matches.length === 0) {
-				return ctx.sendMessage("The replied message has no custom emojis or stickers to steal.");
+				return ctx.sendMessage("The replied message has no **custom** emojis or stickers to steal. Default emojis can't be added.");
 			}
 
 			// Deduplicate by emoji ID
@@ -129,6 +129,12 @@ export default class StealCommand extends Command {
 			return this.stealOneEmoji(ctx, emojiMatch, name);
 		}
 
+		// Check if user sent Unicode emojis (can't be stolen)
+		const unicodeEmojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}]/u;
+		if (unicodeEmojiRegex.test(input)) {
+			return ctx.sendMessage("Those are default Unicode emojis — they can't be stolen. Only **custom server emojis** (with a `:name:` format) can be added.");
+		}
+
 		// Try emoji URL
 		const urlMatch = input.match(/https:\/\/cdn\.discordapp\.com\/emojis\/(\d+)\.(png|gif|webp)/);
 		if (urlMatch) {
@@ -173,29 +179,35 @@ export default class StealCommand extends Command {
 
 	/**
 	 * Generate a unique name from server name.
-	 * Takes first 2-3 letters of first 2 words + 4 random digits.
+	 * Discord emoji names must: be 2-32 chars, only a-z A-Z 0-9 _, start with a letter.
 	 * e.g. "Developer Verse" → "Dev_Ver_3847"
-	 * e.g. "Only eating" → "Onl_eat_9214"
-	 * Always unique due to random suffix.
+	 * e.g. "~` LuCiFeR." → "LuC_iFe_9214"
+	 * e.g. "서버" → "emoji_2847"
 	 */
 	private genName(guildName: string): string {
-		const words = guildName.trim().split(/\s+/).filter(Boolean);
-		let prefix: string;
+		// Strip non-alphanumeric except spaces, then split into words
+		const cleaned = guildName.replace(/[^a-zA-Z0-9\s]/g, "").trim();
+		const words = cleaned.split(/\s+/).filter(w => w.length > 0);
 
+		let prefix: string;
 		if (words.length >= 2) {
-			// Take 3 chars from first word + 3 chars from second word
 			prefix = words[0]!.slice(0, 3) + "_" + words[1]!.slice(0, 3);
+		} else if (words.length === 1) {
+			prefix = words[0]!.slice(0, 5);
 		} else {
-			// Single word — take first 5 chars
-			prefix = (words[0] || "srv").slice(0, 5);
+			prefix = "emoji";
 		}
 
-		// Clean non-alphanumeric
-		prefix = prefix.replace(/[^a-zA-Z0-9_]/g, "");
-		if (!prefix) prefix = "emoji";
+		// Ensure starts with a letter
+		if (!/^[a-zA-Z]/.test(prefix)) {
+			prefix = "e" + prefix;
+		}
 
-		// 4 random digits (always unique)
+		// 4 random digits
 		const rand = Math.floor(1000 + Math.random() * 9000);
-		return `${prefix}_${rand}`;
+		const name = `${prefix}_${rand}`;
+
+		// Final safety: ensure 2-32 chars, only valid chars
+		return name.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 32) || "emoji_" + rand;
 	}
 }
