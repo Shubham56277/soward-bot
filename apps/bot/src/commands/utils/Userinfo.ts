@@ -60,8 +60,8 @@ export default class UserInfoCommand extends Command {
 		// Force fetch to get banner
 		const fetchedUser = await ctx.client.users.fetch(user.id, { force: true }).catch(() => user);
 
-		const avatar = member.displayAvatarURL({ size: 512 });
-		const banner = fetchedUser.bannerURL({ size: 1024 });
+		const avatar = member.displayAvatarURL({ size: 512, forceStatic: false });
+		const banner = fetchedUser.bannerURL({ size: 1024, forceStatic: false });
 
 		const topRole = member.roles.highest.id !== ctx.guild.id ? member.roles.highest : null;
 		const totalRoles = member.roles.cache.size - 1; // Exclude @everyone

@@ -166,6 +166,10 @@ export default class Help extends Command {
 			if (i.customId === "help_category_select") {
 				push();
 				if (value === "home") { state.level = "home"; state.categoryKey = null; state.featureKey = null; state.commandName = null; }
+				else if (value === "bot-settings") {
+					// Skip the intermediate category page — go directly to first feature (Profiles)
+					state.level = "feature"; state.categoryKey = value; state.featureKey = "profiles"; state.commandName = null;
+				}
 				else { state.level = "category"; state.categoryKey = value; state.featureKey = null; state.commandName = null; }
 				return;
 			}
@@ -233,7 +237,7 @@ export default class Help extends Command {
 	private homeView(ctx: Context, prefix: string, disabled: boolean): ContainerBuilder {
 		const { client } = ctx;
 		const botName = client.user?.username ?? "Elfaria";
-		const avatar = client.user?.displayAvatarURL() ?? "https://cdn.discordapp.com/embed/avatars/0.png";
+		const avatar = client.user?.displayAvatarURL({ size: 512, forceStatic: false }) ?? "https://cdn.discordapp.com/embed/avatars/0.png";
 		const totalCommands = [...client.commands.values()].filter(c => c.category !== "dev").length;
 
 		const identity = new SectionBuilder()
@@ -247,18 +251,14 @@ export default class Help extends Command {
 			)
 			.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription(`${botName} avatar`));
 
-		// ANSI box — "Sovereign" centered, mobile-safe width
-		const B = "\x1b[1;34m";
-		const C = "\x1b[0;36m";
-		const R = "\x1b[0m";
-		const W = 32;
+		// Clean centered box — uses simple ASCII for consistent mobile/desktop rendering
 		const word = "S O V E R E I G N";
-		const inner = W - 2;
-		const pad = " ".repeat(Math.floor((inner - word.length) / 2));
-		const extra = " ".repeat(inner - pad.length - word.length);
-		const top = `${B}  ╔${"═".repeat(inner)}╗${R}`;
-		const mid = `${B}  ║${R}${pad}${C}${word}${R}${extra}${B}║${R}`;
-		const bottom = `${B}  ╚${"═".repeat(inner)}╝${R}`;
+		const boxWidth = 30;
+		const padding = Math.floor((boxWidth - word.length) / 2);
+		const padRight = boxWidth - word.length - padding;
+		const top = `┌${"─".repeat(boxWidth)}┐`;
+		const mid = `│${" ".repeat(padding)}${word}${" ".repeat(padRight)}│`;
+		const bottom = `└${"─".repeat(boxWidth)}┘`;
 		const intro = [top, mid, bottom].join("\n");
 
 		const container = new ContainerBuilder()

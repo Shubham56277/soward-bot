@@ -55,7 +55,7 @@ export default class Guildinfo extends Command {
 		const owner = await guild.members.fetch(guild.ownerId).catch(() => null);
 		const bans = await guild.bans.fetch().catch(() => null);
 		const invites = await guild.invites.fetch().catch(() => null);
-		const icon = guild.iconURL({ size: 512 }) ?? "https://cdn.discordapp.com/embed/avatars/0.png";
+		const icon = guild.iconURL({ size: 512, forceStatic: false }) ?? "https://cdn.discordapp.com/embed/avatars/0.png";
 
 		const buildPage = (page: string): ContainerBuilder => {
 			const container = new ContainerBuilder();
