@@ -286,7 +286,7 @@ export default class Help extends Command {
 		const premiumEmoji = "<:elf_4008:1532801782462414988>";
 
 		const container = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${cat.emoji} **${cat.label}**`))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${cat.emoji}  **${cat.label}**`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`));
 
 		// Show ALL features and their commands on one page
@@ -488,16 +488,23 @@ export default class Help extends Command {
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 			new StringSelectMenuBuilder()
 				.setCustomId("help_category_select")
-				.setPlaceholder("Select a category...")
+				.setPlaceholder("↝ Please select a module.")
 				.setDisabled(disabled)
 				.addOptions(
-					HELP_CATEGORIES.map(c => ({
-						label: c.label,
-						description: c.tagline.slice(0, 90),
-						value: c.key,
-						emoji: c.emoji,
-						default: selected === c.key,
-					})),
+					HELP_CATEGORIES.map(c => {
+						// Parse custom emoji format <:name:id> or <a:name:id>
+						const emojiMatch = c.emoji.match(/<(a)?:(\w+):(\d+)>/);
+						const option: any = {
+							label: c.label,
+							description: c.tagline.slice(0, 90),
+							value: c.key,
+							default: selected === c.key,
+						};
+						if (emojiMatch) {
+							option.emoji = { id: emojiMatch[3], name: emojiMatch[2], animated: emojiMatch[1] === "a" };
+						}
+						return option;
+					}),
 				),
 		);
 	}
