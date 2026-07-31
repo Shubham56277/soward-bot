@@ -326,11 +326,9 @@ export default class AntiNukeCommand extends Command {
 			"Real-time protection against destructive server actions.",
 			"",
 			"**Overview**",
-			"────────────────────",
 			row("Protection", settings.enabled ? "Enabled" : "Disabled"),
 			row("Modules", `${enabledModules} / ${totalModules}`),
 			row("Whitelist", `${listed} ${listed === 1 ? "User" : "Users"}`),
-			row("Trusted", `${listed} ${listed === 1 ? "User" : "Users"}`),
 			row("Punishment", punishment),
 			"",
 			"**Quick Commands**",
@@ -338,7 +336,7 @@ export default class AntiNukeCommand extends Command {
 			"`?antinuke config` — Configure protection",
 			"`?antinuke disable` — Disable protection",
 			"",
-			"Page 1 of 3",
+			"-# Page 1 of 3",
 		].join("\n");
 	}
 
@@ -357,14 +355,13 @@ export default class AntiNukeCommand extends Command {
 			"Review the protection modules currently active.",
 			"",
 			"**Protection Modules**",
-			"────────────────────",
 			...lines,
 			"",
 			"**Quick Commands**",
 			"`?antinuke config` — Configure modules",
 			"`?antinuke punishment <action>` — Set punishment",
 			"",
-			"Page 2 of 3",
+			"-# Page 2 of 3",
 		].join("\n");
 	}
 
@@ -373,21 +370,19 @@ export default class AntiNukeCommand extends Command {
 		return [
 			"Manage users excluded from automatic enforcement.",
 			"",
-			"**Trusted Users**",
-			"────────────────────",
-			"`?trusted show` — View trusted users",
-			"`?trusted add @user` — Add a trusted user",
-			"`?trusted remove @user` — Remove a trusted user",
-			"`?trusted reset` — Clear trusted users",
-			"",
 			"**Whitelist**",
-			"────────────────────",
-			"`?antinuke whitelist list` — View whitelist",
-			"`?antinuke whitelist add @user` — Add exemption",
-			"`?antinuke whitelist remove @user` — Remove exemption",
-			"`?antinuke whitelist reset` — Clear whitelist",
+			"`?wl add @user` — Add with action panel",
+			"`?wl remove @user` — Remove from whitelist",
+			"`?wl list` — View whitelist",
+			"`?wl reset` — Clear whitelist",
 			"",
-			"Page 3 of 3",
+			"**Extra Owners**",
+			"`?extraowner add @user` — Add an extra owner",
+			"`?extraowner remove @user` — Remove an extra owner",
+			"`?extraowner config @user` — Configure limits",
+			"`?extraowner reset` — Clear all extra owners",
+			"",
+			"-# Page 3 of 3",
 		].join("\n");
 	}
 
