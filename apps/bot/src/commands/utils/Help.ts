@@ -117,34 +117,14 @@ export default class Help extends Command {
 	// ─── Session / collector ───────────────────────────────────────────────────────
 
 	private async startSession(ctx: Context, prefix: string, state: NavState): Promise<any> {
-		const render = (disabled = false) => ({
+		const buildPayload = (disabled = false) => ({
 			components: [this.buildView(ctx, prefix, state, disabled)],
-			flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+			flags: MessageFlags.IsComponentsV2 | (ctx.isInteraction ? MessageFlags.Ephemeral : 0),
 		});
 
-		let msg: any;
-		let message: any;
-		let dmMode = false;
-
-		if (ctx.isInteraction) {
-			// Slash command — ephemeral reply (only visible to the user)
-			msg = await ctx.editOrReply(render());
-			message = await ctx.interaction!.fetchReply();
-		} else {
-			// Prefix command — send in DMs for privacy
-			try {
-				const dmChannel = await ctx.author!.createDM();
-				msg = await dmChannel.send({ components: [this.buildView(ctx, prefix, state, false)], flags: MessageFlags.IsComponentsV2 });
-				message = msg;
-				dmMode = true;
-				// Notify in channel that help was sent to DMs
-				await ctx.sendMessage("-# Help sent to your DMs.").catch(() => {});
-			} catch {
-				// DMs closed — fall back to channel reply
-				msg = await ctx.sendMessage({ components: [this.buildView(ctx, prefix, state, false)], flags: MessageFlags.IsComponentsV2 });
-				message = msg;
-			}
-		}
+		// Send initial message (ephemeral for slash, normal for prefix)
+		const msg = await ctx.editOrReply(buildPayload());
+		const message = ctx.isInteraction ? await ctx.interaction!.fetchReply() : msg;
 
 		const collector = message.createMessageComponentCollector({ time: HELP_TIMEOUT_MS });
 
@@ -350,43 +330,41 @@ export default class Help extends Command {
 	private featureView(ctx: Context, prefix: string, categoryKey: string, featureKey: string, disabled: boolean): ContainerBuilder {
 		const cat = getCategory(categoryKey);
 		const feature = getFeature(categoryKey, featureKey);
-		if (!cat || !feature) return this.categoryView(ctx, prefix, categoryKey, disabled);
+		if (!cat || !feature) return this.homeView(ctx, prefix, disabled);
+
+		// Get feature index for page display
+		const feats = cat.features.filter(f => !f.comingSoon);
+		const featureIdx = feats.findIndex(f => f.key === featureKey);
+		const pageLabel = `${featureIdx + 1}/${feats.length}`;
 
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${feature.label}`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${feature.description}`));
 
-		// Status line for premium features
 		if (feature.premium) {
 			container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Status** Premium  ·  **Access** \`${prefix}premium redeem\``));
 		}
 
-		container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
-
 		if (feature.comingSoon || feature.groups.length === 0) {
 			container.addTextDisplayComponents(new TextDisplayBuilder().setContent("**Coming soon** — this feature is in development."));
 		} else {
-			// Command groups with separators between them
-			feature.groups.forEach((group, gi) => {
+			// Command groups — ZEON-style compact listing
+			for (const group of feature.groups) {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
-				const cmds = availableCommands.map(name => `\`${name}\``).join("  ");
-				if (!cmds) return;
-				// Tag the heading as Premium when the group is premium (either an
-				// explicit "Premium" group or one whose commands are premium-only).
+				if (availableCommands.length === 0) continue;
+
+				const cmds = availableCommands.map(name => `\`${prefix}${name}\``).join(" , ");
 				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
-				const heading = groupIsPremium ? `${group.heading} \`Premium\`` : group.heading;
-				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${heading}**\n${cmds}`));
-				if (gi < feature.groups.length - 1) {
-					container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
-				}
-			});
+				const heading = groupIsPremium ? `**${group.heading}** \`PRO\`` : `**${group.heading}**`;
+				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
+			}
 		}
 
-		container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
-		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# \`${prefix}help <command>\` for full details on any command.`));
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by Elfaria`));
 
 		container.addActionRowComponents(this.featureSelect(cat, featureKey, disabled));
-		container.addActionRowComponents(this.navRow(disabled, { back: true, prevNext: true }));
+		container.addActionRowComponents(this.navRow(disabled, { back: true, prevNext: true, pageLabel }));
 		return container;
 	}
 
@@ -489,7 +467,7 @@ export default class Help extends Command {
 		);
 	}
 
-	private navRow(disabled: boolean, opts: { back: boolean; prevNext: boolean }): ActionRowBuilder<ButtonBuilder> {
+	private navRow(disabled: boolean, opts: { back?: boolean; prevNext?: boolean; pageLabel?: string }): ActionRowBuilder<ButtonBuilder> {
 		const row = new ActionRowBuilder<ButtonBuilder>();
 		if (opts.prevNext) {
 			row.addComponents(new ButtonBuilder().setCustomId("help_prev").setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(disabled));
@@ -501,6 +479,9 @@ export default class Help extends Command {
 			row.addComponents(new ButtonBuilder().setCustomId("help_next").setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(disabled));
 		}
 		row.addComponents(new ButtonBuilder().setCustomId("help_close").setLabel("🗑").setStyle(ButtonStyle.Danger).setDisabled(disabled));
+		if (opts.pageLabel) {
+			row.addComponents(new ButtonBuilder().setCustomId("help_page_label").setLabel(opts.pageLabel).setStyle(ButtonStyle.Secondary).setDisabled(true));
+		}
 		return row;
 	}
 
