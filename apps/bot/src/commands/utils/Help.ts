@@ -42,6 +42,20 @@ interface NavState {
 	history: Array<Pick<NavState, "level" | "categoryKey" | "featureKey" | "commandName">>;
 }
 
+// ─── Emoji helper ────────────────────────────────────────────────────────────
+
+/**
+ * Parse a Discord custom emoji string into the format required by select menu options.
+ * Accepts: <:name:id> or <a:name:id>
+ * Returns: { id, name, animated } or undefined if parsing fails.
+ */
+function parseCustomEmoji(emojiStr: string | undefined): { id: string; name: string; animated: boolean } | undefined {
+	if (!emojiStr) return undefined;
+	const match = emojiStr.match(/<(a)?:(\w+):(\d+)>/);
+	if (!match) return undefined;
+	return { id: match[3]!, name: match[2]!, animated: match[1] === "a" };
+}
+
 export default class Help extends Command {
 	public constructor() {
 		super({
@@ -485,24 +499,24 @@ export default class Help extends Command {
 	}
 
 	private categorySelect(selected: string | null, disabled: boolean): ActionRowBuilder<StringSelectMenuBuilder> {
+		const options = HELP_CATEGORIES.map(c => {
+			const emoji = parseCustomEmoji(c.emoji);
+			const opt: any = {
+				label: c.label,
+				description: c.tagline.slice(0, 100),
+				value: c.key,
+				default: selected === c.key,
+			};
+			if (emoji) opt.emoji = emoji;
+			return opt;
+		});
+
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 			new StringSelectMenuBuilder()
 				.setCustomId("help_category_select")
 				.setPlaceholder("↝ Please select a module.")
 				.setDisabled(disabled)
-				.addOptions(
-					HELP_CATEGORIES.map(c => {
-						// Parse custom emoji: <:name:id> or <a:name:id>
-						const m = c.emoji.match(/<(a)?:(\w+):(\d+)>/);
-						return {
-							label: c.label,
-							description: c.tagline.slice(0, 100),
-							value: c.key,
-							default: selected === c.key,
-							emoji: m ? { id: m[3]!, name: m[2]!, animated: m[1] === "a" } : undefined,
-						};
-					}),
-				),
+				.addOptions(options),
 		);
 	}
 
