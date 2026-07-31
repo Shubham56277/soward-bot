@@ -292,7 +292,7 @@ export default class Help extends Command {
 		// Show ALL features and their commands on one page
 		for (const feature of cat.features) {
 			if (feature.comingSoon) {
-				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${feature.label}** \`Soon\`\n-# Coming soon`));
+				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`__**${feature.label}**__ \`Soon\`\n-# Coming soon`));
 				continue;
 			}
 
@@ -300,9 +300,9 @@ export default class Help extends Command {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
 				if (availableCommands.length === 0) continue;
 
-				const cmds = availableCommands.map(name => `\`${prefix}${name}\``).join(" . ");
+				const cmds = availableCommands.map(name => `\`${name}\``).join(" . ");
 				const isPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
-				const heading = isPremium ? `**${group.heading}** ${premiumEmoji}` : `**${group.heading}**`;
+				const heading = isPremium ? `__**${group.heading}**__ ${premiumEmoji}` : `__**${group.heading}**__`;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
