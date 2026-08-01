@@ -283,9 +283,9 @@ export default class Help extends Command {
 		const pageLabel = `${catIdx + 1}/${HELP_CATEGORIES.length}`;
 
 		// Premium emoji
-		const premiumEmoji = "<:elf_4008:1532801782462414988>";
+		const premiumEmoji = "<:premium:1532972816951935066>";
 
-		const categoryEmoji = cat.emojiId ? `<:help_category:${cat.emojiId}> ` : "";
+		const categoryEmoji = cat.emojiId ? `<:help_category:${cat.emojiId}>\u2003\u2003` : "";
 
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${categoryEmoji}**${cat.label}**`))
@@ -302,9 +302,11 @@ export default class Help extends Command {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
 				if (availableCommands.length === 0) continue;
 
-				const cmds = availableCommands.map(name => `\`${name}\``).join(" . ");
-				const isPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
-				const heading = isPremium ? `__**${group.heading}**__ ${premiumEmoji}` : `__**${group.heading}**__`;
+				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)!.premium);
+				const cmds = availableCommands
+					.map(name => `**\`${name}\`**${!groupIsPremium && ctx.client.commands.get(name)!.premium ? ` ${premiumEmoji}` : ""}`)
+					.join(" . ");
+				const heading = groupIsPremium ? `__**${group.heading}**__ ${premiumEmoji}` : `__**${group.heading}**__`;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
@@ -354,8 +356,10 @@ export default class Help extends Command {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
 				if (availableCommands.length === 0) continue;
 
-				const cmds = availableCommands.map(name => `\`${prefix}${name}\``).join(" , ");
-				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)?.premium);
+				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)!.premium);
+				const cmds = availableCommands
+					.map(name => `**\`${prefix}${name}\`**${!groupIsPremium && ctx.client.commands.get(name)!.premium ? " `PRO`" : ""}`)
+					.join(" , ");
 				const heading = groupIsPremium ? `**${group.heading}** \`PRO\`` : `**${group.heading}**`;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
