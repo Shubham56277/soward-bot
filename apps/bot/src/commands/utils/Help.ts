@@ -279,9 +279,6 @@ export default class Help extends Command {
 		const cat = getCategory(categoryKey);
 		if (!cat) return this.homeView(ctx, prefix, disabled);
 
-		const catIdx = HELP_CATEGORIES.findIndex(c => c.key === categoryKey);
-		const pageLabel = `${catIdx + 1}/${HELP_CATEGORIES.length}`;
-
 		// Premium emoji
 		const premiumEmoji = "<:premium:1532972816951935066>";
 
@@ -315,20 +312,18 @@ export default class Help extends Command {
 			}
 		}
 
-		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
-		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by Elfaria`));
-
-		// Navigation: ◀ 🗑 ▶ ⌂ pageLabel + category dropdown
+		container.addActionRowComponents(this.categorySelect(categoryKey, disabled));
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
 		container.addActionRowComponents(
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder().setCustomId("help_cat_prev").setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-				new ButtonBuilder().setCustomId("help_close").setLabel("🗑").setStyle(ButtonStyle.Danger).setDisabled(disabled),
-				new ButtonBuilder().setCustomId("help_cat_next").setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
 				new ButtonBuilder().setCustomId("help_home").setLabel("⌂").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-				new ButtonBuilder().setCustomId("help_page_label").setLabel(pageLabel).setStyle(ButtonStyle.Secondary).setDisabled(true),
+				new ButtonBuilder().setCustomId("help_cat_next").setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+				new ButtonBuilder().setCustomId("help_close").setLabel("🗑").setStyle(ButtonStyle.Danger).setDisabled(disabled),
 			),
 		);
-		container.addActionRowComponents(this.categorySelect(categoryKey, disabled));
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by [elfaria.in](${(ctx.client.config.links as any).website ?? ctx.client.config.links.supportServer})`));
 		return container;
 	}
 
