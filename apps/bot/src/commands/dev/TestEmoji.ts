@@ -11,7 +11,7 @@ export default class TestEmoji extends Command {
 		super({
 			name: "testemoji",
 			description: {
-				content: "Test emoji access and select menu rendering",
+				content: "Test emoji rendering in select menus",
 				examples: ["testemoji"],
 				usage: "testemoji",
 			},
@@ -33,54 +33,51 @@ export default class TestEmoji extends Command {
 	public async run(ctx: Context): Promise<any> {
 		const channel = ctx.message?.channel as any;
 
-		// Step 1: Test emoji ACCESS by sending as plain text
+		// Test emoji access in plain text
 		await channel.send(
-			"**Emoji Access Test:**\n" +
-			"settings: <:settings:1532817505423327312>\n" +
-			"Mangement: <:Mangement:1532813659905196326>\n" +
-			"community: <:community:1532819061426094203>\n" +
-			"entertainment: <:entertainment:1532819510854156390>\n" +
-			"utility: <:utility:1532817994726637847>\n" +
-			"If any shows as raw text, the bot cannot access that emoji."
+			"**Emoji Access Test (Application Emojis):**\n" +
+			"settings: <:settings:1532834320132214878>\n" +
+			"management: <:management:1532834395776483538>\n" +
+			"community: <:community:1532834453003571210>\n" +
+			"entertainment: <:entertainment:1532834484800585879>\n" +
+			"utility: <:utility:1532834496586453173>"
 		);
 
-		// Step 2: Build select menu with StringSelectMenuOptionBuilder + setEmoji
+		// Build select menu using application emoji IDs
 		const menu = new StringSelectMenuBuilder()
 			.setCustomId("test_emoji_select")
 			.setPlaceholder("Test emoji rendering");
 
-		const option = new StringSelectMenuOptionBuilder()
-			.setLabel("Settings Test")
-			.setDescription("Guild emoji: settings")
-			.setValue("settings_test")
+		const option1 = new StringSelectMenuOptionBuilder()
+			.setLabel("Settings")
+			.setDescription("Application emoji test")
+			.setValue("settings")
 			.setDefault(false);
-
-		// Bypass .setEmoji() bug — write directly to .data.emoji
-		(option as any).data.emoji = { id: "1532817505423327312", name: "settings", animated: false };
+		// Write directly to .data.emoji to bypass potential setEmoji() issue
+		(option1 as any).data.emoji = { id: "1532834320132214878", name: "settings", animated: false };
 
 		const option2 = new StringSelectMenuOptionBuilder()
-			.setLabel("Management Test")
-			.setDescription("Guild emoji: Mangement")
-			.setValue("management_test")
+			.setLabel("Management")
+			.setDescription("Application emoji test")
+			.setValue("management")
 			.setDefault(false);
-
-		(option2 as any).data.emoji = { id: "1532813659905196326", name: "Mangement", animated: false };
+		(option2 as any).data.emoji = { id: "1532834395776483538", name: "management", animated: false };
 
 		const option3 = new StringSelectMenuOptionBuilder()
 			.setLabel("No Emoji")
-			.setDescription("Control option without emoji")
+			.setDescription("Control option")
 			.setValue("none")
 			.setDefault(false);
 
-		menu.addOptions(option, option2, option3);
+		menu.addOptions(option1, option2, option3);
 
-		// Step 3: Log FULL serialized payload with depth
+		// Log payload
 		console.dir(menu.toJSON(), { depth: null });
 
 		const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 
 		await channel.send({
-			content: "**Select Menu Emoji Test:**",
+			content: "**Select Menu Test (Application Emojis + direct .data.emoji):**",
 			components: [row],
 		});
 
