@@ -114,6 +114,15 @@ export default class Help extends Command {
 		});
 	}
 
+	public async showCommand(ctx: Context, commandName: string): Promise<any> {
+		const prefix = (await Guild.get(ctx.guild.id))?.prefix ?? ctx.client.config.prefix;
+		const command = this.resolveCommand(ctx, commandName.trim().toLowerCase());
+		if (!command) return this.showNotFound(ctx, prefix, commandName);
+		return this.startSession(ctx, prefix, {
+			level: "command", categoryKey: null, featureKey: null, commandName: command.name, history: [],
+		});
+	}
+
 	// ─── Session / collector ───────────────────────────────────────────────────────
 
 	private async startSession(ctx: Context, prefix: string, state: NavState): Promise<any> {
@@ -294,12 +303,13 @@ export default class Help extends Command {
 			}
 
 			for (const group of feature.groups) {
-				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
+				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name.split(" ")[0]!));
 				if (availableCommands.length === 0) continue;
 
 				const cmds = availableCommands
 					.map(name => {
-						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
+						const baseName = name.split(" ")[0]!;
+						const commandIsPremium = ctx.client.commands.get(baseName)!.premium === true;
 						const premiumMarker = commandIsPremium ? "❄ " : "";
 						return `**\`${premiumMarker}${name}\`**`;
 					})

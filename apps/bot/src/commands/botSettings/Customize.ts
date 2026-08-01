@@ -2,9 +2,10 @@ import { GuildBotSettings } from "@repo/db";
 import { ApplicationCommandOptionType, type Attachment, PermissionFlagsBits } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { type BrandingImage, fetchBrandingImage, readGuildBranding, resetGuildBranding, UnsupportedGuildBrandingError, updateGuildAvatar, updateGuildBanner, updateGuildBio } from "../../utils/botBranding";
+import { type BrandingImage, fetchBrandingImage, resetGuildBranding, UnsupportedGuildBrandingError, updateGuildAvatar, updateGuildBanner, updateGuildBio } from "../../utils/botBranding";
 import { SETTINGS_FLAGS, settingsFailure, settingsPanel } from "../../utils/botSettingsUi";
 import { validateBio, validateImageUrl } from "../../utils/botSettingsValidation";
+import Help from "../utils/Help";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -24,8 +25,8 @@ export default class Customize extends Command {
 			name: "customize",
 			description: {
 				content: "Customize this server's bot branding (server-specific)",
-				usage: "customize <show|avatar|bio|banner|reset>",
-				examples: ["customize", "customize show", "customize avatar <url>", "customize bio Your server assistant", "customize reset"],
+				usage: "customize <avatar|bio|banner|reset>",
+				examples: ["customize", "customize avatar <url>", "customize bio Your server assistant", "customize banner <url>", "customize reset"],
 			},
 			premium: true,
 			cooldown: 5,
@@ -36,7 +37,6 @@ export default class Customize extends Command {
 				user: [PermissionFlagsBits.Administrator],
 			},
 			options: [
-				{ name: "show", description: "Preview this server's bot branding", type: ApplicationCommandOptionType.Subcommand },
 				imageOption("avatar", "Set the bot avatar for this server"),
 				{
 					name: "bio",
@@ -57,7 +57,6 @@ export default class Customize extends Command {
 			if (!rawAction) return this.help(ctx);
 
 			const action = rawAction.toLowerCase();
-			if (action === "show") return this.show(ctx);
 			if (!["avatar", "bio", "banner", "reset"].includes(action)) return this.help(ctx);
 
 			if (action === "reset") {
@@ -118,40 +117,11 @@ export default class Customize extends Command {
 		return rawUrl ? validateImageUrl(rawUrl.trim()) : null;
 	}
 
-	private async show(ctx: Context): Promise<any> {
-		const [stored, guildBranding] = await Promise.all([GuildBotSettings.get(ctx.guild.id), Promise.resolve(readGuildBranding(ctx.client, ctx.guild.id))]);
-		return ctx.sendMessage({
-			components: [
-				settingsPanel(`Bot branding in ${ctx.guild.name}`, stored.bio || "No server-specific bio is set.", [
-					["Avatar", guildBranding.avatarUrl ? `[Server avatar](${guildBranding.avatarUrl})` : `Using the bot's default avatar ([open](${guildBranding.globalAvatarUrl}))`],
-					["Banner", stored.bannerUrl ? `[Open image](${stored.bannerUrl})` : "Not set for this server"],
-					["Scope", "These settings apply to **this server only** and never change the bot in other servers."],
-				]),
-			],
-			flags: SETTINGS_FLAGS,
-		});
-	}
-
 	private notice(ctx: Context, title: string, body: string): Promise<any> {
 		return ctx.sendMessage({ components: [settingsPanel(title, body)], flags: SETTINGS_FLAGS });
 	}
 
 	private help(ctx: Context): Promise<any> {
-		return ctx.sendMessage({
-			components: [
-				settingsPanel(
-					"Customize the bot for this server",
-					"Premium servers can give the bot its own look here. Every change applies to **this server only** and never affects other servers.",
-					[
-						["Avatar", "`customize avatar <image url>` or attach an image\nSet the bot's avatar in this server."],
-						["Bio", "`customize bio <text>`\nSet the bot's bio in this server (up to 300 characters)."],
-						["Banner", "`customize banner <image url>` or attach an image\nSet the bot's banner in this server."],
-						["Reset", "`customize reset`\nRestore the bot's default identity in this server."],
-						["Show", "`customize show`\nPreview the branding currently used in this server."],
-					],
-				),
-			],
-			flags: SETTINGS_FLAGS,
-		});
+		return new Help().showCommand(ctx, "customize");
 	}
 }
