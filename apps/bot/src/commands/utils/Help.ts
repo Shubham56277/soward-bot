@@ -518,14 +518,6 @@ export default class Help extends Command {
 			menu.addOptions(option);
 		}
 
-		// Debug: log serialized select menu to verify emoji in payload
-		try {
-			const serialized = menu.toJSON();
-			console.log("[Help] Select menu emoji debug:", JSON.stringify(serialized.options?.map((o: any) => ({ label: o.label, emoji: o.emoji }))));
-		} catch (e) {
-			console.error("[Help] Serialization debug error:", e);
-		}
-
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 	}
 
