@@ -8,6 +8,12 @@ import { invalidatePrefixCache } from "../../utils/commandStateCache";
 
 const MAX_PREFIXES = 5;
 
+/** Normalize the legacy message/slash action while keeping `list` canonical. */
+export function normalizePrefixAction(action: string): string {
+	const normalized = action.toLowerCase();
+	return normalized === "show" ? "list" : normalized;
+}
+
 const prefixValueOption = (name: "set" | "add" | "remove", description: string): any => ({
 	name,
 	description,
@@ -21,8 +27,8 @@ export default class Prefix extends Command {
 			name: "prefix",
 			description: {
 				content: "Manage command prefixes for this server",
-				usage: "prefix <show|set|add|remove|reset> [prefix]",
-				examples: ["prefix show", "prefix set !", "prefix add ?", "prefix remove ?", "prefix reset"],
+				usage: "prefix <list|set|add|remove|reset> [prefix]",
+				examples: ["prefix list", "prefix set !", "prefix add ?", "prefix remove ?", "prefix reset"],
 			},
 			cooldown: 3,
 			permissions: {
@@ -32,7 +38,7 @@ export default class Prefix extends Command {
 			},
 			slashCommand: true,
 			options: [
-				{ name: "show", description: "Show active prefixes", type: ApplicationCommandOptionType.Subcommand },
+				{ name: "list", description: "List active prefixes", type: ApplicationCommandOptionType.Subcommand },
 				prefixValueOption("set", "Replace all prefixes with one primary prefix"),
 				prefixValueOption("add", "Add another accepted prefix"),
 				prefixValueOption("remove", "Remove an accepted prefix"),
@@ -47,9 +53,9 @@ export default class Prefix extends Command {
 			const rawAction = ctx.options.getSubCommand(false, 0);
 			if (!rawAction) return this.dashboard(ctx);
 
-			const action = rawAction.toLowerCase();
+			const action = normalizePrefixAction(rawAction);
 			if (action === "reset") return this.save(ctx, [ctx.client.config.prefix], "Default prefix restored");
-			if (action === "show") return this.show(ctx);
+			if (action === "list") return this.list(ctx);
 			if (!["set", "add", "remove"].includes(action)) return this.dashboard(ctx);
 
 			const raw = ctx.isInteraction ? ctx.options.getString("value", true) : ctx.args[1];
@@ -61,12 +67,12 @@ export default class Prefix extends Command {
 			const current = [...new Set([record?.prefix ?? ctx.client.config.prefix, ...(record?.prefixes ?? [])])];
 			if (action === "set") return this.save(ctx, [value], "Primary prefix updated");
 			if (action === "add") {
-				if (current.includes(value)) return this.show(ctx, `\`${value}\` is already active.`);
-				if (current.length >= MAX_PREFIXES) return this.show(ctx, `This server can use at most ${MAX_PREFIXES} prefixes.`);
+				if (current.includes(value)) return this.list(ctx, `\`${value}\` is already active.`);
+				if (current.length >= MAX_PREFIXES) return this.list(ctx, `This server can use at most ${MAX_PREFIXES} prefixes.`);
 				return this.save(ctx, [...current, value], "Prefix added");
 			}
-			if (!current.includes(value)) return this.show(ctx, `\`${value}\` is not active.`);
-			if (current.length === 1) return this.show(ctx, "You cannot remove the only prefix. Set another one or reset first.");
+			if (!current.includes(value)) return this.list(ctx, `\`${value}\` is not active.`);
+			if (current.length === 1) return this.list(ctx, "You cannot remove the only prefix. Set another one or reset first.");
 			return this.save(
 				ctx,
 				current.filter((prefix) => prefix !== value),
@@ -83,15 +89,16 @@ export default class Prefix extends Command {
 	private async dashboard(ctx: Context): Promise<any> {
 		const record = await Guild.get(ctx.guild.id);
 		const prefixes = [...new Set([record?.prefix ?? ctx.client.config.prefix, ...(record?.prefixes ?? [])])];
+		const currentPrefix = prefixes[0] ?? ctx.client.config.prefix;
 		return ctx.sendMessage({
 			components: [
 				settingsPanel("Prefix settings", `Manage the command prefixes accepted in **${ctx.guild.name}**. You can use up to ${MAX_PREFIXES} prefixes.`, [
 					["Active prefixes", prefixes.map((prefix) => `\`${prefix}\``).join("  ")],
-					["Show", "`prefix show`\nList every prefix accepted in this server."],
-					["Set", "`prefix set <value>`\nReplace all prefixes with one primary prefix."],
-					["Add", "`prefix add <value>`\nAdd another accepted prefix."],
-					["Remove", "`prefix remove <value>`\nRemove an accepted prefix."],
-					["Reset", "`prefix reset`\nRestore the default prefix."],
+					["List", `\`${currentPrefix}prefix list\`\nList every prefix accepted in this server.`],
+					["Set", `\`${currentPrefix}prefix set !\`\nReplace all prefixes with one primary prefix.`],
+					["Add", `\`${currentPrefix}prefix add ?\`\nAdd another accepted prefix.`],
+					["Remove", `\`${currentPrefix}prefix remove ?\`\nRemove an accepted prefix.`],
+					["Reset", `\`${currentPrefix}prefix reset\`\nRestore the default prefix.`],
 					["Mention fallback", `You can always use <@${ctx.client.user?.id}> before a command.`],
 				]),
 			],
@@ -108,7 +115,7 @@ export default class Prefix extends Command {
 		});
 	}
 
-	private async show(ctx: Context, note?: string): Promise<any> {
+	private async list(ctx: Context, note?: string): Promise<any> {
 		const record = await Guild.get(ctx.guild.id);
 		const prefixes = [...new Set([record?.prefix ?? ctx.client.config.prefix, ...(record?.prefixes ?? [])])];
 		return ctx.sendMessage({

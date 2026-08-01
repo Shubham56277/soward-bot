@@ -43,7 +43,20 @@ export const HELP_CATEGORIES: Category[] = [
 				groups: [
 					{ heading: "Profile", commands: ["profile", "bio", "bio set", "bio clear", "badge", "badge create", "badge edit", "badge delete", "badge list", "badge give", "badge remove", "badge clear", "badge show"] },
 					{ heading: "Branding", commands: ["customize", "customize avatar", "customize bio", "customize banner", "customize reset"] },
-					{ heading: "Prefixes", commands: ["prefix", "noprefix"] },
+					{
+						heading: "Prefixes",
+						commands: [
+							"prefix",
+							"prefix list",
+							"prefix set !",
+							"prefix add ?",
+							"prefix remove ?",
+							"prefix reset",
+							"noprefix",
+							"noprefix enable",
+							"noprefix disable",
+						],
+					},
 				],
 			},
 		],

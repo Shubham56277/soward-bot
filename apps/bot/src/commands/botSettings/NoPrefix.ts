@@ -26,7 +26,7 @@ export default class NoPrefix extends Command {
 			description: {
 				content: "Manage no-prefix access",
 				usage: "noprefix <add|remove|enable|disable|list|reset> [user] [duration]",
-				examples: ["noprefix", "noprefix add @user", "noprefix add @user 30d", "noprefix remove @user", "np enable", "np disable", "np list", "np reset"],
+				examples: ["noprefix", "noprefix add @user", "noprefix add @user 30d", "noprefix remove @user", "noprefix enable", "noprefix disable", "noprefix list", "noprefix reset"],
 			},
 			category: "botSettings",
 			premium: true,
@@ -87,7 +87,7 @@ export default class NoPrefix extends Command {
 
 		await User.grantNoPrefixAccess(user.id, durationMs);
 		const window = durationMs ? ` for **${TimeFormat.toHumanize(durationMs)}** (until <t:${Math.floor((Date.now() + durationMs) / 1_000)}:R>)` : " **permanently**";
-		return this.notice(ctx, "Access granted", `${this.tag(user.id)} can now use no-prefix${window}. They enable it with \`np enable\` and turn it off with \`np disable\`.`);
+		return this.notice(ctx, "Access granted", `${this.tag(user.id)} can now use no-prefix${window}. They enable it with \`noprefix enable\` and turn it off with \`noprefix disable\`.`);
 	}
 
 	private async revoke(ctx: Context): Promise<any> {
@@ -114,7 +114,7 @@ export default class NoPrefix extends Command {
 		return this.notice(
 			ctx,
 			enable ? "No-prefix enabled" : "No-prefix disabled",
-			enable ? "You can now run commands without a prefix. Use `np disable` to turn it off." : "You will now need a prefix again. Use `np enable` to turn it back on.",
+			enable ? "You can now run commands without a prefix. Use `noprefix disable` to turn it off." : "You will now need a prefix again. Use `noprefix enable` to turn it back on.",
 		);
 	}
 
@@ -158,8 +158,8 @@ export default class NoPrefix extends Command {
 			sections.push(["List", "`noprefix list`\nShow everyone with access, status, and expiry."]);
 			sections.push(["Reset", "`noprefix reset`\nRevoke access from everyone."]);
 		}
-		sections.push(["Enable", "`np enable`\nTurn no-prefix on for yourself (requires access)."]);
-		sections.push(["Disable", "`np disable`\nTurn no-prefix off for yourself."]);
+		sections.push(["Enable", "`noprefix enable`\nTurn no-prefix on for yourself (requires access)."]);
+		sections.push(["Disable", "`noprefix disable`\nTurn no-prefix off for yourself."]);
 
 		const description = manager
 			? "Grant trusted members the ability to run commands without a prefix, then they toggle it themselves. Only developers can grant access."

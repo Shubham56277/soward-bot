@@ -29,6 +29,11 @@ import {
 
 const HELP_TIMEOUT_MS = 5 * 60_000;
 
+/** Format a category entry with the active prefix and the established premium marker. */
+export function formatCategoryCommand(prefix: string, commandName: string, premium = false): string {
+	return `**\`${premium ? "❄ " : ""}${prefix}${commandName}\`**`;
+}
+
 type Level = "home" | "category" | "feature" | "command";
 
 interface NavState {
@@ -292,16 +297,16 @@ export default class Help extends Command {
 			}
 
 			for (const group of feature.groups) {
-				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name.split(" ")[0]!));
+				const availableCommands = group.commands.flatMap(name => {
+					const baseName = name.split(" ")[0];
+					if (!baseName) return [];
+					const command = ctx.client.commands.get(baseName);
+					return command ? [{ name, command }] : [];
+				});
 				if (availableCommands.length === 0) continue;
 
 				const cmds = availableCommands
-					.map(name => {
-						const baseName = name.split(" ")[0]!;
-						const commandIsPremium = ctx.client.commands.get(baseName)!.premium === true;
-						const premiumMarker = commandIsPremium ? "❄ " : "";
-						return `**\`${premiumMarker}${name}\`**`;
-					})
+					.map(({ name, command }) => formatCategoryCommand(prefix, name, command.premium === true))
 					.join(" . ");
 				const heading = `__**${group.heading}**__`;
 

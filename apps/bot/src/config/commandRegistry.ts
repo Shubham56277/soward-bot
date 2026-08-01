@@ -175,7 +175,7 @@ const seeds: RegistrySeed[] = [
 	["profile", "settings", "View a user's Elfaria profile"],
 	["bio", "settings", "View or manage your profile bio", { subcommands: ["show", "set", "clear"] }],
 	["badge", "settings", "Manage cosmetic profile badges", { subcommands: ["add", "list", "remove"] }],
-	["prefix", "settings", "Manage server command prefixes", { subcommands: ["show", "set", "add", "remove", "reset"] }],
+	["prefix", "settings", "Manage server command prefixes", { subcommands: ["list", "set", "add", "remove", "reset"] }],
 	["noprefix", "settings", "Manage no-prefix access for members", { premium: true, slash: false, subcommands: ["add", "remove", "enable", "disable", "list", "reset"] }],
 	["customize", "settings", "Customize premium bot account branding", { premium: true, subcommands: ["show", "avatar", "bio", "banner", "reset"] }],
 	["premium", "premium", "Manage premium access", { subcommands: ["status", "activate", "features"] }],
