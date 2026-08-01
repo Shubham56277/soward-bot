@@ -9,6 +9,7 @@ import {
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
+	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder,
 	ThumbnailBuilder,
 	type MessageComponentInteraction,
@@ -504,19 +505,27 @@ export default class Help extends Command {
 			.setPlaceholder("↝ Please select a module.")
 			.setDisabled(disabled);
 
-		for (const c of HELP_CATEGORIES) {
-			const parsed = parseCustomEmoji(c.emoji);
-			const option: any = {
-				label: c.label,
-				description: c.tagline.slice(0, 100),
-				value: c.key,
-				default: selected === c.key,
-			};
-			if (parsed) {
-				option.emoji = { id: parsed.id, name: parsed.name, animated: parsed.animated };
+		for (const category of HELP_CATEGORIES) {
+			const option = new StringSelectMenuOptionBuilder()
+				.setLabel(category.label)
+				.setDescription(category.tagline.slice(0, 100))
+				.setValue(category.key)
+				.setDefault(selected === category.key);
+
+			const emoji = parseCustomEmoji(category.emoji);
+
+			if (emoji) {
+				option.setEmoji({
+					id: emoji.id,
+					name: emoji.name,
+					animated: emoji.animated,
+				});
 			}
+
 			menu.addOptions(option);
 		}
+
+		console.dir(menu.toJSON(), { depth: null });
 
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 	}
