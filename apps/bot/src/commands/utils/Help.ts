@@ -285,7 +285,7 @@ export default class Help extends Command {
 		// Premium emoji
 		const premiumEmoji = "<:premium:1532972816951935066>";
 
-		const categoryEmoji = cat.emojiId ? `<:help_category:${cat.emojiId}>\u2003\u2003` : "";
+		const categoryEmoji = cat.emojiId ? `<:help_category:${cat.emojiId}> ` : "";
 
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${categoryEmoji}**${cat.label}**`))
@@ -304,9 +304,15 @@ export default class Help extends Command {
 
 				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)!.premium);
 				const cmds = availableCommands
-					.map(name => `**\`${name}\`**${!groupIsPremium && ctx.client.commands.get(name)!.premium ? ` ${premiumEmoji}` : ""}`)
+					.map(name => {
+						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
+						const premiumMarker = !groupIsPremium && commandIsPremium ? `${premiumEmoji} ` : "";
+						const commandToken = commandIsPremium ? `**\`${name}\`**` : `\`${name}\``;
+						return `${premiumMarker}${commandToken}`;
+					})
 					.join(" . ");
 				const heading = groupIsPremium ? `__**${group.heading}**__ ${premiumEmoji}` : `__**${group.heading}**__`;
+
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
@@ -340,6 +346,8 @@ export default class Help extends Command {
 		const featureIdx = feats.findIndex(f => f.key === featureKey);
 		const pageLabel = `${featureIdx + 1}/${feats.length}`;
 
+		const premiumEmoji = "<:premium:1532972816951935066>";
+
 		const container = new ContainerBuilder()
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${feature.label}`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${feature.description}`));
@@ -358,7 +366,12 @@ export default class Help extends Command {
 
 				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)!.premium);
 				const cmds = availableCommands
-					.map(name => `**\`${prefix}${name}\`**${!groupIsPremium && ctx.client.commands.get(name)!.premium ? " `PRO`" : ""}`)
+					.map(name => {
+						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
+						const premiumMarker = !groupIsPremium && commandIsPremium ? `${premiumEmoji} ` : "";
+						const commandToken = commandIsPremium ? `**\`${prefix}${name}\`**` : `\`${prefix}${name}\``;
+						return `${premiumMarker}${commandToken}`;
+					})
 					.join(" , ");
 				const heading = groupIsPremium ? `**${group.heading}** \`PRO\`` : `**${group.heading}**`;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
