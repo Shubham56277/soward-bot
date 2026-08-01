@@ -171,6 +171,13 @@ export function updateGlobalBio(client: Client, bio: string): Promise<void> {
 	});
 }
 
+/** Sets the bot's global Discord username (applies everywhere the bot is installed). */
+export function updateGlobalUsername(client: Client, username: string): Promise<void> {
+	return serializeBrandingChange(async () => {
+		await requireClientUser(client).setUsername(username);
+	});
+}
+
 function requireClientUser(client: Client): NonNullable<Client["user"]> {
 	if (!client.user) throw new Error("The Discord client is not ready");
 	return client.user;

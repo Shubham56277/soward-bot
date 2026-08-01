@@ -29,11 +29,11 @@ function sanitizeChannelName(input: string): string {
 export default class TicketRename extends Command {
 	constructor() {
 		super({
-			name: "rename",
+			name: "ticketrename",
 			description: {
 				content: "Rename the current ticket channel.",
-				examples: ["rename billing issue", "rename urgent-support"],
-				usage: "rename <new name>",
+				examples: ["ticketrename billing issue", "ticketrename urgent-support"],
+				usage: "ticketrename <new name>",
 			},
 			category: "ticket",
 			cooldown: 5,
@@ -67,7 +67,7 @@ export default class TicketRename extends Command {
 
 		const rawName = args.join(" ").trim();
 		if (!rawName) {
-			return ctx.editOrReply(notice("Rename Ticket", "Please provide a new name. Usage: `rename <new name>`"));
+			return ctx.editOrReply(notice("Rename Ticket", "Please provide a new name. Usage: `ticketrename <new name>`"));
 		}
 
 		const newName = sanitizeChannelName(rawName);
