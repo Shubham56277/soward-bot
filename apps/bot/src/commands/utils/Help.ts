@@ -248,20 +248,9 @@ export default class Help extends Command {
 			)
 			.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription(`${botName} avatar`));
 
-		// Clean centered box — uses simple ASCII for consistent mobile/desktop rendering
-		const word = "S O V E R E I G N";
-		const boxWidth = 30;
-		const padding = Math.floor((boxWidth - word.length) / 2);
-		const padRight = boxWidth - word.length - padding;
-		const top = `┌${"─".repeat(boxWidth)}┐`;
-		const mid = `│${" ".repeat(padding)}${word}${" ".repeat(padRight)}│`;
-		const bottom = `└${"─".repeat(boxWidth)}┘`;
-		const intro = [top, mid, bottom].join("\n");
-
 		const container = new ContainerBuilder()
 			.addSectionComponents(identity)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent("```ansi\n" + intro + "\n```"))
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
 					"\u2003\u2003\u00b7 \u00b7 \u00b7\n" +
