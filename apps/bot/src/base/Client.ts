@@ -177,7 +177,9 @@ export default class BaseClient extends FrameWorkClient {
 
 		for (const dir of commandsPath) {
 			this.logger.debug(`[startup] loadCommands: scanning group ${dir}`);
-			const commandFiles = fs.readdirSync(path.join(process.cwd(), "dist", "commands", dir)).filter((file) => file.endsWith(".js"));
+			const commandFiles = fs
+				.readdirSync(path.join(process.cwd(), "dist", "commands", dir))
+				.filter((file) => file.endsWith(".js") && !file.endsWith(".test.js") && !file.endsWith(".spec.js"));
 
 			for (const file of commandFiles) {
 				this.logger.debug(`[startup] loadCommands: loading ${dir}/${file}`);

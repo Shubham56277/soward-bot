@@ -121,7 +121,9 @@ async function performHotReload(client: BaseClient): Promise<void> {
 			for (const dir of fs.readdirSync(commandsPath)) {
 				const dirPath = path.join(commandsPath, dir);
 				if (!fs.statSync(dirPath).isDirectory()) continue;
-				for (const file of fs.readdirSync(dirPath).filter(f => f.endsWith(".js"))) {
+				for (const file of fs
+					.readdirSync(dirPath)
+					.filter((file) => file.endsWith(".js") && !file.endsWith(".test.js") && !file.endsWith(".spec.js"))) {
 					try {
 						const cmdModule = require(path.join(dirPath, file));
 						const command: CommandOptions = new cmdModule.default(client, file);

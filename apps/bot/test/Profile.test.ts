@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { User } from "discord.js";
-import { buildProfileCard, isOfficialDiscordImageUrl, publicBadgeLabels, sanitizeProfileText } from "./Profile";
+import { buildProfileCard, isOfficialDiscordImageUrl, publicBadgeLabels, sanitizeProfileText } from "../src/commands/botSettings/Profile.ts";
 
 const avatarUrl = "https://cdn.discordapp.com/avatars/123/avatar.webp";
 const bannerUrl = "https://cdn.discordapp.com/banners/123/banner.webp";
