@@ -285,8 +285,10 @@ export default class Help extends Command {
 		// Premium emoji
 		const premiumEmoji = "<:elf_4008:1532801782462414988>";
 
+		const categoryEmoji = cat.emojiId ? `<:help_category:${cat.emojiId}> ` : "";
+
 		const container = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${cat.label}**`))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${categoryEmoji}**${cat.label}**`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`));
 
 		// Show ALL features and their commands on one page
