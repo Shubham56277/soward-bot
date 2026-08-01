@@ -230,6 +230,7 @@ export default class Help extends Command {
 		const identity = new SectionBuilder()
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(`## Hey, I'm ${botName}`),
+				new TextDisplayBuilder().setContent("A celestial companion summoned to rule your Discord realm."),
 				new TextDisplayBuilder().setContent(
 					`-# <a:bsnowflake:1533050645224095774> **My prefix is:** \`${prefix}\`\n` +
 					`-# <a:bsnowflake:1533050645224095774> **Type:** \`${prefix}help <cmd>\`\n` +
@@ -238,27 +239,8 @@ export default class Help extends Command {
 			)
 			.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription(`${botName} avatar`));
 
-		// Clean centered box — uses simple ASCII for consistent mobile/desktop rendering
-		const word = "S O V E R E I G N";
-		const boxWidth = 30;
-		const padding = Math.floor((boxWidth - word.length) / 2);
-		const padRight = boxWidth - word.length - padding;
-		const top = `┌${"─".repeat(boxWidth)}┐`;
-		const mid = `│${" ".repeat(padding)}${word}${" ".repeat(padRight)}│`;
-		const bottom = `└${"─".repeat(boxWidth)}┘`;
-		const intro = [top, mid, bottom].join("\n");
-
 		const container = new ContainerBuilder()
 			.addSectionComponents(identity)
-			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent("```ansi\n" + intro + "\n```"))
-			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					"\u2003\u2003\u00b7 \u00b7 \u00b7\n" +
-					`\u2003**‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ [Elfaria](${(ctx.client.config.links as any).premium ?? ctx.client.config.links.supportServer})** ৻ꪆ\n` +
-					"\u2003‎ ‎ *Powerful. Elegant. All-in-one.*",
-				),
-			)
 			.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(
