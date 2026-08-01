@@ -55,7 +55,8 @@ export default class TestEmoji extends Command {
 			.setValue("settings_test")
 			.setDefault(false);
 
-		option.setEmoji({ id: "1532817505423327312", name: "settings", animated: false });
+		// Bypass .setEmoji() bug — write directly to .data.emoji
+		(option as any).data.emoji = { id: "1532817505423327312", name: "settings", animated: false };
 
 		const option2 = new StringSelectMenuOptionBuilder()
 			.setLabel("Management Test")
@@ -63,7 +64,7 @@ export default class TestEmoji extends Command {
 			.setValue("management_test")
 			.setDefault(false);
 
-		option2.setEmoji({ id: "1532813659905196326", name: "Mangement", animated: false });
+		(option2 as any).data.emoji = { id: "1532813659905196326", name: "Mangement", animated: false };
 
 		const option3 = new StringSelectMenuOptionBuilder()
 			.setLabel("No Emoji")

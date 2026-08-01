@@ -515,17 +515,16 @@ export default class Help extends Command {
 			const emoji = parseCustomEmoji(category.emoji);
 
 			if (emoji) {
-				option.setEmoji({
+				// Bypass .setEmoji() — write directly to .data to avoid validator bug
+				(option as any).data.emoji = {
 					id: emoji.id,
 					name: emoji.name,
 					animated: emoji.animated,
-				});
+				};
 			}
 
 			menu.addOptions(option);
 		}
-
-		console.dir(menu.toJSON(), { depth: null });
 
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 	}
