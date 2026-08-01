@@ -1,6 +1,6 @@
 import { env } from "@repo/env";
-import { relations } from "drizzle-orm";
-import { pgTable, json, text, integer, boolean, timestamp, bigint, jsonb, unique } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { bigint, boolean, check, index, integer, json, jsonb, pgTable, primaryKey, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { AntiNukeChannel, AntiNukeMember, EmbedType, ID, Roles } from "./types";
 
 export const moderationCases = pgTable("moderation_cases", {
@@ -283,6 +283,52 @@ export const userProfiles = pgTable("user_profiles", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const badgeDefinitions = pgTable(
+	"badge_definitions",
+	{
+		key: text("key").primaryKey(),
+		displayName: text("display_name").notNull(),
+		imageUrl: text("image_url"),
+		assetPath: text("asset_path"),
+		description: text("description").notNull(),
+		sortPriority: integer("sort_priority").notNull().default(0),
+		enabled: boolean("enabled").notNull().default(true),
+		type: text("type").notNull().$type<"animated" | "static">(),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		version: integer("version").notNull().default(1),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		check("badge_definitions_key_check", sql`${table.key} ~ '^[a-z0-9]+([a-z0-9_-]*[a-z0-9])?$'`),
+		check("badge_definitions_asset_check", sql`((${table.imageUrl} IS NOT NULL AND ${table.assetPath} IS NULL AND ${table.imageUrl} ~ '^https://') OR (${table.imageUrl} IS NULL AND ${table.assetPath} IS NOT NULL AND ${table.assetPath} ~ '^[A-Za-z0-9_./-]+$' AND ${table.assetPath} !~ '(^|/)\.\.(/|$)' AND ${table.assetPath} !~ '^/'))`),
+		check("badge_definitions_priority_check", sql`${table.sortPriority} >= 0`),
+		check("badge_definitions_type_check", sql`${table.type} IN ('animated', 'static')`),
+		check("badge_definitions_version_check", sql`${table.version} > 0`),
+		index("badge_definitions_active_priority_idx").on(table.enabled, table.sortPriority),
+	],
+);
+
+export const userBadges = pgTable(
+	"user_badges",
+	{
+		userId: text("user_id").notNull().references(() => users.userId, { onDelete: "cascade", onUpdate: "cascade" }),
+		badgeKey: text("badge_key").notNull().references(() => badgeDefinitions.key, { onDelete: "cascade", onUpdate: "cascade" }),
+		grantMetadata: jsonb("grant_metadata").$type<Record<string, unknown>>().notNull().default({}),
+		grantedBy: text("granted_by"),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		version: integer("version").notNull().default(1),
+		grantedAt: timestamp("granted_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		primaryKey({ name: "user_badges_user_id_badge_key_pk", columns: [table.userId, table.badgeKey] }),
+		check("user_badges_version_check", sql`${table.version} > 0`),
+		index("user_badges_user_expiry_idx").on(table.userId, table.expiresAt),
+		index("user_badges_badge_key_idx").on(table.badgeKey),
+	],
+);
 
 export const guildBotSettings = pgTable("guild_bot_settings", {
 	guildId: text("guild_id")

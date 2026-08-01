@@ -16,16 +16,16 @@ import path from "node:path";
 let canvasModule: typeof import("@napi-rs/canvas") | null = null;
 let canvasUnavailable = false;
 
-function getCanvas(): typeof import("@napi-rs/canvas") | null {
+export function getCanvas(): typeof import("@napi-rs/canvas") | null {
 	if (canvasUnavailable) return null;
 	if (canvasModule) return canvasModule;
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		canvasModule = require("@napi-rs/canvas") as typeof import("@napi-rs/canvas");
 
-		// Register fonts only once, right after a successful load
+		// Register fonts only once, right after a successful load.
 		const { GlobalFonts } = canvasModule;
-		const base = path.resolve(__dirname, "..", "..", "..", "fonts");
+		const base = path.resolve(__dirname, "..", "..", "fonts");
 		try { GlobalFonts.registerFromPath(path.join(base, "Poppins-Bold.ttf"),    "Poppins-Bold");    } catch {}
 		try { GlobalFonts.registerFromPath(path.join(base, "Poppins-Regular.ttf"), "Poppins-Regular"); } catch {}
 
