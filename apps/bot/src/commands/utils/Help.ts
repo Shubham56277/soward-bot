@@ -9,6 +9,7 @@ import {
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
+	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder,
 	ThumbnailBuilder,
 	type MessageComponentInteraction,
@@ -28,8 +29,6 @@ import {
 
 const HELP_TIMEOUT_MS = 5 * 60_000;
 
-// ─── Navigation state ─────────────────────────────────────────────────────────
-
 type Level = "home" | "category" | "feature" | "command";
 
 interface NavState {
@@ -41,20 +40,7 @@ interface NavState {
 	history: Array<Pick<NavState, "level" | "categoryKey" | "featureKey" | "commandName">>;
 }
 
-// ─── Emoji helper ────────────────────────────────────────────────────────────
-
-/**
- * Parse a Discord custom emoji string into the format required by select menu options.
- * Accepts: <:name:id> or <a:name:id>
- * For application emojis, only the `id` is required — name is optional.
- * Returns: { id, name, animated } or undefined if parsing fails.
- */
-function parseCustomEmoji(emojiStr: string | undefined): { id: string; name: string; animated: boolean } | undefined {
-	if (!emojiStr) return undefined;
-	const match = emojiStr.match(/<(a)?:(\w+):(\d+)>/);
-	if (!match) return undefined;
-	return { id: match[3]!, name: match[2]!, animated: match[1] === "a" };
-}
+// ─── Navigation state ─────────────────────────────────────────────────────────
 
 export default class Help extends Command {
 	public constructor() {
@@ -300,7 +286,7 @@ export default class Help extends Command {
 		const premiumEmoji = "<:elf_4008:1532801782462414988>";
 
 		const container = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${cat.emoji}  **${cat.label}**`))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${cat.label}**`))
 			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${cat.tagline}`));
 
 		// Show ALL features and their commands on one page
@@ -499,29 +485,28 @@ export default class Help extends Command {
 	}
 
 	private categorySelect(selected: string | null, disabled: boolean): ActionRowBuilder<StringSelectMenuBuilder> {
-		// Build options as raw API objects, then construct the menu from them directly
-		// This bypasses StringSelectMenuOptionBuilder entirely since setEmoji/data.emoji
-		// are being stripped by the builders on this server's runtime
+		const menu = new StringSelectMenuBuilder()
+			.setCustomId("help_category_select")
+			.setPlaceholder("↝ Please select a module.")
+			.setMinValues(1)
+			.setMaxValues(1)
+			.setDisabled(disabled);
+
 		const options = HELP_CATEGORIES.map(category => {
-			const emoji = parseCustomEmoji(category.emoji);
-			const opt: Record<string, any> = {
-				label: category.label,
-				description: category.tagline.slice(0, 100),
-				value: category.key,
-				default: selected === category.key,
-			};
-			if (emoji) {
-				opt.emoji = { id: emoji.id, name: emoji.name, animated: emoji.animated };
+			const option = new StringSelectMenuOptionBuilder()
+				.setLabel(category.label)
+				.setDescription(category.tagline.slice(0, 100))
+				.setValue(category.key)
+				.setDefault(selected === category.key);
+
+			if (category.emojiId) {
+				option.setEmoji(category.emojiId);
 			}
-			return opt;
+
+			return option;
 		});
 
-		const menu = new StringSelectMenuBuilder({
-			custom_id: "help_category_select",
-			placeholder: "↝ Please select a module.",
-			disabled,
-			options: options as any,
-		});
+		menu.addOptions(...options);
 
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 	}
