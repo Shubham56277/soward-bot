@@ -13,7 +13,6 @@ import { Redis } from "ioredis";
 import { Services } from "../service";
 import { ButtonOptions } from "../abstract/Button";
 import { MenuOptions } from "../abstract/Menu";
-import { installUiPolicy } from "../utils/uiPolicy";
 import { createHash } from "node:crypto";
 import { AiService } from "../service/aiService";
 import { KnowledgeBase } from "../service/knowledgeBase";
@@ -54,7 +53,6 @@ export default class BaseClient extends FrameWorkClient {
 	private body: ApplicationCommandDataResolvable[] = [];
 	constructor() {
 		console.log("[startup][BaseClient] constructor begin");
-		installUiPolicy();
 		super({
 			intents: 53608447,
 			shards: getInfo().SHARD_LIST,
