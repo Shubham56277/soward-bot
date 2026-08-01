@@ -10,12 +10,22 @@ const MAX_BYTES = 4 * 1024 * 1024;
 const TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 2;
 const CACHE_TTL_MS = 2 * 60_000;
+const NEGATIVE_CACHE_TTL_MS = 7_500;
+const CACHE_MAX_BYTES = 32 * 1024 * 1024;
 const CACHE_LIMIT = 128;
 const DISCORD_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-type CacheEntry = { expiresAt: number; value: Promise<Buffer | null> };
+type CacheEntry = { expiresAt: number; value: Promise<Buffer | null>; bytes: number; settled: boolean };
 export type ProfileAssetSource = string | Buffer | Uint8Array | null | undefined;
+
+export interface ProfileAssetCacheOptions {
+	maxBytes?: number;
+	maxEntries?: number;
+	successTtlMs?: number;
+	negativeTtlMs?: number;
+	now?: () => number;
+}
 
 function isImageBuffer(buffer: Buffer): boolean {
 	if (buffer.length < 12) return false;
@@ -52,9 +62,20 @@ export function isAnimatedDiscordAsset(value: string | null | undefined): boolea
 export class ProfileAssetLoader {
 	private readonly cache = new Map<string, CacheEntry>();
 	private readonly imagesRoot: string;
+	private readonly maxCacheBytes: number;
+	private readonly maxCacheEntries: number;
+	private readonly successTtlMs: number;
+	private readonly negativeTtlMs: number;
+	private readonly now: () => number;
+	private cacheBytes = 0;
 
-	public constructor(imagesRoot = path.resolve(__dirname, "..", "..", "..", "images")) {
+	public constructor(imagesRoot = path.resolve(__dirname, "..", "..", "..", "images"), options: ProfileAssetCacheOptions = {}) {
 		this.imagesRoot = imagesRoot;
+		this.maxCacheBytes = Math.max(1, Math.min(options.maxBytes ?? CACHE_MAX_BYTES, 64 * 1024 * 1024));
+		this.maxCacheEntries = Math.max(1, Math.min(options.maxEntries ?? CACHE_LIMIT, 256));
+		this.successTtlMs = options.successTtlMs ?? CACHE_TTL_MS;
+		this.negativeTtlMs = options.negativeTtlMs ?? NEGATIVE_CACHE_TTL_MS;
+		this.now = options.now ?? Date.now;
 	}
 
 	public loadDiscord(source: ProfileAssetSource): Promise<Buffer | null> {
@@ -81,6 +102,30 @@ export class ProfileAssetLoader {
 
 	public clear(): void {
 		this.cache.clear();
+		this.cacheBytes = 0;
+	}
+
+	public cacheState(): Readonly<{ entries: number; bytes: number }> {
+		return { entries: this.cache.size, bytes: this.cacheBytes };
+	}
+
+	private removeCacheEntry(key: string, entry: CacheEntry): void {
+		if (this.cache.get(key) !== entry) return;
+		this.cache.delete(key);
+		this.cacheBytes = Math.max(0, this.cacheBytes - entry.bytes);
+	}
+
+	private evict(excludeKey?: string): void {
+		while (this.cache.size > this.maxCacheEntries || this.cacheBytes > this.maxCacheBytes) {
+			// Never evict unresolved work: callers for the same key must retain promise deduplication.
+			const candidate = [...this.cache.entries()].find(([key, entry]) => key !== excludeKey && entry.settled);
+			if (!candidate) break;
+			this.removeCacheEntry(candidate[0], candidate[1]);
+		}
+		const own = excludeKey ? this.cache.get(excludeKey) : undefined;
+		if (own?.settled && (own.bytes > this.maxCacheBytes || this.cache.size > this.maxCacheEntries || this.cacheBytes > this.maxCacheBytes)) {
+			this.removeCacheEntry(excludeKey!, own);
+		}
 	}
 
 	private fromBuffer(value: Uint8Array): Promise<Buffer | null> {
@@ -89,18 +134,29 @@ export class ProfileAssetLoader {
 	}
 
 	private cached(key: string, factory: () => Promise<Buffer | null>): Promise<Buffer | null> {
-		const now = Date.now();
+		const now = this.now();
 		const found = this.cache.get(key);
-		if (found && found.expiresAt > now) return found.value;
-		if (found) this.cache.delete(key);
-		while (this.cache.size >= CACHE_LIMIT) {
-			const oldest = this.cache.keys().next().value as string | undefined;
-			if (!oldest) break;
-			this.cache.delete(oldest);
+		if (found && (!found.settled || found.expiresAt > now)) {
+			this.cache.delete(key);
+			this.cache.set(key, found);
+			return found.value;
 		}
-		const value = factory().catch(() => null);
-		this.cache.set(key, { expiresAt: now + CACHE_TTL_MS, value });
-		return value;
+		if (found) this.removeCacheEntry(key, found);
+		const entry: CacheEntry = { expiresAt: Number.POSITIVE_INFINITY, value: Promise.resolve(null), bytes: 0, settled: false };
+		entry.value = factory()
+			.catch(() => null)
+			.then((result) => {
+				if (this.cache.get(key) !== entry) return result;
+				entry.settled = true;
+				entry.expiresAt = this.now() + (result ? this.successTtlMs : this.negativeTtlMs);
+				entry.bytes = result?.length ?? 0;
+				this.cacheBytes += entry.bytes;
+				this.evict(key);
+				return result;
+			});
+		this.cache.set(key, entry);
+		this.evict(key);
+		return entry.value;
 	}
 
 	private async resolvePublicHost(url: URL): Promise<Array<{ address: string; family: number }> | null> {

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Premium, UserProfile } from "@repo/db";
 import {
 	ActionRowBuilder,
@@ -14,6 +15,7 @@ import Context from "../../lib/Context";
 import { mapOfficialProfileBadges } from "../../services/profile/OfficialProfileBadges";
 import { profileBadgeService } from "../../services/profile/ProfileBadgeService";
 import { profileAttachmentName, renderProfileCard } from "../../services/profile/ProfileCardRenderer";
+import { acquireProfileAnimationLease } from "../../services/profile/ProfileAnimationLease";
 import { isAnimatedDiscordAsset, isOfficialDiscordAssetUrl } from "../../services/profile/ProfileAssetLoader";
 import { SETTINGS_FLAGS, settingsFailure, settingsPanel } from "../../utils/botSettingsUi";
 
@@ -102,6 +104,7 @@ export default class Profile extends Command {
 				bannerAnimated,
 				profileVersion: profile?.updatedAt ?? 0,
 				badgeVersion: badgeView?.versionToken ?? "none",
+				acquireAnimationLease: () => acquireProfileAnimationLease(ctx.client.redis, randomUUID()),
 			});
 			if (!image) {
 				return this.notice(ctx, "Profile unavailable", "The profile image renderer is temporarily unavailable. Please try again later.");

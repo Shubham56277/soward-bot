@@ -2,15 +2,16 @@ import { createHash } from "node:crypto";
 import type { BadgeAsset, UserProfileData } from "@repo/db";
 import type { User } from "discord.js";
 import { getCanvas } from "../../utils/canvas";
-import { composeAnimatedProfile } from "./ProfileAnimationCodec";
+import { composeAnimatedProfile, type AcquireAnimationLease } from "./ProfileAnimationCodec";
 import { layoutOfficialBadges, officialBadgeVersion, type OfficialProfileBadge } from "./OfficialProfileBadges";
 import { ProfileAssetLoader, profileAssetLoader, type ProfileAssetSource } from "./ProfileAssetLoader";
 import type { ProfileBadgeEntry, ProfileBadgeView } from "./ProfileBadgeService";
 
 const OUTPUT_LIMIT = Math.floor(7.5 * 1024 * 1024);
 const CACHE_TTL_MS = 90_000;
-const CACHE_MAX_BYTES = 48 * 1024 * 1024;
-const OUTPUT_POLICY_VERSION = "profile-card-v3";
+const CACHE_MAX_BYTES = 24 * 1024 * 1024;
+const TRANSIENT_FALLBACK_TTL_MS = 7_500;
+export const OUTPUT_POLICY_VERSION = "profile-card-v4-raw-rgba";
 const FALLBACK_BIO = "No bio set — a quiet story waiting to be written.";
 
 type BadgeEntries = { entries: ProfileBadgeEntry[]; overflow: number; version: string };
@@ -19,6 +20,12 @@ type RenderCacheEntry = { expiresAt: number; output: ProfileCardRenderOutput; by
 export interface ProfileCardRenderOutput {
 	buffer: Buffer;
 	format: "png" | "gif";
+	/** Internal cache hint used for transient safe-PNG fallbacks. */
+	cacheTtlMs?: number;
+}
+
+export function profileFallbackCacheTtl(transient: boolean): number {
+	return transient ? TRANSIENT_FALLBACK_TTL_MS : CACHE_TTL_MS;
 }
 
 export interface ProfileCardRenderInput {
@@ -36,6 +43,8 @@ export interface ProfileCardRenderInput {
 	bannerAnimated?: boolean;
 	profileVersion?: string | number | Date | null;
 	badgeVersion?: string | number | null;
+	/** Optional deployment-wide slot acquisition. Deliberately excluded from cache identity. */
+	acquireAnimationLease?: AcquireAnimationLease;
 }
 export function sanitizeProfileText(value: unknown, maxLength = 80): string {
 	const clean = String(value ?? "")
@@ -204,7 +213,12 @@ export class ProfileCardRenderer {
 			const oldest = this.cache.get(oldestKey);
 			if (oldest) this.removeCacheEntry(oldestKey, oldest);
 		}
-		this.cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, output, bytes: output.buffer.length, userId });
+		this.cache.set(key, {
+			expiresAt: Date.now() + (output.cacheTtlMs ?? CACHE_TTL_MS),
+			output,
+			bytes: output.buffer.length,
+			userId,
+		});
 		this.cacheBytes += output.buffer.length;
 	}
 	private async renderUncached(input: ProfileCardRenderInput, badges: BadgeEntries): Promise<ProfileCardRenderOutput | null> {
@@ -221,28 +235,37 @@ export class ProfileCardRenderer {
 			if (!buffer) return null;
 			try { return await canvasApi.loadImage(buffer); } catch { return null; }
 		};
-		const badgeImages = await Promise.all(badgeBuffers.map(load));
+		// Static counterparts and badges are decoded once and reused for every animation tick.
+		const [staticAvatar, staticBanner, badgeImages] = await Promise.all([
+			load(avatarBuffer), load(bannerBuffer), Promise.all(badgeBuffers.map(load)),
+		]);
 		const animated = await composeAnimatedProfile({
 			avatar: avatarBuffer,
 			banner: bannerBuffer,
 			avatarAnimated: Boolean(input.avatarAnimated),
 			bannerAnimated: Boolean(input.bannerAnimated),
 		}, async (avatarFrame, bannerFrame, width, height) => {
-			const [avatar, banner] = await Promise.all([load(avatarFrame), load(bannerFrame)]);
-			return this.paint(canvasApi, input, badges, avatar, banner, badgeImages, width, height);
-		}, OUTPUT_LIMIT);
-		if (animated) return { buffer: animated, format: "gif" };
+			const [avatar, banner] = await Promise.all([
+				input.avatarAnimated ? load(avatarFrame) : Promise.resolve(staticAvatar),
+				input.bannerAnimated ? load(bannerFrame) : Promise.resolve(staticBanner),
+			]);
+			return this.paint(canvasApi, input, badges, avatar, banner, badgeImages, width, height, true);
+		}, OUTPUT_LIMIT, input.acquireAnimationLease);
+		if (animated.ok) return { buffer: animated.buffer, format: "gif" };
 
-		const [avatar, banner] = await Promise.all([load(avatarBuffer), load(bannerBuffer)]);
-		let output = await this.paint(canvasApi, input, badges, avatar, banner, badgeImages, 1200, 675);
-		if (output.length > OUTPUT_LIMIT) output = await this.paint(canvasApi, input, badges, avatar, banner, badgeImages, 960, 540);
-		return output.length <= OUTPUT_LIMIT ? { buffer: output, format: "png" } : null;
+		let output = await this.paint(canvasApi, input, badges, staticAvatar, staticBanner, badgeImages, 1200, 675, false);
+		if (output.length > OUTPUT_LIMIT) {
+			output = await this.paint(canvasApi, input, badges, staticAvatar, staticBanner, badgeImages, 960, 540, false);
+		}
+		return output.length <= OUTPUT_LIMIT
+			? { buffer: output, format: "png", cacheTtlMs: profileFallbackCacheTtl(animated.transient) }
+			: null;
 	}
 
 	private async paint(
 		canvasApi: typeof import("@napi-rs/canvas"), input: ProfileCardRenderInput,
 		badges: BadgeEntries, avatar: any, banner: any, badgeImages: any[],
-		width: number, height: number,
+		width: number, height: number, rawRgba: boolean,
 	): Promise<Buffer> {
 		const canvas = canvasApi.createCanvas(width, height);
 		const ctx: any = canvas.getContext("2d");
@@ -254,7 +277,10 @@ export class ProfileCardRenderer {
 		this.drawAvatar(ctx, avatar, input.user);
 		this.drawIdentity(ctx, input);
 		this.drawDetails(ctx, input, badges, badgeImages);
-		return canvas.encode("png");
+		if (!rawRgba) return canvas.encode("png");
+		ctx.resetTransform();
+		const rgba = ctx.getImageData(0, 0, width, height).data;
+		return Buffer.from(rgba.buffer, rgba.byteOffset, rgba.byteLength);
 	}
 	private drawBackground(ctx: any, banner: any): void {
 		const base = ctx.createLinearGradient(0, 0, 1200, 675);

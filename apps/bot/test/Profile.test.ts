@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it, mock } from "node:test";
 import { ProfileBadges, UserProfile, type UserProfileData } from "@repo/db";
 import { ProfileBadgeService } from "../src/services/profile/ProfileBadgeService.ts";
 import {
 	buildProfileRenderCacheKey,
+	OUTPUT_POLICY_VERSION,
 	preferredProfileFormat,
 	profileAttachmentName,
 	profileBioDigest,
+	profileFallbackCacheTtl,
 	ProfileCardRenderer,
 	resolveProfileBio,
 	sanitizeProfileText,
 	type ProfileCardRenderInput,
 } from "../src/services/profile/ProfileCardRenderer.ts";
 import { isAnimatedDiscordAsset, isOfficialDiscordAssetUrl, ProfileAssetLoader } from "../src/services/profile/ProfileAssetLoader.ts";
+import { AnimationGate, animationPlans, expectedRgbaBytes, selectTimelineFrameIndex } from "../src/services/profile/ProfileAnimationCodec.ts";
+import { acquireProfileAnimationLease } from "../src/services/profile/ProfileAnimationLease.ts";
 import { layoutOfficialBadges, mapOfficialProfileBadges } from "../src/services/profile/OfficialProfileBadges.ts";
 
 describe("profile text safety", () => {
@@ -154,5 +161,126 @@ describe("profile attachment format", () => {
 		assert.equal(preferredProfileFormat(false, true), "gif");
 		assert.equal(profileAttachmentName("123", "png"), "elfaria-profile-123.png");
 		assert.equal(profileAttachmentName("123", "gif"), "elfaria-profile-123.gif");
+	});
+});
+
+
+describe("profile animation adaptive plans", () => {
+	it("uses the approved avatar, banner, and retry quality ladder", () => {
+		const avatar = animationPlans(false);
+		assert.deepEqual(avatar[0], { width: 960, height: 540, fps: 15, duration: 3, frames: 45, colors: 128 });
+		assert.deepEqual(avatar[1], { width: 800, height: 450, fps: 10, duration: 2.4, frames: 24, colors: 96 });
+		const banner = animationPlans(true);
+		assert.deepEqual(banner[0], { width: 900, height: 506, fps: 12, duration: 3, frames: 36, colors: 128 });
+		assert.equal(banner[1], avatar[1]);
+	});
+
+	it("enforces the RGBA contract and selects nearest retry samples from the primary timeline", () => {
+		assert.equal(expectedRgbaBytes(960, 540), 960 * 540 * 4);
+		assert.deepEqual(
+			Array.from({ length: 4 }, (_, index) => selectTimelineFrameIndex(index, 10, 15, 45)),
+			[0, 2, 3, 5],
+		);
+		assert.equal(selectTimelineFrameIndex(23, 10, 15, 45), 35);
+	});
+});
+
+describe("finite profile animation gate", () => {
+	it("bounds active and queued work and makes release idempotent", async () => {
+		const gate = new AnimationGate(1, 1, 100);
+		const first = await gate.acquire();
+		assert.ok(first);
+		const secondPending = gate.acquire();
+		assert.equal(await gate.acquire(), null);
+		assert.deepEqual(gate.snapshot(), { active: 1, queued: 1 });
+		first();
+		const second = await secondPending;
+		assert.ok(second);
+		first();
+		assert.deepEqual(gate.snapshot(), { active: 1, queued: 0 });
+		second();
+		second();
+		assert.deepEqual(gate.snapshot(), { active: 0, queued: 0 });
+	});
+
+	it("times out queued work without leaking capacity", async () => {
+		const gate = new AnimationGate(1, 1, 10);
+		const release = await gate.acquire();
+		assert.ok(release);
+		assert.equal(await gate.acquire(), null);
+		assert.deepEqual(gate.snapshot(), { active: 1, queued: 0 });
+		release();
+		assert.deepEqual(gate.snapshot(), { active: 0, queued: 0 });
+	});
+});
+
+class FakeRedis {
+	public readonly values = new Map<string, string>();
+	public async set(key: string, value: string): Promise<"OK" | null> {
+		if (this.values.has(key)) return null;
+		this.values.set(key, value);
+		return "OK";
+	}
+	public async eval(_script: string, _keys: number, key: string, token: string): Promise<number> {
+		if (this.values.get(key) !== token) return 0;
+		this.values.delete(key);
+		return 1;
+	}
+}
+
+describe("distributed profile animation slots", () => {
+	it("uses two slots and releases only the matching token", async () => {
+		const redis = new FakeRedis();
+		const first = await acquireProfileAnimationLease(redis as any, "request-a");
+		const second = await acquireProfileAnimationLease(redis as any, "request-b");
+		assert.ok(first);
+		assert.ok(second);
+		assert.equal(await acquireProfileAnimationLease(redis as any, "request-c"), null);
+		redis.values.set("profile:animation:slot:0", "replacement-token");
+		await first();
+		assert.equal(redis.values.get("profile:animation:slot:0"), "replacement-token");
+		await second();
+		assert.equal(redis.values.has("profile:animation:slot:1"), false);
+	});
+});
+
+describe("profile animation fallback cache policy", () => {
+	it("uses a new output policy and short-lived transient PNG fallback caching", () => {
+		assert.equal(OUTPUT_POLICY_VERSION, "profile-card-v4-raw-rgba");
+		assert.equal(profileFallbackCacheTtl(true), 7_500);
+		assert.equal(profileFallbackCacheTtl(false), 90_000);
+		assert.match(buildProfileRenderCacheKey(renderInput("versioned")), /^profile-card-v4-raw-rgba\|/);
+	});
+});
+
+describe("profile asset byte LRU", () => {
+	it("accounts bytes, evicts by byte limit, and gives failures a short negative TTL", async () => {
+		const root = await mkdtemp(path.join(tmpdir(), "profile-assets-test-"));
+		let now = 1_000;
+		const image = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(8)]);
+		try {
+			await writeFile(path.join(root, "one.png"), image);
+			await writeFile(path.join(root, "two.png"), image);
+			const loader = new ProfileAssetLoader(root, {
+				maxBytes: image.length + 1,
+				maxEntries: 4,
+				successTtlMs: 1_000,
+				negativeTtlMs: 10,
+				now: () => now,
+			});
+			assert.deepEqual(await loader.loadBadge({ kind: "local", path: "one.png" }), image);
+			assert.deepEqual(await loader.loadBadge({ kind: "local", path: "two.png" }), image);
+			assert.deepEqual(loader.cacheState(), { entries: 1, bytes: image.length });
+			assert.equal(await loader.loadBadge({ kind: "local", path: "later.png" }), null);
+			await writeFile(path.join(root, "later.png"), image);
+			assert.equal(await loader.loadBadge({ kind: "local", path: "later.png" }), null);
+			now += 11;
+			assert.deepEqual(await loader.loadBadge({ kind: "local", path: "later.png" }), image);
+			assert.ok(loader.cacheState().bytes <= image.length + 1);
+			loader.clear();
+			assert.deepEqual(loader.cacheState(), { entries: 0, bytes: 0 });
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 });
