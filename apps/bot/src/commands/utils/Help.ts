@@ -9,6 +9,7 @@ import {
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
+	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder,
 	ThumbnailBuilder,
 	type MessageComponentInteraction,
@@ -505,16 +506,27 @@ export default class Help extends Command {
 			.setDisabled(disabled);
 
 		for (const c of HELP_CATEGORIES) {
-			const emoji = parseCustomEmoji(c.emoji);
-			const opt: any = {
-				label: c.label,
-				description: c.tagline.slice(0, 100),
-				value: c.key,
-				default: selected === c.key,
-			};
-			// For application emojis, pass only the id to avoid name mismatch issues
-			if (emoji) opt.emoji = { id: emoji.id, animated: emoji.animated };
-			menu.addOptions(opt);
+			const option = new StringSelectMenuOptionBuilder()
+				.setLabel(c.label)
+				.setDescription(c.tagline.slice(0, 100))
+				.setValue(c.key)
+				.setDefault(selected === c.key);
+
+			// Parse custom emoji and pass as object to setEmoji
+			const parsed = parseCustomEmoji(c.emoji);
+			if (parsed) {
+				option.setEmoji({ id: parsed.id, name: parsed.name, animated: parsed.animated });
+			}
+
+			menu.addOptions(option);
+		}
+
+		// Debug: log serialized select menu to verify emoji in payload
+		try {
+			const serialized = menu.toJSON();
+			console.log("[Help] Select menu emoji debug:", JSON.stringify(serialized.options?.map((o: any) => ({ label: o.label, emoji: o.emoji }))));
+		} catch (e) {
+			console.error("[Help] Serialization debug error:", e);
 		}
 
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
