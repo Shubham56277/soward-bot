@@ -33,7 +33,7 @@ export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "bot-settings",
 		label: "Bot Settings",
-		emojiId: "1532834320132214878",
+		emojiId: "1533007834319421532",
 		tagline: "Personalization, branding, and command prefixes.",
 		features: [
 			{
@@ -51,7 +51,7 @@ export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "management",
 		label: "Management",
-		emojiId: "1532834395776483538",
+		emojiId: "1533007963890126849",
 		tagline: "Moderate, protect, and configure your server.",
 		features: [
 			{
@@ -71,7 +71,7 @@ export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "community",
 		label: "Community",
-		emojiId: "1532834453003571210",
+		emojiId: "1533007999663341618",
 		tagline: "Engage, reward, and grow your members.",
 		features: [
 			{
@@ -90,7 +90,7 @@ export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "entertainment",
 		label: "Entertainment",
-		emojiId: "1532834484800585879",
+		emojiId: "1533009553917214780",
 		tagline: "Music, voice, and fun for everyone.",
 		features: [
 			{
@@ -109,7 +109,7 @@ export const HELP_CATEGORIES: Category[] = [
 	{
 		key: "utilities",
 		label: "Utilities",
-		emojiId: "1532834496586453173",
+		emojiId: "1533009101586563155",
 		tagline: "Information, tools, and server assets.",
 		features: [
 			{

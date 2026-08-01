@@ -141,18 +141,18 @@ export default class Voicemaster extends Command {
 				const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(IncreaseLimitButton, DecreaseLimitButton, MuteButton, UnmuteButton);
 
 				const controlGuide = [
-					"<:lock:1532994741594099784> `Lock` — Prevent members from joining.",
-					"<:unlock:1532994676230193252> `Unlock` — Allow members to join.",
-					"<:visibilityoff:1532994897638854827> `Hide` — Hide the channel from members.",
-					"<:visibility:1532995043688976567> `Unhide` — Make the channel visible.",
-					"<:info:1532995283867402280> `Info` — View channel information.",
-					"<:disconnect:1532995923829850172> `Disconnect` — Remove a member from the channel.",
-					"<:claim:1532996165786669096> `Claim` — Claim an ownerless channel.",
-					"<:activity:1532997243768930304> `Activity` — Start a voice channel activity.",
-					"<:add:1532997686041514127> `Increase` — Raise the channel user limit.",
-					"<:remove:1532997616550412390> `Decrease` — Lower the channel user limit.",
-					"<:mic_off:1533000723585826816> `Mute` — Mute a member in the channel.",
-					"<:mic_on:1533000700500381779> `Unmute` — Unmute a member in the channel.",
+					"-# <:lock:1532994741594099784> `Lock` — Prevent members from joining.",
+					"-# <:unlock:1532994676230193252> `Unlock` — Allow members to join.",
+					"-# <:visibilityoff:1532994897638854827> `Hide` — Hide the channel from members.",
+					"-# <:visibility:1532995043688976567> `Unhide` — Make the channel visible.",
+					"-# <:info:1532995283867402280> `Info` — View channel information.",
+					"-# <:disconnect:1532995923829850172> `Disconnect` — Remove a member from the channel.",
+					"-# <:claim:1532996165786669096> `Claim` — Claim an ownerless channel.",
+					"-# <:activity:1532997243768930304> `Activity` — Start a voice channel activity.",
+					"-# <:add:1532997686041514127> `Increase` — Raise the channel user limit.",
+					"-# <:remove:1532997616550412390> `Decrease` — Lower the channel user limit.",
+					"-# <:mic_off:1533000723585826816> `Mute` — Mute a member in the channel.",
+					"-# <:mic_on:1533000700500381779> `Unmute` — Unmute a member in the channel.",
 				].join("\n");
 
 				const container = new ContainerBuilder()
