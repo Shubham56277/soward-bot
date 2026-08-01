@@ -9,7 +9,6 @@ import {
 	SeparatorBuilder,
 	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
-	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder,
 	ThumbnailBuilder,
 	type MessageComponentInteraction,
@@ -500,31 +499,29 @@ export default class Help extends Command {
 	}
 
 	private categorySelect(selected: string | null, disabled: boolean): ActionRowBuilder<StringSelectMenuBuilder> {
-		const menu = new StringSelectMenuBuilder()
-			.setCustomId("help_category_select")
-			.setPlaceholder("↝ Please select a module.")
-			.setDisabled(disabled);
-
-		for (const category of HELP_CATEGORIES) {
-			const option = new StringSelectMenuOptionBuilder()
-				.setLabel(category.label)
-				.setDescription(category.tagline.slice(0, 100))
-				.setValue(category.key)
-				.setDefault(selected === category.key);
-
+		// Build options as raw API objects, then construct the menu from them directly
+		// This bypasses StringSelectMenuOptionBuilder entirely since setEmoji/data.emoji
+		// are being stripped by the builders on this server's runtime
+		const options = HELP_CATEGORIES.map(category => {
 			const emoji = parseCustomEmoji(category.emoji);
-
+			const opt: Record<string, any> = {
+				label: category.label,
+				description: category.tagline.slice(0, 100),
+				value: category.key,
+				default: selected === category.key,
+			};
 			if (emoji) {
-				// Bypass .setEmoji() — write directly to .data to avoid validator bug
-				(option as any).data.emoji = {
-					id: emoji.id,
-					name: emoji.name,
-					animated: emoji.animated,
-				};
+				opt.emoji = { id: emoji.id, name: emoji.name, animated: emoji.animated };
 			}
+			return opt;
+		});
 
-			menu.addOptions(option);
-		}
+		const menu = new StringSelectMenuBuilder({
+			custom_id: "help_category_select",
+			placeholder: "↝ Please select a module.",
+			disabled,
+			options: options as any,
+		});
 
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 	}

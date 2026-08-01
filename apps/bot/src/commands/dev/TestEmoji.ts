@@ -33,51 +33,68 @@ export default class TestEmoji extends Command {
 	public async run(ctx: Context): Promise<any> {
 		const channel = ctx.message?.channel as any;
 
-		// Test emoji access in plain text
-		await channel.send(
-			"**Emoji Access Test (Application Emojis):**\n" +
-			"settings: <:settings:1532834320132214878>\n" +
-			"management: <:management:1532834395776483538>\n" +
-			"community: <:community:1532834453003571210>\n" +
-			"entertainment: <:entertainment:1532834484800585879>\n" +
-			"utility: <:utility:1532834496586453173>"
-		);
+		// DIAGNOSTIC: Check what setEmoji actually does on this runtime
+		const testOpt = new StringSelectMenuOptionBuilder()
+			.setLabel("Diagnostic")
+			.setValue("diag")
+			.setDefault(false);
 
-		// Build select menu using application emoji IDs
+		// Log data BEFORE setEmoji
+		console.log("[TestEmoji] data BEFORE setEmoji:", JSON.stringify((testOpt as any).data));
+
+		testOpt.setEmoji({ id: "1532834320132214878", name: "settings", animated: false });
+
+		// Log data AFTER setEmoji
+		console.log("[TestEmoji] data AFTER setEmoji:", JSON.stringify((testOpt as any).data));
+
+		// Log toJSON
+		console.log("[TestEmoji] toJSON:", JSON.stringify(testOpt.toJSON()));
+
+		// Also check: what does the builders version say?
+		try {
+			const buildersPath = require.resolve("@discordjs/builders/package.json");
+			const buildersPkg = require(buildersPath);
+			console.log("[TestEmoji] @discordjs/builders version:", buildersPkg.version);
+		} catch (e) {
+			console.log("[TestEmoji] Could not resolve builders version:", e);
+		}
+
+		try {
+			const djsPath = require.resolve("discord.js/package.json");
+			const djsPkg = require(djsPath);
+			console.log("[TestEmoji] discord.js version:", djsPkg.version);
+		} catch (e) {
+			console.log("[TestEmoji] Could not resolve djs version:", e);
+		}
+
+		// Now build and send the menu
 		const menu = new StringSelectMenuBuilder()
 			.setCustomId("test_emoji_select")
-			.setPlaceholder("Test emoji rendering");
+			.setPlaceholder("Test emoji rendering")
+			.setMinValues(1)
+			.setMaxValues(1);
 
-		const option1 = new StringSelectMenuOptionBuilder()
-			.setLabel("Settings")
-			.setDescription("Application emoji test")
-			.setValue("settings")
+		const opt1 = new StringSelectMenuOptionBuilder()
+			.setLabel("With Emoji")
+			.setDescription("Should have settings emoji")
+			.setValue("with_emoji")
 			.setDefault(false);
-		// Write directly to .data.emoji to bypass potential setEmoji() issue
-		(option1 as any).data.emoji = { id: "1532834320132214878", name: "settings", animated: false };
+		opt1.setEmoji({ id: "1532834320132214878", name: "settings", animated: false });
 
-		const option2 = new StringSelectMenuOptionBuilder()
-			.setLabel("Management")
-			.setDescription("Application emoji test")
-			.setValue("management")
-			.setDefault(false);
-		(option2 as any).data.emoji = { id: "1532834395776483538", name: "management", animated: false };
-
-		const option3 = new StringSelectMenuOptionBuilder()
+		const opt2 = new StringSelectMenuOptionBuilder()
 			.setLabel("No Emoji")
-			.setDescription("Control option")
-			.setValue("none")
+			.setDescription("Control - no emoji")
+			.setValue("no_emoji")
 			.setDefault(false);
 
-		menu.addOptions(option1, option2, option3);
+		menu.addOptions(opt1, opt2);
 
-		// Log payload
-		console.dir(menu.toJSON(), { depth: null });
+		console.log("[TestEmoji] FULL menu.toJSON():", JSON.stringify(menu.toJSON(), null, 2));
 
 		const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 
 		await channel.send({
-			content: "**Select Menu Test (Application Emojis + direct .data.emoji):**",
+			content: "**Emoji Diagnostic Test**\nCheck PM2 logs for data BEFORE/AFTER setEmoji",
 			components: [row],
 		});
 
