@@ -231,9 +231,9 @@ export default class Help extends Command {
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(`## Hey, I'm ${botName}`),
 				new TextDisplayBuilder().setContent(
-					`-# <a:dot:1532821300773388299> **My prefix is :** \`${prefix}\`\n` +
-					`-# <a:dot:1532821300773388299> **Type** : \`${prefix}help <cmd>\`\n` +
-					`-# <a:dot:1532821300773388299> **Total commands** : \`${totalCommands}\``,
+					`-# <a:bsnowflake:1533050645224095774> **My prefix is:** \`${prefix}\`\n` +
+					`-# <a:bsnowflake:1533050645224095774> **Type:** \`${prefix}help <cmd>\`\n` +
+					`-# <a:bsnowflake:1533050645224095774> **Total commands:** **${totalCommands}**`
 				),
 			)
 			.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription(`${botName} avatar`));
@@ -300,12 +300,12 @@ export default class Help extends Command {
 					.map(name => {
 						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
 						const premiumMarker = commandIsPremium ? "❄ " : "";
-						return `${premiumMarker}\`${name}\``;
+						return `**\`${premiumMarker}${name}\`**`;
 					})
 					.join(" . ");
 				const heading = `__**${group.heading}**__`;
 
-				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n-# ${cmds}`));
+				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
 
@@ -356,11 +356,11 @@ export default class Help extends Command {
 					.map(name => {
 						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
 						const premiumMarker = commandIsPremium ? "❄ " : "";
-						return `${premiumMarker}\`${prefix}${name}\``;
+						return `**\`${premiumMarker}${prefix}${name}\`**`;
 					})
 					.join(" . ");
 				const heading = `**${group.heading}**`;
-				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n-# ${cmds}`));
+				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
 
