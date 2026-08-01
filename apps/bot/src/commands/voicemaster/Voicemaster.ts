@@ -122,9 +122,12 @@ export default class Voicemaster extends Command {
 				const ActivityButton = new ButtonBuilder().setCustomId("voice-activity").setEmoji("1532997243768930304").setStyle(ButtonStyle.Secondary);
 				const IncreaseLimitButton = new ButtonBuilder().setCustomId("voice-increase-limit").setEmoji("1532997686041514127").setStyle(ButtonStyle.Secondary);
 				const DecreaseLimitButton = new ButtonBuilder().setCustomId("voice-decrease-limit").setEmoji("1532997616550412390").setStyle(ButtonStyle.Secondary);
+				const MuteButton = new ButtonBuilder().setCustomId("voice-mute").setEmoji("1533000723585826816").setStyle(ButtonStyle.Secondary);
+				const UnmuteButton = new ButtonBuilder().setCustomId("voice-unmute").setEmoji("1533000700500381779").setStyle(ButtonStyle.Secondary);
 
 				const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(LockButton, UnlockButton, HideButton, UnhideButton, ViewButton);
 				const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(DisconnectButton, ClaimButton, ActivityButton, IncreaseLimitButton, DecreaseLimitButton);
+				const row3 = new ActionRowBuilder<ButtonBuilder>().addComponents(MuteButton, UnmuteButton);
 
 				const vmContent = [
 					`## ${guild.name}`,
@@ -132,9 +135,10 @@ export default class Voicemaster extends Command {
 					"",
 					"<:lock:1532994741594099784> Lock · <:unlock:1532994676230193252> Unlock · <:visibilityoff:1532994897638854827> Hide · <:visibility:1532995043688976567> Unhide · <:info:1532995283867402280> View",
 					"<:disconnect:1532995923829850172> Disconnect · <:claim:1532996165786669096> Claim · <:activity:1532997243768930304> Activity · <:add:1532997686041514127> Increase · <:remove:1532997616550412390> Decrease",
+					"<:mic_off:1533000723585826816> Mute · <:mic_on:1533000700500381779> Unmute",
 				].join("\n");
 
-				await textChannel.send({ content: vmContent, components: [row1, row2], allowedMentions: { parse: [] } });
+				await textChannel.send({ content: vmContent, components: [row1, row2, row3], allowedMentions: { parse: [] } });
 
 				await VoiceCreator.create(guild.id, {
 					voiceChannelId: voiceChannel.id,
