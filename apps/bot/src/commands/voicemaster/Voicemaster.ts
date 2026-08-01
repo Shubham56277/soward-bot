@@ -112,16 +112,16 @@ export default class Voicemaster extends Command {
 					],
 				});
 
-				const LockButton = new ButtonBuilder().setCustomId("voice-lock").setLabel("🔒").setStyle(ButtonStyle.Secondary);
-				const UnlockButton = new ButtonBuilder().setCustomId("voice-unlock").setLabel("🔓").setStyle(ButtonStyle.Secondary);
-				const HideButton = new ButtonBuilder().setCustomId("voice-hide").setLabel("👁️").setStyle(ButtonStyle.Secondary);
-				const UnhideButton = new ButtonBuilder().setCustomId("voice-unhide").setLabel("👀").setStyle(ButtonStyle.Secondary);
-				const ViewButton = new ButtonBuilder().setCustomId("voice-view").setLabel("ℹ️").setStyle(ButtonStyle.Secondary);
-				const DisconnectButton = new ButtonBuilder().setCustomId("voice-disconnect").setLabel("⏏️").setStyle(ButtonStyle.Secondary);
-				const ClaimButton = new ButtonBuilder().setCustomId("voice-claim").setLabel("⭐").setStyle(ButtonStyle.Secondary);
-				const ActivityButton = new ButtonBuilder().setCustomId("voice-activity").setLabel("🎮").setStyle(ButtonStyle.Secondary);
-				const IncreaseLimitButton = new ButtonBuilder().setCustomId("voice-increase-limit").setLabel("➕").setStyle(ButtonStyle.Secondary);
-				const DecreaseLimitButton = new ButtonBuilder().setCustomId("voice-decrease-limit").setLabel("➖").setStyle(ButtonStyle.Secondary);
+				const LockButton = new ButtonBuilder().setCustomId("voice-lock").setEmoji("1532994741594099784").setStyle(ButtonStyle.Secondary);
+				const UnlockButton = new ButtonBuilder().setCustomId("voice-unlock").setEmoji("1532994676230193252").setStyle(ButtonStyle.Secondary);
+				const HideButton = new ButtonBuilder().setCustomId("voice-hide").setEmoji("1532994897638854827").setStyle(ButtonStyle.Secondary);
+				const UnhideButton = new ButtonBuilder().setCustomId("voice-unhide").setEmoji("1532995043688976567").setStyle(ButtonStyle.Secondary);
+				const ViewButton = new ButtonBuilder().setCustomId("voice-view").setEmoji("1532995283867402280").setStyle(ButtonStyle.Secondary);
+				const DisconnectButton = new ButtonBuilder().setCustomId("voice-disconnect").setEmoji("1532995923829850172").setStyle(ButtonStyle.Secondary);
+				const ClaimButton = new ButtonBuilder().setCustomId("voice-claim").setEmoji("1532996165786669096").setStyle(ButtonStyle.Secondary);
+				const ActivityButton = new ButtonBuilder().setCustomId("voice-activity").setEmoji("1532997243768930304").setStyle(ButtonStyle.Secondary);
+				const IncreaseLimitButton = new ButtonBuilder().setCustomId("voice-increase-limit").setEmoji("1532997686041514127").setStyle(ButtonStyle.Secondary);
+				const DecreaseLimitButton = new ButtonBuilder().setCustomId("voice-decrease-limit").setEmoji("1532997616550412390").setStyle(ButtonStyle.Secondary);
 
 				const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(LockButton, UnlockButton, HideButton, UnhideButton, ViewButton);
 				const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(DisconnectButton, ClaimButton, ActivityButton, IncreaseLimitButton, DecreaseLimitButton);
@@ -130,11 +130,11 @@ export default class Voicemaster extends Command {
 					`## ${guild.name}`,
 					"Use the buttons below to control your voice channel.",
 					"",
-					"🔒 Lock · 🔓 Unlock · 👁️ Hide · 👀 Unhide · ℹ️ View",
-					"⏏️ Disconnect · ⭐ Claim · 🎮 Activity · ➕ Increase · ➖ Decrease",
+					"<:lock:1532994741594099784> Lock · <:unlock:1532994676230193252> Unlock · <:visibilityoff:1532994897638854827> Hide · <:visibility:1532995043688976567> Unhide · <:info:1532995283867402280> View",
+					"<:disconnect:1532995923829850172> Disconnect · <:claim:1532996165786669096> Claim · <:activity:1532997243768930304> Activity · <:add:1532997686041514127> Increase · <:remove:1532997616550412390> Decrease",
 				].join("\n");
 
-				await textChannel.send({ content: vmContent, components: [row1, row2] });
+				await textChannel.send({ content: vmContent, components: [row1, row2], allowedMentions: { parse: [] } });
 
 				await VoiceCreator.create(guild.id, {
 					voiceChannelId: voiceChannel.id,
