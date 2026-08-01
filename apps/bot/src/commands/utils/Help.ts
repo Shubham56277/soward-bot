@@ -302,16 +302,14 @@ export default class Help extends Command {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
 				if (availableCommands.length === 0) continue;
 
-				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)!.premium);
 				const cmds = availableCommands
 					.map(name => {
 						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
-						const premiumMarker = !groupIsPremium && commandIsPremium ? `${premiumEmoji} ` : "";
-						const commandToken = commandIsPremium ? `**\`${name}\`**` : `\`${name}\``;
-						return `${premiumMarker}${commandToken}`;
+						const premiumMarker = commandIsPremium ? `${premiumEmoji} ` : "";
+						return `${premiumMarker}**\`${name}\`**`;
 					})
 					.join(" . ");
-				const heading = groupIsPremium ? `__**${group.heading}**__ ${premiumEmoji}` : `__**${group.heading}**__`;
+				const heading = `__**${group.heading}**__`;
 
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
@@ -364,16 +362,14 @@ export default class Help extends Command {
 				const availableCommands = group.commands.filter(name => ctx.client.commands.has(name));
 				if (availableCommands.length === 0) continue;
 
-				const groupIsPremium = feature.premium || group.heading === "Premium" || availableCommands.every(name => ctx.client.commands.get(name)!.premium);
 				const cmds = availableCommands
 					.map(name => {
 						const commandIsPremium = ctx.client.commands.get(name)!.premium === true;
-						const premiumMarker = !groupIsPremium && commandIsPremium ? `${premiumEmoji} ` : "";
-						const commandToken = commandIsPremium ? `**\`${prefix}${name}\`**` : `\`${prefix}${name}\``;
-						return `${premiumMarker}${commandToken}`;
+						const premiumMarker = commandIsPremium ? `${premiumEmoji} ` : "";
+						return `${premiumMarker}**\`${prefix}${name}\`**`;
 					})
 					.join(" , ");
-				const heading = groupIsPremium ? `**${group.heading}** \`PRO\`` : `**${group.heading}**`;
+				const heading = `**${group.heading}**`;
 				container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`${heading}\n${cmds}`));
 			}
 		}
