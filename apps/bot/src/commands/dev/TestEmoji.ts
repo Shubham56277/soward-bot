@@ -36,38 +36,36 @@ export default class TestEmoji extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		// Approach: Build the select menu using RAW API option objects
+		// This bypasses any discord.js builder that might strip emoji
 		const menu = new StringSelectMenuBuilder()
 			.setCustomId("test_emoji_select")
-			.setPlaceholder("Test emoji rendering");
-
-		// Option 1: Static custom emoji (application emoji - settings)
-		const opt1 = new StringSelectMenuOptionBuilder()
-			.setLabel("Static Custom Emoji")
-			.setDescription("Application emoji: settings")
-			.setValue("static_custom")
-			.setEmoji({ id: "1532834320132214878", name: "settings", animated: false });
-
-		// Option 2: Animated custom emoji (dot)
-		const opt2 = new StringSelectMenuOptionBuilder()
-			.setLabel("Animated Custom Emoji")
-			.setDescription("Animated emoji: dot")
-			.setValue("animated_custom")
-			.setEmoji({ id: "1532821300773388299", name: "dot", animated: true });
-
-		// Option 3: Unicode emoji
-		const opt3 = new StringSelectMenuOptionBuilder()
-			.setLabel("Unicode Emoji")
-			.setDescription("Standard unicode emoji")
-			.setValue("unicode")
-			.setEmoji({ name: "⚙️" });
-
-		// Option 4: No emoji
-		const opt4 = new StringSelectMenuOptionBuilder()
-			.setLabel("No Emoji")
-			.setDescription("This option has no emoji")
-			.setValue("none");
-
-		menu.addOptions(opt1, opt2, opt3, opt4);
+			.setPlaceholder("Test emoji rendering")
+			.addOptions(
+				{
+					label: "Static Custom Emoji",
+					description: "Application emoji: settings",
+					value: "static_custom",
+					emoji: { id: "1532834320132214878", name: "settings", animated: false },
+				},
+				{
+					label: "Animated Custom Emoji",
+					description: "Animated emoji: dot",
+					value: "animated_custom",
+					emoji: { id: "1532821300773388299", name: "dot", animated: true },
+				},
+				{
+					label: "Unicode Emoji",
+					description: "Standard unicode emoji",
+					value: "unicode",
+					emoji: { name: "⚙️" },
+				},
+				{
+					label: "No Emoji",
+					description: "This option has no emoji",
+					value: "none",
+				},
+			);
 
 		// Log the serialized payload
 		const serialized = menu.toJSON();
