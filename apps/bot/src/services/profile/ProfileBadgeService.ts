@@ -37,12 +37,12 @@ export class ProfileBadgeService {
 		return this.listDefinitions();
 	}
 
-	public async activeAssigned(userId: string, visibleCap = 5): Promise<ProfileBadgeView> {
+	public async activeAssigned(userId: string, visibleCap = 5, existingProfile?: UserProfileData): Promise<ProfileBadgeView> {
 		const now = new Date();
 		const [definitions, assigned, profile] = await Promise.all([
 			ProfileBadges.list(),
 			ProfileBadges.assigned(userId, now),
-			UserProfile.get(userId),
+			existingProfile ?? UserProfile.get(userId),
 		]);
 		const active = definitions.filter((definition) =>
 			definition.enabled && (!definition.expiresAt || timestamp(definition.expiresAt) > now.getTime()));

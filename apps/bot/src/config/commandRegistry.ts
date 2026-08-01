@@ -57,7 +57,7 @@ const implemented = new Set([
 	"logging", "automod", "filter", "autorole", "notifier", "autodelete",
 	"autoresponder", "autoreact", "welcome", "customrole", "ticket", "media-only", "sticky",
 	"reaction-role", "variables", "embed", "voice", "voice-role",
-	"giveaway", "music", "fun", "bot", "prefix", "premium",
+	"giveaway", "music", "fun", "prefix", "premium",
 	"ai", "record", "dev", "profile", "bio", "badge", "customize", "noprefix", "playlist",
 	"steal", "cloneemoji", "deleteemoji", "renameemoji", "stickerinfo", "stickerurl", "deletesticker", "serversplash", "messageurl", "attachments", "zipsticker",
 ]);
@@ -172,7 +172,6 @@ const seeds: RegistrySeed[] = [
 	["fun", "fun", "Run social and text activities"],
 
 	// === SETTINGS (6) ===
-	["bot", "settings", "Open the separate Bot Settings dashboard"],
 	["profile", "settings", "View a user's Elfaria profile"],
 	["bio", "settings", "View or manage your profile bio", { subcommands: ["show", "set", "clear"] }],
 	["badge", "settings", "Manage cosmetic profile badges", { subcommands: ["add", "list", "remove"] }],

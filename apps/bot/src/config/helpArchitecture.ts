@@ -41,7 +41,6 @@ export const HELP_CATEGORIES: Category[] = [
 				label: "Bot Settings",
 				description: "Personalization, branding, and command prefixes.",
 				groups: [
-					{ heading: "Identity", commands: ["bot"] },
 					{ heading: "Profile", commands: ["profile", "bio", "bio set", "bio clear", "badge", "badge create", "badge edit", "badge delete", "badge list", "badge give", "badge remove", "badge clear", "badge show"] },
 					{ heading: "Branding", commands: ["customize", "customize avatar", "customize bio", "customize banner", "customize reset"] },
 					{ heading: "Prefixes", commands: ["prefix", "noprefix"] },

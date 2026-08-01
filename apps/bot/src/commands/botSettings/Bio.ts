@@ -45,7 +45,7 @@ export default class Bio extends Command {
 			}
 			if (action === "clear") {
 				await UserProfile.update(ctx.author!.id, { bio: null });
-				return ctx.sendMessage({ components: [settingsPanel("Bio cleared", "Your profile bio was removed.")], flags: SETTINGS_FLAGS });
+				return ctx.sendMessage({ content: "<:tick:1533150498973155490> Bio cleared.", allowedMentions: { parse: [] } });
 			}
 			if (action !== "set") return ctx.sendMessage({ components: [settingsPanel("Bio commands", "Use `bio show`, `bio set <text>`, or `bio clear`.")], flags: SETTINGS_FLAGS });
 			const text = ctx.isInteraction ? ctx.options.getString("text", true) : ctx.args.slice(1).join(" ");
@@ -54,7 +54,7 @@ export default class Bio extends Command {
 				return ctx.sendMessage({ components: [settingsPanel("Invalid bio", "Use 1-190 characters. User, role, and mass mentions are not allowed.")], flags: SETTINGS_FLAGS });
 			}
 			await UserProfile.update(ctx.author!.id, { bio });
-			return ctx.sendMessage({ components: [settingsPanel("Bio updated", bio)], flags: SETTINGS_FLAGS });
+			return ctx.sendMessage({ content: "<:tick:1533150498973155490> Bio updated.", allowedMentions: { parse: [] } });
 		} catch (error) {
 			return settingsFailure(ctx, error, "bio");
 		}

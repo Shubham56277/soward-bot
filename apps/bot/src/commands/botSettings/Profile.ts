@@ -1,4 +1,4 @@
-import { Premium } from "@repo/db";
+import { Premium, UserProfile } from "@repo/db";
 import {
 	ActionRowBuilder,
 	ApplicationCommandOptionType,
@@ -59,9 +59,11 @@ export default class Profile extends Command {
 			const user = await this.resolveTarget(ctx);
 			if (!user) return this.notice(ctx, "User not found", "Mention a user or provide a valid Discord user ID.");
 
-			const premium = await Premium.hasPremium(user.id).catch(() => false);
-			const badgeView = premium ? await profileBadgeService.activeAssigned(user.id, 5) : null;
-			const profile = badgeView?.profile ?? null;
+			const [premium, profile] = await Promise.all([
+				Premium.hasPremium(user.id).catch(() => false),
+				UserProfile.get(user.id),
+			]);
+			const badgeView = premium ? await profileBadgeService.activeAssigned(user.id, 5, profile) : null;
 
 			// Canvas cannot preserve animation: detect animated hashes and request a stable PNG first frame.
 			const avatarAnimated = isAnimatedDiscordAsset(user.avatar);
