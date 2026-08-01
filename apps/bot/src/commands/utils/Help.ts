@@ -230,6 +230,7 @@ export default class Help extends Command {
 		const identity = new SectionBuilder()
 			.addTextDisplayComponents(
 				new TextDisplayBuilder().setContent(`## Hey, I'm ${botName}`),
+				new TextDisplayBuilder().setContent("-# A celestial companion summoned to rule your Discord realm."),
 				new TextDisplayBuilder().setContent(
 					`-# <a:bsnowflake:1533050645224095774> **My prefix is:** \`${prefix}\`\n` +
 					`-# <a:bsnowflake:1533050645224095774> **Type:** \`${prefix}help <cmd>\`\n` +
