@@ -29,8 +29,15 @@ function isImageBuffer(buffer: Buffer): boolean {
 export function isOfficialDiscordAssetUrl(value: string): boolean {
 	try {
 		const url = new URL(value);
-		return url.protocol === "https:" && !url.username && !url.password && !url.port
-			&& DISCORD_HOSTS.has(url.hostname.toLowerCase());
+		if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash
+			|| !DISCORD_HOSTS.has(url.hostname.toLowerCase())) return false;
+		const expectedPath = /^\/(?:avatars|banners)\/\d{17,20}\/[a-zA-Z0-9_]+\.(?:png|jpe?g|webp|gif)$/i.test(url.pathname)
+			|| /^\/embed\/avatars\/[0-5]\.png$/i.test(url.pathname);
+		if (!expectedPath) return false;
+		for (const [key, valuePart] of url.searchParams) {
+			if (key !== "size" || !/^(?:16|32|64|128|256|512|1024|2048|4096)$/.test(valuePart)) return false;
+		}
+		return true;
 	} catch {
 		return false;
 	}
@@ -113,7 +120,7 @@ export class ProfileAssetLoader {
 		try {
 			const url = new URL(value);
 			if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
-			if (discordOnly && !DISCORD_HOSTS.has(url.hostname.toLowerCase())) return null;
+			if (discordOnly && !isOfficialDiscordAssetUrl(url.toString())) return null;
 			return url;
 		} catch {
 			return null;
@@ -139,14 +146,15 @@ export class ProfileAssetLoader {
 		});
 		try {
 			const response = await request(url, {
-				method: "GET", dispatcher, maxRedirections: 0,
+				method: "GET", dispatcher,
 				headersTimeout: TIMEOUT_MS, bodyTimeout: TIMEOUT_MS,
 				signal: AbortSignal.timeout(TIMEOUT_MS),
 				headers: { accept: "image/png,image/jpeg,image/webp,image/gif", "user-agent": "Elfaria-Profile/1.0" },
 			});
 			if (response.statusCode >= 300 && response.statusCode < 400) {
 				await response.body.dump();
-				const location = response.headers.location;
+				const locationHeader = response.headers.location;
+				const location = Array.isArray(locationHeader) ? locationHeader[0] : locationHeader;
 				if (!location || redirects >= MAX_REDIRECTS) return null;
 				return this.fetchRemote(new URL(location, url).toString(), discordOnly, redirects + 1);
 			}

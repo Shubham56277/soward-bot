@@ -2,6 +2,7 @@ import { UserProfile } from "@repo/db";
 import { ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import { profileCardRenderer } from "../../services/profile/ProfileCardRenderer";
 import { SETTINGS_FLAGS, settingsFailure, settingsPanel } from "../../utils/botSettingsUi";
 import { validateBio } from "../../utils/botSettingsValidation";
 
@@ -45,6 +46,7 @@ export default class Bio extends Command {
 			}
 			if (action === "clear") {
 				await UserProfile.update(ctx.author!.id, { bio: null });
+				profileCardRenderer.invalidateUser(ctx.author!.id);
 				return ctx.sendMessage({ content: "<:tick:1533150498973155490> Bio cleared.", allowedMentions: { parse: [] } });
 			}
 			if (action !== "set") return ctx.sendMessage({ components: [settingsPanel("Bio commands", "Use `bio show`, `bio set <text>`, or `bio clear`.")], flags: SETTINGS_FLAGS });
@@ -54,6 +56,7 @@ export default class Bio extends Command {
 				return ctx.sendMessage({ components: [settingsPanel("Invalid bio", "Use 1-190 characters. User, role, and mass mentions are not allowed.")], flags: SETTINGS_FLAGS });
 			}
 			await UserProfile.update(ctx.author!.id, { bio });
+			profileCardRenderer.invalidateUser(ctx.author!.id);
 			return ctx.sendMessage({ content: "<:tick:1533150498973155490> Bio updated.", allowedMentions: { parse: [] } });
 		} catch (error) {
 			return settingsFailure(ctx, error, "bio");

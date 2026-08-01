@@ -11,8 +11,9 @@ import {
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import { mapOfficialProfileBadges } from "../../services/profile/OfficialProfileBadges";
 import { profileBadgeService } from "../../services/profile/ProfileBadgeService";
-import { renderProfileCard } from "../../services/profile/ProfileCardRenderer";
+import { profileAttachmentName, renderProfileCard } from "../../services/profile/ProfileCardRenderer";
 import { isAnimatedDiscordAsset, isOfficialDiscordAssetUrl } from "../../services/profile/ProfileAssetLoader";
 import { SETTINGS_FLAGS, settingsFailure, settingsPanel } from "../../utils/botSettingsUi";
 
@@ -59,20 +60,31 @@ export default class Profile extends Command {
 			const user = await this.resolveTarget(ctx);
 			if (!user) return this.notice(ctx, "User not found", "Mention a user or provide a valid Discord user ID.");
 
-			const [premium, profile] = await Promise.all([
+			const [premium, profile, publicFlags, guildMember] = await Promise.all([
 				Premium.hasPremium(user.id).catch(() => false),
 				UserProfile.get(user.id),
+				user.fetchFlags().catch(() => user.flags),
+				ctx.guild?.members.fetch(user.id).catch(() => null) ?? Promise.resolve(null),
 			]);
 			const badgeView = premium ? await profileBadgeService.activeAssigned(user.id, 5, profile) : null;
+			const serverBooster = Boolean(guildMember?.premiumSince);
+			const officialBadges = mapOfficialProfileBadges(publicFlags, serverBooster);
 
-			// Canvas cannot preserve animation: detect animated hashes and request a stable PNG first frame.
 			const avatarAnimated = isAnimatedDiscordAsset(user.avatar);
 			const bannerAnimated = isAnimatedDiscordAsset(user.banner);
-			const avatarCandidate = user.displayAvatarURL({ extension: "png", size: 1024, forceStatic: avatarAnimated });
+			const avatarCandidate = user.displayAvatarURL({
+				extension: avatarAnimated ? "gif" : "png",
+				size: avatarAnimated ? 512 : 1024,
+				forceStatic: false,
+			});
 			const avatarUrl = isOfficialDiscordAssetUrl(avatarCandidate)
 				? avatarCandidate
 				: "https://cdn.discordapp.com/embed/avatars/0.png";
-			const bannerCandidate = user.bannerURL({ extension: "png", size: 1024, forceStatic: bannerAnimated });
+			const bannerCandidate = user.bannerURL({
+				extension: bannerAnimated ? "gif" : "png",
+				size: 1024,
+				forceStatic: false,
+			});
 			const bannerUrl = bannerCandidate && isOfficialDiscordAssetUrl(bannerCandidate) ? bannerCandidate : null;
 
 			const image = await renderProfileCard({
@@ -80,10 +92,14 @@ export default class Profile extends Command {
 				premium,
 				profile,
 				badges: badgeView,
+				officialBadges,
+				serverBooster,
 				avatar: avatarUrl,
 				banner: bannerUrl,
-				avatarHash: `${user.avatar ?? "none"}:${avatarAnimated ? "animated-first-frame" : "static"}`,
-				bannerHash: `${user.banner ?? "none"}:${bannerAnimated ? "animated-first-frame" : "static"}`,
+				avatarHash: user.avatar ?? "default",
+				bannerHash: user.banner ?? "none",
+				avatarAnimated,
+				bannerAnimated,
 				profileVersion: profile?.updatedAt ?? 0,
 				badgeVersion: badgeView?.versionToken ?? "none",
 			});
@@ -94,7 +110,7 @@ export default class Profile extends Command {
 			const closeId = `profile_close:${ctx.id}`;
 			const renderControls = (disabled = false) => [profileButtons(avatarUrl, bannerUrl, closeId, disabled)];
 			const response = await ctx.sendMessage({
-				files: [new AttachmentBuilder(image, { name: `elfaria-profile-${user.id}.png` })],
+				files: [new AttachmentBuilder(image.buffer, { name: profileAttachmentName(user.id, image.format) })],
 				components: renderControls(),
 				allowedMentions: NO_MENTIONS,
 			});
