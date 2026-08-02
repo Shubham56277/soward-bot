@@ -337,9 +337,17 @@ function createAiChannelWorker(client: BaseClient, connection: Redis): Worker<Ai
 				if (!active) return
 
 				const scope = { guildId, channelId, userId }
-				const result = await client.rag.ask({ scope, question, useHistory: true })
 
-				if (!result.ok) return // Silently skip on failure
+				// Try up to 3 times with a 2s delay between attempts
+				let result: any = null
+				for (let attempt = 0; attempt < 3; attempt++) {
+					result = await client.rag.ask({ scope, question, useHistory: true, skipRateLimit: true })
+					if (result.ok) break
+					// Wait 2s before retry
+					if (attempt < 2) await new Promise(r => setTimeout(r, 2000))
+				}
+
+				if (!result?.ok) return // Silently give up after 3 attempts
 
 				// Fetch the original message to reply to it
 				const originalMessage = await (channel as any).messages.fetch(messageId).catch(() => null)
@@ -370,10 +378,10 @@ function createAiChannelWorker(client: BaseClient, connection: Redis): Worker<Ai
 		},
 		{
 			connection,
-			concurrency: 1,
+			concurrency: 2,
 			limiter: {
-				max: 1,
-				duration: 3000, // 1 job every 3 seconds max
+				max: 2,
+				duration: 3000,
 			},
 		},
 	)

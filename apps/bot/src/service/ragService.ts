@@ -17,6 +17,8 @@ export interface RagQuery {
 	};
 	question: string;
 	useHistory: boolean;
+	/** Skip rate limits and concurrency checks (used by dev-started channel sessions). */
+	skipRateLimit?: boolean;
 }
 
 export type RagResult =
@@ -190,19 +192,21 @@ export class RagService {
 			const normalizedQuery = this.normalizeQuery(query.question);
 			if (!normalizedQuery) return { ok: false, reason: "unavailable" };
 
-			// (b) Concurrency check
-			if (this.activeRequests >= env.AI_MAX_CONCURRENCY) {
+			// (b) Concurrency check (skip for channel sessions)
+			if (!query.skipRateLimit && this.activeRequests >= env.AI_MAX_CONCURRENCY) {
 				return { ok: false, reason: "busy", retryAfter: 2 };
 			}
 
-			// (c) Rate limit checks
-			const [userLimit, guildLimit] = await Promise.all([
-				this.takeRateLimit(`ai:rate:user:${query.scope.userId}`, env.AI_USER_REQUESTS_PER_MINUTE),
-				this.takeRateLimit(`ai:rate:guild:${query.scope.guildId}`, env.AI_GUILD_REQUESTS_PER_MINUTE),
-			]);
+			// (c) Rate limit checks (skip for channel sessions)
+			if (!query.skipRateLimit) {
+				const [userLimit, guildLimit] = await Promise.all([
+					this.takeRateLimit(`ai:rate:user:${query.scope.userId}`, env.AI_USER_REQUESTS_PER_MINUTE),
+					this.takeRateLimit(`ai:rate:guild:${query.scope.guildId}`, env.AI_GUILD_REQUESTS_PER_MINUTE),
+				]);
 
-			if (!userLimit.allowed) return { ok: false, reason: "rate_limited", retryAfter: userLimit.retryAfter };
-			if (!guildLimit.allowed) return { ok: false, reason: "rate_limited", retryAfter: guildLimit.retryAfter };
+				if (!userLimit.allowed) return { ok: false, reason: "rate_limited", retryAfter: userLimit.retryAfter };
+				if (!guildLimit.allowed) return { ok: false, reason: "rate_limited", retryAfter: guildLimit.retryAfter };
+			}
 
 			// Check provider configuration — support both single and multi-key
 			const groqKey = env.GROQ_API_KEY || (env.GROQ_API_KEYS?.[0] && (typeof env.GROQ_API_KEYS[0] === "string" ? env.GROQ_API_KEYS[0] : (env.GROQ_API_KEYS[0] as any)?.key));

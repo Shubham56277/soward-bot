@@ -119,14 +119,13 @@ export default class MessageCreate extends Event {
 				&& !(noPrefix && isKnownCommand);
 			const aiScope: AiScope = { guildId: message.guildId, channelId: message.channelId, userId: message.author.id };
 			const activeAiSession = canBeSessionMessage ? await this.client.ai.isSessionActive(aiScope) : false;
-			const activeChannelSession = canBeSessionMessage && !activeAiSession
-				? await this.client.ai.isChannelSessionActive(message.guildId, message.channelId)
-				: false;
+			// Channel sessions apply to everyone — check regardless of mention or prefix
+			const activeChannelSession = await this.client.ai.isChannelSessionActive(message.guildId, message.channelId);
 
-			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession || activeChannelSession) {
+			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession || (activeChannelSession && canBeSessionMessage)) {
 				if (await isCommandIgnored(message)) return;
 
-				// For channel-wide sessions started by a dev, skip premium check
+				// For channel-wide sessions started by a dev, skip premium check entirely
 				if (!activeChannelSession) {
 					const isDev = env.DEVELOPER_IDS.includes(message.author.id);
 					if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
@@ -203,7 +202,8 @@ export default class MessageCreate extends Event {
 
 					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
 					const useHistory = activeAiSession || (wasMentioned && await this.client.ai.isSessionActive(aiScope));
-					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory });
+					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory, skipRateLimit: activeChannelSession });
+					if (!result.ok && activeChannelSession) return; // Never show errors in channel sessions
 					return sendAiMessageResult(message, result);
 				}
 			}
