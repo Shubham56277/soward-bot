@@ -127,8 +127,8 @@ export default class MessageCreate extends Event {
 				let question = wasMentioned ? mentionText : message.content.trim();
 				// Bare mention with no text → treat as greeting
 				if (wasMentioned && !question) question = "hey";
-				// Skip truly meaningless spam (single/double chars, gaming slang)
-				if (!question || /^[a-z]{1,2}$/i.test(question) || /^(ok|lol|lmao|bruh|ff|gg|rip|f|k|nah|idk|ikr|fr|smh|nvm|ty|thx|gn|gm|wb)$/i.test(question)) return;
+				// Skip only empty messages
+				if (!question) return;
 
 				try {
 					const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;

@@ -391,10 +391,10 @@ function createAiChannelWorker(client: BaseClient, connection: Redis): Worker<Ai
 		},
 		{
 			connection,
-			concurrency: 2,
+			concurrency: 5,
 			limiter: {
-				max: 2,
-				duration: 3000,
+				max: 5,
+				duration: 5000,
 			},
 		},
 	)
