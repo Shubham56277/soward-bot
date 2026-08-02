@@ -63,6 +63,11 @@ export default class MessageCreate extends Event {
 
 			const mention = new RegExp(`^<@!?${this.client.user?.id}>( |)$`);
 			if (mention.test(message.content)) {
+				// In an active channel session, treat bare mentions as a greeting instead of showing info card
+				const channelSessionForMention = await this.client.ai.isChannelSessionActive(message.guildId, message.channelId);
+				if (channelSessionForMention) {
+					// Will be handled below by the channel session handler
+				} else {
 				if (await isCommandIgnored(message)) {
 					return message
 						.reply({
@@ -105,6 +110,7 @@ export default class MessageCreate extends Event {
 					flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications,
 				});
 				return;
+				}
 			}
 
 			const mentionPrefix = new RegExp(`^<@!?${this.client.user?.id}>\\s*`);
