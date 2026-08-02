@@ -119,7 +119,7 @@ const envSchema = z.object({
 	AI_SESSION_TTL_SECONDS: integerFromEnv(21_600, 300, 86_400),
 	AI_USER_REQUESTS_PER_MINUTE: integerFromEnv(10, 1, 60),
 	AI_GUILD_REQUESTS_PER_MINUTE: integerFromEnv(100, 1, 1_000),
-	AI_MAX_CONCURRENCY: integerFromEnv(50, 1, 200),
+	AI_MAX_CONCURRENCY: integerFromEnv(10, 1, 200),
 	AI_RESPONSE_CACHE_SECONDS: integerFromEnv(300, 0, 3_600),
 });
 

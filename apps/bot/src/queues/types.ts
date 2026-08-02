@@ -35,3 +35,11 @@ export interface ScheduledMessageJob {
 	channelId: string
 	content: string
 }
+
+export interface AiChannelRequestJob {
+	guildId: string
+	channelId: string
+	userId: string
+	messageId: string
+	question: string
+}

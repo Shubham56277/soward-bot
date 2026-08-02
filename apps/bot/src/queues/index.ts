@@ -18,6 +18,7 @@ import type {
 	ModerationLogJob,
 	AnalyticsJob,
 	ScheduledMessageJob,
+	AiChannelRequestJob,
 } from "./types"
 import { initDiscordActionQueue, shutdownDiscordActionQueue } from "./discordActionQueue"
 
@@ -30,6 +31,7 @@ export let reminderQueue: Queue<ReminderJob>
 export let moderationLogQueue: Queue<ModerationLogJob>
 export let analyticsQueue: Queue<AnalyticsJob>
 export let scheduledMessageQueue: Queue<ScheduledMessageJob>
+export let aiChannelQueue: Queue<AiChannelRequestJob>
 
 // ─────────────────────────────────────────────────────────
 // Internal state
@@ -81,12 +83,22 @@ export async function initQueues(client: BaseClient): Promise<void> {
 		defaultJobOptions: DEFAULT_JOB_OPTIONS,
 	})
 
+	aiChannelQueue = new Queue<AiChannelRequestJob>("ai-channel-request", {
+		connection,
+		defaultJobOptions: {
+			removeOnComplete: { count: 50 },
+			removeOnFail: { count: 100 },
+			attempts: 1,
+		},
+	})
+
 	// Create workers
 	workers.push(createTempPunishmentWorker(client, connection))
 	workers.push(createReminderWorker(client, connection))
 	workers.push(createModerationLogWorker(client, connection))
 	workers.push(createAnalyticsWorker(client, connection))
 	workers.push(createScheduledMessageWorker(client, connection))
+	workers.push(createAiChannelWorker(client, connection))
 
 	// Discord API action queue (rate-limit safe bulk operations)
 	initDiscordActionQueue(client)
@@ -306,6 +318,62 @@ function createScheduledMessageWorker(client: BaseClient, connection: Redis): Wo
 			limiter: {
 				max: 10,
 				duration: 10000,
+			},
+		},
+	)
+}
+
+function createAiChannelWorker(client: BaseClient, connection: Redis): Worker<AiChannelRequestJob> {
+	return new Worker<AiChannelRequestJob>(
+		"ai-channel-request",
+		async (job) => {
+			const { guildId, channelId, userId, messageId, question } = job.data
+			try {
+				const channel = await client.channels.fetch(channelId).catch(() => null)
+				if (!channel || !channel.isTextBased()) return
+
+				// Check if channel session is still active
+				const active = await client.ai.isChannelSessionActive(guildId, channelId)
+				if (!active) return
+
+				const scope = { guildId, channelId, userId }
+				const result = await client.rag.ask({ scope, question, useHistory: true })
+
+				if (!result.ok) return // Silently skip on failure
+
+				// Fetch the original message to reply to it
+				const originalMessage = await (channel as any).messages.fetch(messageId).catch(() => null)
+				if (originalMessage) {
+					const { splitDiscordMessage } = await import("../service/aiService")
+					const chunks = splitDiscordMessage(result.answer.text)
+					for (const chunk of chunks) {
+						await originalMessage.reply({
+							content: chunk,
+							allowedMentions: { parse: [], repliedUser: false },
+							flags: 4096, // SuppressNotifications
+						}).catch(() => {})
+					}
+				} else {
+					// Message was deleted, send in channel
+					const { splitDiscordMessage } = await import("../service/aiService")
+					const chunks = splitDiscordMessage(result.answer.text)
+					for (const chunk of chunks) {
+						await (channel as any).send({
+							content: chunk,
+							allowedMentions: { parse: [] },
+						}).catch(() => {})
+					}
+				}
+			} catch (err) {
+				client.logger.error(`[queue:ai-channel] Error: ${err}`)
+			}
+		},
+		{
+			connection,
+			concurrency: 1,
+			limiter: {
+				max: 1,
+				duration: 3000, // 1 job every 3 seconds max
 			},
 		},
 	)

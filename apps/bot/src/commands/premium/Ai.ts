@@ -11,6 +11,7 @@ import Context from "../../lib/Context";
 import type { AiRequestResult, AiScope } from "../../service/aiService";
 import type { RagResult } from "../../service/ragService";
 import { ResponseFormatter } from "../../service/responseFormatter";
+import { env } from "@repo/env";
 
 export default class Ai extends Command {
 	public constructor() {
@@ -55,26 +56,33 @@ export default class Ai extends Command {
 		const scope = this.scope(ctx);
 
 		if (action === "start") {
-			await ctx.client.ai.startSession(scope);
-			return this.sendNotice(ctx, "AI Conversation Started", "Messages you send in this channel will use your private AI session. Use `/ai stop` when finished.");
+			if (!env.DEVELOPER_IDS.includes(ctx.author!.id)) {
+				return this.sendNotice(ctx, "Restricted", "Only developers can start or stop AI channels.");
+			}
+			await ctx.client.ai.startChannelSession(ctx.guild.id, ctx.channelId);
+			return this.sendNotice(ctx, "AI Channel Session Started", "All messages in this channel will get AI responses. Use `/ai stop` when finished.");
 		}
 		if (action === "stop") {
-			await ctx.client.ai.stopSession(scope);
-			return this.sendNotice(ctx, "AI Conversation Stopped", "The session and its temporary conversation history were removed.");
+			if (!env.DEVELOPER_IDS.includes(ctx.author!.id)) {
+				return this.sendNotice(ctx, "Restricted", "Only developers can start or stop AI channels.");
+			}
+			await ctx.client.ai.stopChannelSession(ctx.guild.id, ctx.channelId);
+			return this.sendNotice(ctx, "AI Channel Session Stopped", "The channel-wide AI session was removed.");
 		}
 		if (action === "reset") {
 			await ctx.client.ai.resetHistory(scope);
 			return this.sendNotice(ctx, "AI History Cleared", "Your temporary conversation context for this channel was removed.");
 		}
 		if (action === "status") {
-			const [active, providers] = await Promise.all([
+			const [active, channelActive, providers] = await Promise.all([
 				ctx.client.ai.isSessionActive(scope),
+				ctx.client.ai.isChannelSessionActive(ctx.guild.id, ctx.channelId),
 				Promise.resolve(ctx.client.ai.configuredProviders()),
 			]);
 			return this.sendNotice(
 				ctx,
 				"Premium AI",
-				`**Session** ${active ? "Active" : "Stopped"}\n**Providers ready** ${providers.length}\n-# **Ask once with \`/ai ask\`, or use \`/ai start\` for a conversation.**`,
+				`**Session** ${active || channelActive ? "Active" : "Stopped"}\n**Providers ready** ${providers.length}\n-# **Ask once with \`/ai ask\`, or use \`/ai start\` for a conversation.**`,
 			);
 		}
 

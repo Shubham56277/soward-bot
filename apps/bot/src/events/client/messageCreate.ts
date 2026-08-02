@@ -11,6 +11,7 @@ import { compactReplyText } from "../../utils/compactReply";
 import { getCachedNoPrefix, getCachedPrefix, getCachedPrefixes } from "../../utils/commandStateCache";
 import { splitDiscordMessage, type AiRequestResult, type AiScope } from "../../service/aiService";
 import type { RagResult } from "../../service/ragService";
+import { aiChannelQueue } from "../../queues";
 import { LEGACY_COMMANDS_BY_NAME, replacementArguments, replacementRoot, type LegacyCommandMapping } from "../../config/legacyCommandMap";
 import { handleMessageError } from "../../utils/errorHandler";
 import { checkPremium } from "../../utils/premiumCheck";
@@ -111,38 +112,92 @@ export default class MessageCreate extends Event {
 			const mentionText = wasMentioned ? message.content.replace(mentionPrefix, "").trim() : "";
 			const firstWord = (wasMentioned ? mentionText : message.content).trim().split(/\s+/, 1)[0]?.toLowerCase() || "";
 			const isKnownCommand = this.client.commands.has(firstWord);
-			const aiControl = wasMentioned && ["start", "stop", "status", "reset"].includes(mentionText.toLowerCase());
+			const aiControlAction = wasMentioned ? mentionText.split(/\s+/, 1)[0]?.toLowerCase() : "";
+			const aiControl = wasMentioned && ["start", "stop", "status", "reset"].includes(aiControlAction);
 			const canBeSessionMessage = !wasMentioned
 				&& !configuredPrefixes.some((candidate) => message.content.startsWith(candidate))
 				&& !(noPrefix && isKnownCommand);
 			const aiScope: AiScope = { guildId: message.guildId, channelId: message.channelId, userId: message.author.id };
 			const activeAiSession = canBeSessionMessage ? await this.client.ai.isSessionActive(aiScope) : false;
+			const activeChannelSession = canBeSessionMessage && !activeAiSession
+				? await this.client.ai.isChannelSessionActive(message.guildId, message.channelId)
+				: false;
 
-			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession) {
+			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession || activeChannelSession) {
 				if (await isCommandIgnored(message)) return;
-				const isDev = env.DEVELOPER_IDS.includes(message.author.id);
-				if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
-					return message.reply({
-						content: "AI conversations are a premium feature. Use `/premium redeem` with an activation code to unlock them.",
-						allowedMentions: { parse: [], repliedUser: false },
-						flags: MessageFlags.SuppressNotifications,
-					});
+
+				// For channel-wide sessions started by a dev, skip premium check
+				if (!activeChannelSession) {
+					const isDev = env.DEVELOPER_IDS.includes(message.author.id);
+					if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
+						return message.reply({
+							content: "AI conversations are a premium feature. Use `/premium redeem` with an activation code to unlock them.",
+							allowedMentions: { parse: [], repliedUser: false },
+							flags: MessageFlags.SuppressNotifications,
+						});
+					}
 				}
 
 				if (aiControl) {
-					const action = mentionText.toLowerCase();
-					if (action === "start") await this.client.ai.startSession(aiScope);
-					if (action === "stop") await this.client.ai.stopSession(aiScope);
-					if (action === "reset") await this.client.ai.resetHistory(aiScope);
-					const active = action === "status" ? await this.client.ai.isSessionActive(aiScope) : action === "start";
-					const response = action === "reset"
+					if (aiControlAction === "start" || aiControlAction === "stop") {
+						if (!env.DEVELOPER_IDS.includes(message.author.id)) {
+							return message.reply({
+								content: "-# Only developers can start or stop AI channels.",
+								allowedMentions: { parse: [], repliedUser: false },
+								flags: MessageFlags.SuppressNotifications,
+							});
+						}
+					}
+
+					if (aiControlAction === "start") {
+						// Parse optional channel mention: @elfaria start <#123456>
+						const channelMention = mentionText.match(/<#(\d+)>/);
+						const targetChannelId = channelMention ? channelMention[1]! : message.channelId;
+						await this.client.ai.startChannelSession(message.guildId, targetChannelId);
+						const response = targetChannelId === message.channelId
+							? "**AI channel session active.**\n-# All messages in this channel will get AI responses."
+							: `**AI channel session active in <#${targetChannelId}>.**\n-# All messages in that channel will get AI responses.`;
+						return message.reply({ content: response, allowedMentions: { parse: [], repliedUser: false }, flags: MessageFlags.SuppressNotifications });
+					}
+					if (aiControlAction === "stop") {
+						await this.client.ai.stopChannelSession(message.guildId, message.channelId);
+						return message.reply({
+							content: "**AI channel session stopped.**\n-# The channel-wide AI session was removed.",
+							allowedMentions: { parse: [], repliedUser: false },
+							flags: MessageFlags.SuppressNotifications,
+						});
+					}
+					if (aiControlAction === "reset") await this.client.ai.resetHistory(aiScope);
+					const active = aiControlAction === "status" ? await this.client.ai.isSessionActive(aiScope) : false;
+					const response = aiControlAction === "reset"
 						? "**AI history cleared.**\n-# Your temporary conversation context was removed."
-						: `**AI conversation ${active ? "active" : "stopped"}.**\n-# ${active ? "Send messages here, or mention me with a question." : "Mention me with a question or use `/ai start`."}`;
+						: `**AI conversation ${active ? "active" : "stopped"}.**\n-# ${active ? "Send messages here, or mention me with a question." : "Mention me with a question or use \`/ai start\`."}`;
 					return message.reply({ content: response, allowedMentions: { parse: [], repliedUser: false }, flags: MessageFlags.SuppressNotifications });
 				}
 
 				const question = wasMentioned ? mentionText : message.content.trim();
 				if (question) {
+					// Channel session: cooldown + queue instead of direct call
+					if (activeChannelSession) {
+						const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
+						const onCooldown = await this.client.redis.exists(cooldownKey);
+						if (onCooldown) return;
+						await this.client.redis.set(cooldownKey, "1", "EX", 7);
+
+						// Send typing indicator
+						if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => {});
+
+						// Queue the AI request instead of calling directly
+						await aiChannelQueue.add("ai-reply", {
+							guildId: message.guildId,
+							channelId: message.channelId,
+							userId: message.author.id,
+							messageId: message.id,
+							question: message.content.trim(),
+						});
+						return;
+					}
+
 					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
 					const useHistory = activeAiSession || (wasMentioned && await this.client.ai.isSessionActive(aiScope));
 					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory });
