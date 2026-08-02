@@ -338,33 +338,46 @@ function createAiChannelWorker(client: BaseClient, connection: Redis): Worker<Ai
 
 				const scope = { guildId, channelId, userId }
 
-				// Try up to 3 times with a 2s delay between attempts
-				let result: any = null
+				// Try RAG first, fall back to direct AI service
+				let answerText: string | null = null
+
 				for (let attempt = 0; attempt < 3; attempt++) {
-					result = await client.rag.ask({ scope, question, useHistory: true, skipRateLimit: true })
-					if (result.ok) break
+					try {
+						// Try RAG service first (has knowledge base)
+						const ragResult = await client.rag.ask({ scope, question, useHistory: true, skipRateLimit: true })
+						if (ragResult.ok) {
+							answerText = ragResult.answer.text
+							break
+						}
+
+						// RAG failed — try direct AI service as fallback
+						const aiResult = await client.ai.ask(scope, question, true)
+						if (aiResult.ok) {
+							answerText = aiResult.answer.text
+							break
+						}
+					} catch {}
+
 					// Wait 2s before retry
 					if (attempt < 2) await new Promise(r => setTimeout(r, 2000))
 				}
 
-				if (!result?.ok) return // Silently give up after 3 attempts
+				if (!answerText) return // Silently give up after 3 attempts
 
 				// Fetch the original message to reply to it
 				const originalMessage = await (channel as any).messages.fetch(messageId).catch(() => null)
+				const { splitDiscordMessage } = await import("../service/aiService")
+				const chunks = splitDiscordMessage(answerText)
+
 				if (originalMessage) {
-					const { splitDiscordMessage } = await import("../service/aiService")
-					const chunks = splitDiscordMessage(result.answer.text)
 					for (const chunk of chunks) {
 						await originalMessage.reply({
 							content: chunk,
 							allowedMentions: { parse: [], repliedUser: false },
-							flags: 4096, // SuppressNotifications
+							flags: 4096,
 						}).catch(() => {})
 					}
 				} else {
-					// Message was deleted, send in channel
-					const { splitDiscordMessage } = await import("../service/aiService")
-					const chunks = splitDiscordMessage(result.answer.text)
 					for (const chunk of chunks) {
 						await (channel as any).send({
 							content: chunk,
