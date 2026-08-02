@@ -4,6 +4,7 @@ import Context from "../../lib/Context";
 import { dangerPermissions } from "../../utils/helper";
 import { ContainerBuilder, MessageFlags, Role, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import { ContainerPagination } from "../../utils/Pagination";
+import Help from "../utils/Help";
 
 function buildPanel(title: string, body: string): ContainerBuilder {
 	return new ContainerBuilder()
@@ -18,13 +19,13 @@ export default class CustomroleCommand extends Command {
 			name: "customrole",
 			description: {
 				content: "Manage custom roles",
-				examples: ["add <alias> <role>", "remove <role>", "manager <role>", "list", "reset"],
+				examples: ["customrole add staff @Staff", "customrole remove @Staff", "customrole manager @Moderator", "customrole list", "customrole reset"],
 				usage: "customrole <subcommand>",
 			},
 			category: "settings",
 			aliases: ["cr"],
 			cooldown: 5,
-			args: true,
+			args: false,
 			player: {
 				voice: false,
 				active: false,
@@ -69,13 +70,13 @@ export default class CustomroleCommand extends Command {
 					],
 				},
 				{
-					name: "manger",
-					description: "Manager the custom roles",
+					name: "manager",
+					description: "Set the manager role for custom roles",
 					type: 1,
 					options: [
 						{
 							name: "role",
-							description: "The role to add for the manger",
+							description: "The role to add for the manager",
 							type: 8,
 							required: true,
 						},
@@ -102,7 +103,9 @@ export default class CustomroleCommand extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
-		const subcommand = ctx.options.getSubCommand();
+		const subcommand = ctx.options.getSubCommand(false, 0);
+
+		if (!subcommand) return new Help().showCommand(ctx, "customrole");
 
 		if (subcommand === "add") {
 			const alias = ctx.options.getString("alias", true, 1);
@@ -159,10 +162,10 @@ export default class CustomroleCommand extends Command {
 				return ctx.editOrReply(this.msg(`Removed role ${role}`));
 			}
 		}
-		if (subcommand === "manger") {
+		if (subcommand === "manager") {
 			const role = ctx.options.getRole("role", true, 1);
 			if (!role) {
-				return ctx.editOrReply(this.msg("Please specify a role! `/customrole manger <role>`"));
+				return ctx.editOrReply(this.msg("Please specify a role! `/customrole manager <role>`"));
 			}
 			const customRole = await CustomRole.get(ctx.guild.id);
 			if (customRole) {
