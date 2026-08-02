@@ -122,19 +122,42 @@ export default class MessageCreate extends Event {
 			// Channel sessions apply to everyone — check regardless of mention or prefix
 			const activeChannelSession = await this.client.ai.isChannelSessionActive(message.guildId, message.channelId);
 
-			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession || (activeChannelSession && canBeSessionMessage)) {
+			// Channel session: intercept ALL messages (except commands with prefix) and route to AI
+			if (activeChannelSession && !aiControl) {
+				const question = wasMentioned ? mentionText : message.content.trim();
+				// Skip empty, very short, attachments-only, or meaningless messages
+				if (!question || question.length < 4 || /^[a-z]{1,3}$/i.test(question) || /^(ok|lol|lmao|bruh|hmm|hm|ff|gg|rip|f|k|ye|ya|no|nah|idk|ikr|fr|smh|nvm|ty|thx|gn|gm|wb|hi|hey|hii|hello|yo|sup)$/i.test(question)) return;
+
+				try {
+					const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
+					const onCooldown = await this.client.redis.exists(cooldownKey);
+					if (onCooldown) return;
+					await this.client.redis.set(cooldownKey, "1", "EX", 7);
+
+					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => {});
+
+					await aiChannelQueue.add("ai-reply", {
+						guildId: message.guildId,
+						channelId: message.channelId,
+						userId: message.author.id,
+						messageId: message.id,
+						question,
+					});
+				} catch {}
+				return;
+			}
+
+			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession) {
 				if (await isCommandIgnored(message)) return;
 
-				// For channel-wide sessions started by a dev, skip premium check entirely
-				if (!activeChannelSession) {
-					const isDev = env.DEVELOPER_IDS.includes(message.author.id);
-					if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
-						return message.reply({
-							content: "AI conversations are a premium feature. Use `/premium redeem` with an activation code to unlock them.",
-							allowedMentions: { parse: [], repliedUser: false },
-							flags: MessageFlags.SuppressNotifications,
-						});
-					}
+				// Premium check for non-channel-session AI usage
+				const isDev = env.DEVELOPER_IDS.includes(message.author.id);
+				if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
+					return message.reply({
+						content: "AI conversations are a premium feature. Use `/premium redeem` with an activation code to unlock them.",
+						allowedMentions: { parse: [], repliedUser: false },
+						flags: MessageFlags.SuppressNotifications,
+					});
 				}
 
 				if (aiControl) {
@@ -176,34 +199,9 @@ export default class MessageCreate extends Event {
 
 				const question = wasMentioned ? mentionText : message.content.trim();
 				if (question) {
-					// Channel session: cooldown + queue instead of direct call
-					if (activeChannelSession) {
-						// Ignore very short or meaningless messages to save credits
-						if (question.length < 4 || /^[a-z]{1,3}$/i.test(question) || /^(ok|lol|lmao|bruh|hmm|hm|ff|gg|rip|f|k|ye|ya|no|nah|idk|ikr|fr|smh|nvm|ty|thx|gn|gm|wb)$/i.test(question)) return;
-
-						const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
-						const onCooldown = await this.client.redis.exists(cooldownKey);
-						if (onCooldown) return;
-						await this.client.redis.set(cooldownKey, "1", "EX", 7);
-
-						// Send typing indicator
-						if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => {});
-
-						// Queue the AI request instead of calling directly
-						await aiChannelQueue.add("ai-reply", {
-							guildId: message.guildId,
-							channelId: message.channelId,
-							userId: message.author.id,
-							messageId: message.id,
-							question: message.content.trim(),
-						});
-						return;
-					}
-
 					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
 					const useHistory = activeAiSession || (wasMentioned && await this.client.ai.isSessionActive(aiScope));
-					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory, skipRateLimit: activeChannelSession });
-					if (!result.ok && activeChannelSession) return; // Never show errors in channel sessions
+					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory });
 					return sendAiMessageResult(message, result);
 				}
 			}
