@@ -1,7 +1,9 @@
 import { CustomRole, Roles } from "@repo/db";
 import { Message, GuildMember, PermissionsBitField, PermissionResolvable, ChannelType } from "discord.js";
 
-// Dangerous permissions that should never be assigned via alias
+const TICK = "<:tick:1533150498973155490>";
+
+/** Dangerous permissions that a custom role must never have. */
 const DANGER_PERMISSIONS: PermissionResolvable[] = [
 	"Administrator",
 	"ManageGuild",
@@ -51,8 +53,6 @@ async function handleReplyRoleAssignment(message: Message, rolesConfig: Roles[],
 		if (!repliedMessage || repliedMessage.author.bot) return;
 
 		const content = message.content.trim();
-
-		// Only allow alias if it's the first word in the reply message
 		const alias = content.split(/\s+/)[0]?.toLowerCase();
 
 		const matchingRole = rolesConfig.find(role =>
@@ -61,10 +61,11 @@ async function handleReplyRoleAssignment(message: Message, rolesConfig: Roles[],
 
 		if (!matchingRole) return;
 
-		const targetMember = await message.guild!.members.fetch(repliedMessage.author.id);
+		// Force-fetch to get fresh role state
+		const targetMember = await message.guild!.members.fetch({ user: repliedMessage.author.id, force: true });
 		if (!targetMember) return;
 
-		await assignRoleIfSafe(message, targetMember, matchingRole.role, botMember);
+		await assignRole(message, targetMember, matchingRole.role, botMember);
 	} catch (error) {
 		console.error("Error in reply role assignment:", error);
 	}
@@ -88,64 +89,51 @@ async function handleAliasCommand(message: Message, rolesConfig: Roles[], botMem
 	if (!matchingRole) return;
 
 	try {
-		const targetMember = await message.guild!.members.fetch(userId!);
+		// Force-fetch to get fresh role state
+		const targetMember = await message.guild!.members.fetch({ user: userId!, force: true });
 		if (!targetMember) {
-			await sendEmbed(message, "red", "User not found or not in the server");
+			await reply(message, `User not found or not in the server.`);
 			return;
 		}
 
-		await assignRoleIfSafe(message, targetMember, matchingRole.role, botMember);
+		await assignRole(message, targetMember, matchingRole.role, botMember);
 	} catch (error) {
 		console.error("Error in alias command:", error);
-		await sendEmbed(message, "red", "User not found or not in the server");
+		await reply(message, `User not found or not in the server.`);
 	}
 }
 
 
-async function assignRoleIfSafe(message: Message, member: GuildMember, roleId: string, botMember: GuildMember) {
+async function assignRole(message: Message, member: GuildMember, roleId: string, botMember: GuildMember) {
 	try {
 		const role = member.guild.roles.cache.get(roleId);
-		if (!role) {
-			console.log(`Role ${roleId} not found in guild`);
-			return;
-		}
+		if (!role) return;
 
-		const hasDangerousPermission = DANGER_PERMISSIONS.some((perm) => role.permissions.has(perm));
-		if (hasDangerousPermission) {
-			await sendEmbed(message, "red", `Role <@&${role.id}> has dangerous permissions`);
+		// Block assignment if role has dangerous permissions
+		const hasDangerous = DANGER_PERMISSIONS.some(perm => role.permissions.has(perm));
+		if (hasDangerous) {
+			await reply(message, `Can't assign <@&${role.id}> — it has dangerous permissions.`);
 			return;
 		}
 
 		if (role.position >= botMember.roles.highest.position) {
-			await sendEmbed(message, "red", `I don't have permission to assign <@&${role.id}> to <@${member.id}>`);
+			await reply(message, `I can't manage <@&${role.id}> because it's above my highest role.`);
 			return;
 		}
 
 		if (!member.roles.cache.has(role.id)) {
-			await member.roles.add(role, "Custom Role");
-			await sendEmbed(message, "main", `Successfully Given <@&${role.id}> to <@${member.id}>`);
+			await member.roles.add(role, `Custom role by ${message.author.username}`);
+			await reply(message, `${TICK} Added <@&${role.id}> to <@${member.id}>`);
 		} else {
-			await member.roles.remove(role, "Custom Role");
-			await sendEmbed(message, "main", `Successfully Removed <@&${role.id}> from <@${member.id}>`);
+			await member.roles.remove(role, `Custom role by ${message.author.username}`);
+			await reply(message, `${TICK} Removed <@&${role.id}> from <@${member.id}>`);
 		}
 	} catch (error) {
 		console.error(`Error assigning role to ${member.user.tag}:`, error);
 	}
 }
 
-async function sendEmbed(message: Message, color: "red" | "main", description: string) {
+async function reply(message: Message, text: string) {
 	if (message.channel.type !== ChannelType.GuildText) return;
-	
-	await message.channel.send({
-		embeds: [
-			{
-				color: message.client.config.colors[color],
-				author: {
-					name: message.author.username,
-					icon_url: message.author.avatarURL()!,
-				},
-				description,
-			},
-		],
-	});
+	await message.channel.send({ content: `-# ${text}`, allowedMentions: { parse: [] } });
 }
