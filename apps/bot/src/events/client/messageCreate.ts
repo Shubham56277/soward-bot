@@ -124,9 +124,11 @@ export default class MessageCreate extends Event {
 
 			// Channel session: intercept ALL messages (except commands with prefix) and route to AI
 			if (activeChannelSession && !aiControl) {
-				const question = wasMentioned ? mentionText : message.content.trim();
-				// Skip empty, very short, attachments-only, or meaningless messages
-				if (!question || question.length < 4 || /^[a-z]{1,3}$/i.test(question) || /^(ok|lol|lmao|bruh|hmm|hm|ff|gg|rip|f|k|ye|ya|no|nah|idk|ikr|fr|smh|nvm|ty|thx|gn|gm|wb|hi|hey|hii|hello|yo|sup)$/i.test(question)) return;
+				let question = wasMentioned ? mentionText : message.content.trim();
+				// Bare mention with no text → treat as greeting
+				if (wasMentioned && !question) question = "hey";
+				// Skip truly meaningless spam (single/double chars, gaming slang)
+				if (!question || /^[a-z]{1,2}$/i.test(question) || /^(ok|lol|lmao|bruh|ff|gg|rip|f|k|nah|idk|ikr|fr|smh|nvm|ty|thx|gn|gm|wb)$/i.test(question)) return;
 
 				try {
 					const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
