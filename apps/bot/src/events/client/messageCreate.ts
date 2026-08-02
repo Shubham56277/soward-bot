@@ -179,6 +179,9 @@ export default class MessageCreate extends Event {
 				if (question) {
 					// Channel session: cooldown + queue instead of direct call
 					if (activeChannelSession) {
+						// Ignore very short or meaningless messages to save credits
+						if (question.length < 4 || /^[a-z]{1,3}$/i.test(question) || /^(ok|lol|lmao|bruh|hmm|hm|ff|gg|rip|f|k|ye|ya|no|nah|idk|ikr|fr|smh|nvm|ty|thx|gn|gm|wb)$/i.test(question)) return;
+
 						const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
 						const onCooldown = await this.client.redis.exists(cooldownKey);
 						if (onCooldown) return;

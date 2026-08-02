@@ -114,7 +114,7 @@ const envSchema = z.object({
 	HUGGINGFACE_TOKENS: multiKeySchema,
 	AI_TIMEOUT_SECONDS: integerFromEnv(12, 2, 30),
 	AI_MAX_HISTORY: integerFromEnv(6, 0, 30),
-	AI_MAX_OUTPUT_TOKENS: integerFromEnv(500, 64, 2_000),
+	AI_MAX_OUTPUT_TOKENS: integerFromEnv(200, 64, 2_000),
 	AI_RACE_MODE: booleanFromEnv(true),
 	AI_SESSION_TTL_SECONDS: integerFromEnv(21_600, 300, 86_400),
 	AI_USER_REQUESTS_PER_MINUTE: integerFromEnv(10, 1, 60),
