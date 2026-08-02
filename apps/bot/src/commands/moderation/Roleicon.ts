@@ -1,6 +1,7 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, SectionBuilder, ThumbnailBuilder, GuildMember, Role } from "discord.js";
+import Help from "../utils/Help";
 
 function buildPanel(title: string, body: string): ContainerBuilder {
     return new ContainerBuilder()
@@ -25,7 +26,7 @@ export default class RoleIconCommand extends Command {
             category: "moderation",
             aliases: ["setroleicon"],
             cooldown: 5,
-            args: true,
+            args: false,
             permissions: {
                 dev: false,
                 client: ["ManageRoles"],
@@ -50,6 +51,8 @@ export default class RoleIconCommand extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
+        if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "roleicon");
+
         const role = ctx.options.getRole("role") as Role;
         const icon = ctx.options.getString("icon", true, 1)!;
 

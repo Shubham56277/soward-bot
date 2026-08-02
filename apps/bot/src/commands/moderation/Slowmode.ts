@@ -3,6 +3,7 @@ import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import * as reply from "../../utils/reply";
 import { Guild } from "@repo/db";
+import Help from "../utils/Help";
 
 export default class Slowmode extends Command {
 	/** Helper to send a component based error message that auto‑deletes after a short delay. */
@@ -131,9 +132,9 @@ export default class Slowmode extends Command {
 		const reason = ctx.options.getString("reason", false, 1) ?? "No reason provided";
 
 		console.log(`[Slowmode] durationStr: "${durationStr}", isInteraction: ${ctx.isInteraction}`);
-		// No arguments provided → Show info
+		// No arguments provided → Show help
 		if (!durationStr.trim()) {
-			return this.sendInfo(ctx);
+			return new Help().showCommand(ctx, "slowmode");
 		}
 
 		// Parse duration before permission checks

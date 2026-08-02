@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 function cv2(text: string) {
 	return {
@@ -31,7 +32,7 @@ export default class Purge extends Command {
 			category: "moderation",
 			aliases: ["clear", "prune"],
 			cooldown: 5,
-			args: true,
+			args: false,
 			permissions: {
 				dev: false,
 				client: ["ManageMessages", "ViewChannel", "SendMessages", "ReadMessageHistory"],
@@ -51,6 +52,8 @@ export default class Purge extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "purge");
+
 		if (!ctx.channel?.isTextBased() || ctx.channel.isDMBased()) {
 			return ctx.sendMessage(cv2("This command can only be used in text channels."));
 		}

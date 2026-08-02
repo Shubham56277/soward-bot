@@ -2,6 +2,7 @@ import Command from "../../abstract/Command";
 import BaseClient from "../../base/Client";
 import Context from "../../lib/Context";
 import { ButtonBuilder, ActionRowBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
+import Help from "../utils/Help";
 
 export default class BadWord extends Command {
     client!: BaseClient
@@ -16,7 +17,7 @@ export default class BadWord extends Command {
             category: 'automod',
             aliases: ['bw', 'filter'],
             cooldown: 5,
-            args: true,
+            args: false,
             player: {
                 voice: false,
                 active: false,
@@ -104,17 +105,7 @@ export default class BadWord extends Command {
         const subCommand = ctx.isInteraction ? ctx.options.getSubCommand() : ctx.args[0]?.toLowerCase();
 
         if (!subCommand) {
-            const helpMsg = this.createEmbed(
-                'Word Filter Help',
-                `**Available Commands:**
-                • \`/badword add <word>\` - Add a word to the filter
-                • \`/badword remove <word>\` - Remove a word from the filter
-                • \`/badword list\` - View all filtered words
-                • \`/badword clear\` - Remove all filtered words
-                
-                **Note:** Filtered words will be blocked in all channels`,
-            );
-            return ctx.editOrReply(helpMsg);
+            return new Help().showCommand(ctx, "badword");
         }
 
         if (subCommand === 'add') {

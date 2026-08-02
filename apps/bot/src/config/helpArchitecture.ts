@@ -75,7 +75,7 @@ export const HELP_CATEGORIES: Category[] = [
 					{ heading: "Member Moderation", commands: ["ban", "unban", "softban", "kick", "timeout", "mute", "unmute", "massban", "unbanall", "warn", "warns", "clearwarn", "note", "snipe"] },
 					{ heading: "Channel & Server Control", commands: ["lock", "unlock", "lockall", "unlockall", "hide", "unhide", "hideall", "unhideall", "lockdown", "slowmode", "unslowmode", "nuke", "purge", "clear", "clone", "media"] },
 					{ heading: "Roles & Members", commands: ["nick", "nickname", "role", "roleall", "roleicon"] },
-					{ heading: "Protection", commands: ["security", "antinuke", "extraowner", "wl", "automod", "antiswear", "badword", "filter"] },
+					{ heading: "Protection", commands: ["antinuke", "extraowner", "wl", "automod", "antiswear", "badword", "filter"] },
 					{ heading: "Configuration", commands: ["logging", "logger", "customrole", "ignoredchannels", "autoresponder"] },
 				],
 			},

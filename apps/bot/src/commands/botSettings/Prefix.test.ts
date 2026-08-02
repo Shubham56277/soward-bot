@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ApplicationCommandOptionType } from "discord.js";
 import { HELP_CATEGORIES } from "../../config/helpArchitecture";
-import { formatCategoryCommand } from "../utils/Help";
+import Help, { formatCategoryCommand } from "../utils/Help";
+import NoPrefix from "./NoPrefix";
 import Prefix, { normalizePrefixAction } from "./Prefix";
 
 describe("Prefix command metadata and compatibility", () => {
@@ -48,5 +49,38 @@ describe("Help category command formatting", () => {
 		for (const prefix of ["!", "??", ".", "$", "elf "]) {
 			assert.equal(formatCategoryCommand(prefix, "prefix reset"), `**\`${prefix}prefix reset\`**`);
 		}
+	});
+});
+
+describe("Root command routes", () => {
+	async function assertDelegatesToHelp(command: { run(ctx: any): Promise<any> }, ctx: any, commandName: string): Promise<void> {
+		const original = Help.prototype.showCommand;
+		const expected = { commandName };
+		let receivedContext: any;
+		let receivedName: string | undefined;
+
+		Help.prototype.showCommand = async (actualContext, actualName) => {
+			receivedContext = actualContext;
+			receivedName = actualName;
+			return expected;
+		};
+
+		try {
+			assert.equal(await command.run(ctx), expected);
+			assert.equal(receivedContext, ctx);
+			assert.equal(receivedName, commandName);
+		} finally {
+			Help.prototype.showCommand = original;
+		}
+	}
+
+	it("routes prefix without a subcommand through Help command details", async () => {
+		const ctx = { options: { getSubCommand: () => undefined } };
+		await assertDelegatesToHelp(new Prefix(), ctx, "prefix");
+	});
+
+	it("routes noprefix without a subcommand through Help command details", async () => {
+		const ctx = { args: [] };
+		await assertDelegatesToHelp(new NoPrefix(), ctx, "noprefix");
 	});
 });

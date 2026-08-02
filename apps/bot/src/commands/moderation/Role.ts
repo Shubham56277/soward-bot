@@ -1,6 +1,7 @@
 import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, Role, PermissionFlagsBits, PermissionResolvable } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 const dangerPermissions: PermissionResolvable[] = [
 	PermissionFlagsBits.Administrator,
@@ -33,7 +34,7 @@ export default class GiveRole extends Command {
 			category: "moderation",
 			aliases: ["addrole", "ar"],
 			cooldown: 5,
-			args: true,
+			args: false,
 			permissions: {
 				dev: false,
 				client: ["ManageRoles", "ViewChannel", "EmbedLinks", "SendMessages"],
@@ -62,6 +63,8 @@ export default class GiveRole extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "role");
+
 		const target = ctx.options.getMember("user", 0) as GuildMember;
 		const role = ctx.options.getRole("role", true, 1) as Role;
 

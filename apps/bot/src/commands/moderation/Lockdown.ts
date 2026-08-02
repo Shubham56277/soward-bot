@@ -1,6 +1,7 @@
 import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, TextChannel, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 export default class Lockdown extends Command {
     constructor() {
@@ -40,7 +41,9 @@ export default class Lockdown extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const reason = ctx.options?.getString("reason") || ctx.args?.join(" ") || "No reason provided";
+        const reasonInput = ctx.options?.getString("reason") || ctx.args?.join(" ") || "";
+        if (!reasonInput.trim()) return new Help().showCommand(ctx, "lockdown");
+        const reason = reasonInput;
         const channels = ctx.guild.channels.cache.filter(c => c.isTextBased());
 
         try {

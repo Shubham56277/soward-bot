@@ -36,7 +36,7 @@ export default class Logger extends Command {
                 usage: "logger",
             },
             category: "settings",
-            aliases: ["log"],
+            aliases: ["log", "logging"],
             cooldown: 5,
             args: false,
             player: {

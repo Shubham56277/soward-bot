@@ -2,6 +2,7 @@ import { EmbedBuilder, GuildMember, ApplicationCommandOptionType } from "discord
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import * as reply from "../../utils/reply";
+import Help from "../utils/Help";
 
 export default class Nick extends Command {
 	constructor() {
@@ -15,7 +16,7 @@ export default class Nick extends Command {
 			category: "moderation",
 			aliases: ["nickname", "setnick"],
 			cooldown: 5,
-			args: true,
+			args: false,
 			permissions: {
 				dev: false,
 				client: ["ManageNicknames", "ViewChannel", "EmbedLinks", "SendMessages"],
@@ -40,6 +41,8 @@ export default class Nick extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "nick");
+
 		const target = ctx.options.getMember("user") as GuildMember;
 		let nickname = ctx.options.getString("nickname", false);
 

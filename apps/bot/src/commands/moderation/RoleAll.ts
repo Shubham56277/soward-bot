@@ -1,6 +1,7 @@
 import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, Role, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, PermissionResolvable } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 // Dangerous permissions to check against
 const dangerPermissions: PermissionResolvable[] = [
@@ -34,7 +35,7 @@ export default class RoleAll extends Command {
             category: "moderation",
             aliases: ["massrole", "addroleall"],
             cooldown: 30,
-            args: true,
+            args: false,
             permissions: {
                 dev: false,
                 client: ["ManageRoles"],
@@ -78,6 +79,8 @@ export default class RoleAll extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
+        if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "roleall");
+
         const role = ctx.options.getRole("role", true) as Role;
         const targetType = ctx.options.getString("type", false) || "humans";
 

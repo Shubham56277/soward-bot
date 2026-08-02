@@ -15,6 +15,7 @@ import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AntiNuke } from "@repo/db";
 import { env } from "@repo/env";
+import Help from "../utils/Help";
 
 // ─── Action Categories ─────────────────────────────────────────────────────
 
@@ -82,14 +83,14 @@ export default class WhitelistCommand extends Command {
 
 		const sub = (ctx.args[0] ?? "").toLowerCase();
 
-		if (!sub) return this.showHelp(ctx);
+		if (!sub) return new Help().showCommand(ctx, "wl");
 
 		switch (sub) {
 			case "add": return this.addUser(ctx);
 			case "remove": return this.removeUser(ctx);
 			case "list": return this.listUsers(ctx);
 			case "reset": return this.resetAll(ctx);
-			default: return this.showHelp(ctx);
+			default: return new Help().showCommand(ctx, "wl");
 		}
 	}
 

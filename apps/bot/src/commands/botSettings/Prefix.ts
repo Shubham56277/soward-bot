@@ -5,6 +5,7 @@ import Context from "../../lib/Context";
 import { SETTINGS_FLAGS, settingsFailure, settingsPanel } from "../../utils/botSettingsUi";
 import { validatePrefix } from "../../utils/botSettingsValidation";
 import { invalidatePrefixCache } from "../../utils/commandStateCache";
+import Help from "../utils/Help";
 
 const MAX_PREFIXES = 5;
 
@@ -49,9 +50,9 @@ export default class Prefix extends Command {
 
 	public async run(ctx: Context): Promise<any> {
 		try {
-			// `?prefix` with no subcommand shows the full dashboard (current prefixes + subcommands).
+			// Route the message-command root through Help so its detail UI stays synchronized.
 			const rawAction = ctx.options.getSubCommand(false, 0);
-			if (!rawAction) return this.dashboard(ctx);
+			if (!rawAction) return this.help(ctx);
 
 			const action = normalizePrefixAction(rawAction);
 			if (action === "reset") return this.save(ctx, [ctx.client.config.prefix], "Default prefix restored");
@@ -82,6 +83,10 @@ export default class Prefix extends Command {
 			return settingsFailure(ctx, error, "prefix");
 		}
 	}
+	private help(ctx: Context): Promise<any> {
+		return new Help().showCommand(ctx, "prefix");
+	}
+
 	private notice(ctx: Context, title: string, body: string): Promise<any> {
 		return ctx.sendMessage({ components: [settingsPanel(title, body)], flags: SETTINGS_FLAGS });
 	}

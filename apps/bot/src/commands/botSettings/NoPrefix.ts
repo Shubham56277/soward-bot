@@ -5,6 +5,7 @@ import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { SETTINGS_FLAGS, settingsFailure, settingsPanel } from "../../utils/botSettingsUi";
 import { TimeFormat } from "../../utils/timeFormat";
+import Help from "../utils/Help";
 
 const MAX_LIST = 30;
 // Never ping users when rendering the list or notices.
@@ -39,7 +40,7 @@ export default class NoPrefix extends Command {
 	public async run(ctx: Context): Promise<any> {
 		try {
 			const action = (ctx.args[0] ?? "").toLowerCase();
-			if (!action) return this.dashboard(ctx);
+			if (!action) return this.help(ctx);
 
 			switch (action) {
 				case "add":
@@ -168,6 +169,10 @@ export default class NoPrefix extends Command {
 	}
 
 	// ─── Helpers ────────────────────────────────────────────────────────────
+
+	private help(ctx: Context): Promise<any> {
+		return new Help().showCommand(ctx, "noprefix");
+	}
 
 	private isDev(ctx: Context): boolean {
 		return env.DEVELOPER_IDS.includes(ctx.author!.id);

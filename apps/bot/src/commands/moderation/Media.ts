@@ -3,6 +3,7 @@ import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { ChannelType, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, TextChannel } from "discord.js";
 import { ApplicationCommandOptionType } from "discord.js";
+import Help from "../utils/Help";
 
 export default class Media extends Command {
     constructor() {
@@ -20,7 +21,7 @@ export default class Media extends Command {
             category: "moderation",
             aliases: ["mediachannel"],
             cooldown: 10,
-            args: true,
+            args: false,
             player: {
                 voice: false,
                 active: false,
@@ -74,7 +75,9 @@ export default class Media extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const subcommand = ctx.options.getSubCommand();
+        const subcommand = ctx.options.getSubCommand(false, 0);
+
+        if (!subcommand) return new Help().showCommand(ctx, "media");
 
         switch (subcommand) {
             case "add":

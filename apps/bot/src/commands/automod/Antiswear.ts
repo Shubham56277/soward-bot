@@ -1,6 +1,7 @@
 import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 export default class Antiswear extends Command {
     constructor() {
@@ -8,8 +9,8 @@ export default class Antiswear extends Command {
             name: "antiswear",
             description: {
                 content: "Toggle the anti-swear filter for your server",
-                examples: ["antiswear"],
-                usage: "antiswear",
+                examples: ["antiswear toggle", "antiswear on", "antiswear off"],
+                usage: "antiswear <toggle|on|off|enable|disable>",
             },
             category: "automod",
             cooldown: 5,
@@ -25,6 +26,13 @@ export default class Antiswear extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
+        const sub = (ctx.args?.[0] ?? "").toLowerCase();
+
+        if (!sub) return new Help().showCommand(ctx, "antiswear");
+
+        const validActions = ["toggle", "on", "off", "enable", "disable"];
+        if (!validActions.includes(sub)) return new Help().showCommand(ctx, "antiswear");
+
         const guild = await ctx.client.guilds.fetch(ctx.guild.id);
         const rules = await guild.autoModerationRules.fetch();
         const rule = rules.find(r => r.name === "soward badwords");
@@ -37,7 +45,15 @@ export default class Antiswear extends Command {
             return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
         }
 
-        const newState = !rule.enabled;
+        let newState: boolean;
+        if (sub === "toggle") {
+            newState = !rule.enabled;
+        } else if (sub === "on" || sub === "enable") {
+            newState = true;
+        } else {
+            newState = false;
+        }
+
         await rule.edit({ enabled: newState });
 
         const statusText = newState ? "**enabled**" : "**disabled**";

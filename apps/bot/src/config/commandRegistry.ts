@@ -53,7 +53,7 @@ const implemented = new Set([
 	"help", "ping", "uptime", "botinfo", "serverinfo", "info", "pfp", "banner", "membercount", "boostcount",
 	"roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
 	"timeout", "untimeout", "warn", "warnings", "nickname", "slowmode", "lock", "unlock", "hide", "unhide", "clear",
-	"channel", "role", "quarantine", "security", "antinuke", "mainrole", "extraowner", "ignore", "coowner",
+	"channel", "role", "quarantine", "antinuke", "mainrole", "extraowner", "ignore", "coowner",
 	"logging", "automod", "filter", "autorole", "notifier", "autodelete",
 	"autoresponder", "autoreact", "welcome", "customrole", "ticket", "media-only", "sticky",
 	"reaction-role", "variables", "embed", "voice", "voice-role",
@@ -114,7 +114,6 @@ const seeds: RegistrySeed[] = [
 	["quarantine", "moderation", "Manage member quarantine"],
 
 	// === SECURITY (5) ===
-	["security", "security", "Show active server protections"],
 	["antinuke", "security", "Configure destructive-action protection"],
 	["mainrole", "security", "Manage the server main role"],
 	["extraowner", "security", "Manage extra owners with configurable security limits"],
