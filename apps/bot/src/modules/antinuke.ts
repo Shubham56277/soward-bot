@@ -191,6 +191,7 @@ export class AntiNukeService {
                         await guild.members.kick(userId, truncatedReason).catch(() => { });
                         break;
 
+                    case "rolestrip":
                     case "role-remove": {
                         const member = guild.members.cache.get(userId);
                         if (member) {

@@ -447,6 +447,7 @@ export default class AntiNukeCommand extends Command {
 
 		const saved = await AntiNuke.update(ctx.guild.id!, config);
 		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(saved));
+		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 
 		const moduleList = Object.values(MODULES).map((m) => `${EMOJI.on} ${m.label}`).join("\n");
 
@@ -473,15 +474,15 @@ export default class AntiNukeCommand extends Command {
 	// ─── Disable ──────────────────────────────────────────────────────────
 
 	private async disable(ctx: Context, settings: AntiNuke): Promise<any> {
-		const nowEnabled = !settings.enabled;
-		const updated = await AntiNuke.update(ctx.guild.id!, { enabled: nowEnabled });
+		if (!settings.enabled) {
+			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection is already disabled.\nUse \`antinuke enable\` to re-activate.`);
+		}
+
+		const updated = await AntiNuke.update(ctx.guild.id!, { enabled: false });
 		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
+		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 
-		const body = nowEnabled
-			? `${EMOJI.check} Protection has been **re-enabled**.`
-			: `${EMOJI.warn} Protection has been **disabled**.\n\n-# Your configuration is preserved. Use \`antinuke enable\` to re-activate.`;
-
-		return reply(ctx, nowEnabled ? "Protection Enabled" : "Protection Disabled", body);
+		return reply(ctx, "Protection Disabled", `${EMOJI.warn} Protection has been **disabled**.\n\n-# Your configuration is preserved. Use \`antinuke enable\` to re-activate.`);
 	}
 
 	// ─── Punishment ───────────────────────────────────────────────────────
@@ -519,6 +520,7 @@ export default class AntiNukeCommand extends Command {
 
 		const updated = await AntiNuke.update(ctx.guild.id!, patch);
 		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
+		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 
 		return reply(ctx, "Punishment Updated", `${EMOJI.check} Default action set to **${value}** across all modules.`);
 	}
@@ -548,6 +550,7 @@ export default class AntiNukeCommand extends Command {
 
 		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: [...settings.trustedUsers, { id: member.id }] });
 		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
+		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 		return reply(ctx, "Whitelist Updated", `${EMOJI.check} **${member.user.username}** added to the whitelist.`);
 	}
 
@@ -562,6 +565,7 @@ export default class AntiNukeCommand extends Command {
 
 		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: settings.trustedUsers.filter((u) => u.id !== member.id) });
 		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
+		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 		return reply(ctx, "Whitelist Updated", `${EMOJI.check} **${member.user.username}** removed from the whitelist.`);
 	}
 
@@ -580,6 +584,7 @@ export default class AntiNukeCommand extends Command {
 
 		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: [] });
 		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
+		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 		return reply(ctx, "Whitelist Cleared", `${EMOJI.check} All users have been removed from the whitelist.`);
 	}
 
@@ -645,6 +650,7 @@ export default class AntiNukeCommand extends Command {
 					(settings as any)[key] = !(settings as any)[key];
 					settings = await AntiNuke.update(ctx.guild.id!, { [key]: (settings as any)[key] });
 					await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(settings));
+					ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 
 					const newPanel = panel("Configuration", buildOverview(settings));
 					await int.update({ components: [newPanel, menuRow] }).catch(() => {});
@@ -802,6 +808,7 @@ export default class AntiNukeCommand extends Command {
 
 				settings = await AntiNuke.update(ctx.guild.id!, settings);
 				await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(settings));
+				ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
 
 				const refreshed: any[] = (settings as any)[targetModule] ?? [];
 				const refreshedPanel = panel(`${meta.label} Module`, buildModuleView(refreshed));
