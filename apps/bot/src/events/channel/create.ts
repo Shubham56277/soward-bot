@@ -31,7 +31,7 @@ export default class ChannelCreate extends Event {
                 }
 
                 const actionConfig = config?.channel?.find(c => c.type === "create");
-                if (!actionConfig?.enabled) return;
+                if (!config?.enabled || !actionConfig?.enabled) return;
 
                 // Fetch only 1 log instead of 2 for speed
                 const logs = await guild.fetchAuditLogs({

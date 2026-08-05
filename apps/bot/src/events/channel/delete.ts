@@ -31,7 +31,7 @@ export default class ChannelDelete extends Event {
                 }
 
                 const actionConfig = config?.channel?.find(c => c.type === "delete");
-                if (!actionConfig?.enabled) return;
+                if (!config?.enabled || !actionConfig?.enabled) return;
 
                 // Fast audit log fetch
                 const logs = await guild.fetchAuditLogs({

@@ -36,7 +36,7 @@ export default class ChannelUpdate extends Event {
                 }
 
                 const actionConfig = config?.channel?.find(c => c.type === "update");
-                if (!actionConfig?.enabled) return;
+                if (!config?.enabled || !actionConfig?.enabled) return;
 
                 // Fast audit log fetch
                 const logs = await guild.fetchAuditLogs({
