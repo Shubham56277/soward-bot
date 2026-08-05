@@ -19,7 +19,8 @@ export default class AntiNukeBotAddListener extends Event {
     if (!member.user.bot) return;
 
     // ── Anti Unverified Bot filter ──────────────────────────────────────────
-    // Checks if the added bot lacks the VERIFIED_BOT flag and kicks it
+    // Checks if the added bot lacks the VERIFIED_BOT flag and bans it.
+    // Only active when antinuke is enabled AND the antiUnverifiedBot module is on.
     try {
       const premiumActive = await isGuildPremiumActive(member.guild.id);
       if (premiumActive) {
@@ -36,7 +37,9 @@ export default class AntiNukeBotAddListener extends Event {
 
               // Skip if the executor is the guild owner or the bot itself
               if (executorId === member.guild.ownerId || executorId === this.client.user?.id) {
-                // Allowed, bypass the ban
+                // Allowed — owner/self bypass
+              } else if (executorId && this.isWhitelisted(config, executorId)) {
+                // Allowed — whitelisted user added this bot
               } else {
                 await member.ban({ reason: "[ANTINUKE] Anti-Unverified Bot | Unverified bot addition blocked" }).catch(() => null);
                 logger.info(`[ ANTINUKE ] Banned unverified bot ${member.user.tag} in ${member.guild.id} (added by ${executorId || "unknown"})`);
@@ -47,27 +50,39 @@ export default class AntiNukeBotAddListener extends Event {
         }
       }
     } catch (err) {
-      logger.debug(`[ ANTINUKE ] Anti-unverified bot check failed: ${err}`);
+      logger.debug(`[ ANTINUKE ] Anti-unverified bot check failed in ${member.guild.id}: ${err}`);
     }
 
     // ── Standard botAdd protection ──────────────────────────────────────────
-    const protection = await runAntiNukeProtectionDetailed(this.client, member.guild, "botAdd", `botAdd:${member.user.tag}`);
+    try {
+      const protection = await runAntiNukeProtectionDetailed(this.client, member.guild, "botAdd", `botAdd:${member.user.tag}`);
 
-    // Auto-recovery: also ban the illegally-added bot itself
-    if (protection.enforcedNow) {
-      const autoRecovery = await isAutoRecoveryEnabled(member.guild.id);
-      if (autoRecovery) {
-        try {
+      // Auto-recovery: also ban the illegally-added bot itself
+      if (protection.enforcedNow) {
+        const autoRecovery = await isAutoRecoveryEnabled(member.guild.id);
+        if (autoRecovery) {
           await member.ban({ reason: "[ANTINUKE] Auto-recovery | Removing illegally-added bot" }).catch(() => null);
           await sendRecoveryReport(
             member.guild,
             "Illegal Bot Removed",
             `Banned illegally-added bot <@${member.id}> (\`${member.user.tag}\`) after unauthorized bot addition.`,
-          );
-        } catch (err) {
-          logger.debug(`[ ANTINUKE ] Failed to ban illegal bot ${member.id} in ${member.guild.id}: ${err}`);
+          ).catch(() => null);
         }
       }
+    } catch (err) {
+      logger.debug(`[ ANTINUKE ] BotAdd protection error in ${member.guild.id}: ${err}`);
     }
+  }
+
+  private isWhitelisted(config: any, userId: string): boolean {
+    // Check extra owners
+    if (config.extraOwnerIds?.includes(userId)) return true;
+    // Check user-level whitelist
+    if (config.whitelistUserIds?.includes(userId)) return true;
+    // Check whitelist access profiles
+    const profile = config.whitelistAccess?.[userId];
+    if (profile?.fullAccess) return true;
+    if (Array.isArray(profile?.actions) && profile.actions.includes("botAdd")) return true;
+    return false;
   }
 }
