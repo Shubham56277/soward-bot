@@ -351,8 +351,12 @@ export default class AntiNukeCommand extends Command {
 		lines.push(row("Mention", settings.mention ? "Enabled" : "Disabled"));
 		lines.push(row("GateKeeper", settings.gateKeeper ? "Enabled" : "Disabled"));
 
+		const header = settings.enabled
+			? "Review the protection modules currently active."
+			: "⚠️ **AntiNuke is disabled.** Modules below will not enforce until you run `?antinuke enable`.";
+
 		return [
-			"Review the protection modules currently active.",
+			header,
 			"",
 			"**Protection Modules**",
 			...lines,
