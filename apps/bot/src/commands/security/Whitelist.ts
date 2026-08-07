@@ -1,65 +1,21 @@
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	ComponentType,
-	ContainerBuilder,
-	GuildMember,
-	MessageFlags,
-	SeparatorBuilder,
-	SeparatorSpacingSize,
-	StringSelectMenuBuilder,
-	TextDisplayBuilder,
-} from "discord.js";
+import type { User } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AntiNuke } from "@repo/db";
 import { env } from "@repo/env";
+import { addTrustedUser, normalizeTrustedUsers, parseDiscordUserId, removeTrustedUser } from "../../modules/antiNukeState";
 import Help from "../utils/Help";
 
-// ─── Action Categories ─────────────────────────────────────────────────────
-
-const WHITELIST_ACTIONS = [
-	{ key: "ban", label: "Ban" },
-	{ key: "kick", label: "Kick" },
-	{ key: "prune", label: "Prune" },
-	{ key: "botAdd", label: "Bot Add" },
-	{ key: "guildUpdate", label: "Server Update" },
-	{ key: "memberRoleUpdate", label: "Member Role Update" },
-	{ key: "linkRole", label: "Member Role Update (Power Roles)" },
-	{ key: "channelCreate", label: "Channel Create" },
-	{ key: "channelDelete", label: "Channel Delete" },
-	{ key: "channelUpdate", label: "Channel Update" },
-	{ key: "roleCreate", label: "Role Create" },
-	{ key: "roleDelete", label: "Role Delete" },
-	{ key: "roleUpdate", label: "Role Update" },
-	{ key: "everyoneHerePing", label: "Mention Everyone/Here" },
-	{ key: "webhookCreate", label: "Webhook Create" },
-	{ key: "webhookUpdate", label: "Webhook Update" },
-	{ key: "webhookDelete", label: "Webhook Delete" },
-	{ key: "emojiCreate", label: "Emoji Create" },
-	{ key: "emojiUpdate", label: "Emoji Update" },
-	{ key: "emojiDelete", label: "Emoji Delete" },
-	{ key: "stickerCreate", label: "Sticker Create" },
-	{ key: "stickerUpdate", label: "Sticker Update" },
-	{ key: "stickerDelete", label: "Sticker Delete" },
-] as const;
-
-type ActionKey = typeof WHITELIST_ACTIONS[number]["key"];
-
-const CACHE_KEY = (guildId: string) => `c:${guildId}`;
-const WL_STATE_KEY = (guildId: string, userId: string) => `wl:actions:${guildId}:${userId}`;
-
-// ─── Command ───────────────────────────────────────────────────────────────
+type UserResolution = { user: User; error?: never } | { user: null; error: string };
 
 export default class WhitelistCommand extends Command {
 	constructor() {
 		super({
 			name: "wl",
 			description: {
-				content: "Manage antinuke whitelist with per-action controls",
-				examples: ["wl", "wl add @user", "wl remove @user", "wl list"],
-				usage: "wl [add|remove|list|reset] [user]",
+				content: "Manage full AntiNuke bypasses",
+				examples: ["wl @user", "wl 123456789012345678", "wl add @user", "wl remove @user", "wl list"],
+				usage: "wl <mention|user-id> | wl <add|remove|list|reset> [user]",
 			},
 			category: "security",
 			aliases: ["whitelist"],
@@ -76,251 +32,120 @@ export default class WhitelistCommand extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
-		// Check authorization
-		if (!(await this.isAuthorized(ctx))) {
-			return;
-		}
+		try {
+			if (!(await this.isAuthorized(ctx))) {
+				return ctx.sendMessage("Only the server owner, an extra owner, or the AntiNuke admin can manage the whitelist.");
+			}
 
-		const sub = (ctx.args[0] ?? "").toLowerCase();
-
-		if (!sub) return new Help().showCommand(ctx, "wl");
-
-		switch (sub) {
-			case "add": return this.addUser(ctx);
-			case "remove": return this.removeUser(ctx);
-			case "list": return this.listUsers(ctx);
-			case "reset": return this.resetAll(ctx);
-			default: return new Help().showCommand(ctx, "wl");
+			const sub = (ctx.args[0] ?? "").toLowerCase();
+			switch (sub) {
+				case "add": return this.addUser(ctx, 1);
+				case "remove": return this.removeUser(ctx, 1);
+				case "list": return this.listUsers(ctx);
+				case "reset": return this.resetAll(ctx);
+				case "": return new Help().showCommand(ctx, "wl");
+				default: return this.addUser(ctx, 0);
+			}
+		} catch (error) {
+			ctx.client.logger.error("[AntiNuke] Whitelist command failed:", error);
+			return ctx.sendMessage("Could not update the AntiNuke whitelist. Please try again.");
 		}
 	}
 
 	private async isAuthorized(ctx: Context): Promise<boolean> {
 		const userId = ctx.author?.id ?? "";
 		if (userId === ctx.guild.ownerId || env.DEVELOPER_IDS.includes(userId)) return true;
-		// Check extra owners
-		const raw = await ctx.client.redis.get(`extraowners:${ctx.guild.id}`).catch(() => null);
-		if (raw) {
-			try {
+		try {
+			const raw = await ctx.client.redis.get(`extraowners:${ctx.guild.id}`);
+			if (raw) {
 				const owners = JSON.parse(raw) as { userId: string }[];
-				if (owners.some(o => o.userId === userId)) return true;
-			} catch {}
-		}
-		// Check antinuke admin
-		const settings = await AntiNuke.get(ctx.guild.id!);
-		if (settings.admin === userId) return true;
-		return false;
-	}
-
-	private showHelp(ctx: Context): Promise<any> {
-		const body = [
-			"## Whitelist",
-			"Manage which users are exempted from antinuke protection.",
-			"",
-			"`wl add @user` — Add user with action selection panel",
-			"`wl remove @user` — Remove user from whitelist",
-			"`wl list` — Show all whitelisted users",
-			"`wl reset` — Clear all whitelisted users",
-			"",
-			"-# Whitelisted users can perform up to 25 actions per 10 minutes.",
-		].join("\n");
-
-		return ctx.sendMessage({ content: body });
-	}
-
-	private async addUser(ctx: Context): Promise<any> {
-		const settings = await AntiNuke.get(ctx.guild.id!);
-		if (!settings.enabled) return ctx.sendMessage("Antinuke must be enabled first.");
-
-		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return ctx.sendMessage("Mention a user: `wl add @user`");
-
-		// Load existing action state for this user (or default all disabled)
-		const stateKey = WL_STATE_KEY(ctx.guild.id, member.id);
-		const existingRaw = await ctx.client.redis.get(stateKey).catch(() => null);
-		let enabledActions: Set<string> = new Set();
-
-		if (existingRaw) {
-			try {
-				enabledActions = new Set(JSON.parse(existingRaw));
-			} catch {}
-		}
-
-		// Check if already whitelisted
-		const alreadyWhitelisted = settings.trustedUsers.some((u) => u.id === member.id);
-		if (alreadyWhitelisted && existingRaw) {
-			// Show current panel for editing
-		}
-
-		// Build the interactive panel
-		const buildPanel = () => {
-			const lines = WHITELIST_ACTIONS.map(a => {
-				const enabled = enabledActions.has(a.key);
-				const icon = enabled ? "✅" : "❌";
-				return `${icon} **: ${a.label}**`;
-			});
-
-			const container = new ContainerBuilder()
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${ctx.guild.name}`))
-				.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(lines.join("\n")))
-				.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`**Executor**\u2003\u2003**Target**\n\`${ctx.author!.username}\`\u2003\u2003\`${member.user.username}\``
-				))
-				.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Powered by Elfaria`));
-
-			return container;
-		};
-
-		// Select menu to toggle individual actions
-		const buildSelectMenu = () => {
-			const options = WHITELIST_ACTIONS.map(a => ({
-				label: a.label,
-				value: a.key,
-				description: enabledActions.has(a.key) ? "Currently: Enabled" : "Currently: Disabled",
-			}));
-
-			return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-				new StringSelectMenuBuilder()
-					.setCustomId("wl_toggle_select")
-					.setPlaceholder("Choose Your Options")
-					.setMinValues(1)
-					.setMaxValues(options.length)
-					.addOptions(options),
-			);
-		};
-
-		const buildButtons = () => {
-			return new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("wl_add_all").setLabel("Add This User To All Categories").setStyle(ButtonStyle.Primary),
-				new ButtonBuilder().setCustomId("wl_save").setLabel("Save & Confirm").setStyle(ButtonStyle.Success),
-			);
-		};
-
-		const msg = await ctx.sendMessage({
-			components: [buildPanel(), buildSelectMenu(), buildButtons()],
-			flags: MessageFlags.IsComponentsV2,
-			allowedMentions: { parse: [] },
-		});
-
-		const collector = msg.createMessageComponentCollector({
-			time: 120_000,
-			filter: (i) => i.user.id === ctx.author!.id,
-		});
-
-		collector.on("collect", async (i) => {
-			if (i.customId === "wl_toggle_select" && i.isStringSelectMenu()) {
-				// Toggle selected actions
-				for (const value of i.values) {
-					if (enabledActions.has(value)) {
-						enabledActions.delete(value);
-					} else {
-						enabledActions.add(value);
-					}
-				}
-				await i.update({
-					components: [buildPanel(), buildSelectMenu(), buildButtons()],
-				}).catch(() => {});
-
-			} else if (i.customId === "wl_add_all" && i.isButton()) {
-				// Enable all actions
-				for (const a of WHITELIST_ACTIONS) {
-					enabledActions.add(a.key);
-				}
-				await i.update({
-					components: [buildPanel(), buildSelectMenu(), buildButtons()],
-				}).catch(() => {});
-
-			} else if (i.customId === "wl_save" && i.isButton()) {
-				collector.stop("saved");
-
-				// Save to Redis (per-user action state)
-				await ctx.client.redis.set(stateKey, JSON.stringify([...enabledActions])).catch(() => {});
-
-				// Add to trustedUsers if not already
-				if (!settings.trustedUsers.some(u => u.id === member.id)) {
-					const updated = await AntiNuke.update(ctx.guild.id!, {
-						trustedUsers: [...settings.trustedUsers, { id: member.id }],
-					});
-					await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated)).catch(() => {});
-				}
-
-				const enabledCount = enabledActions.size;
-				const totalCount = WHITELIST_ACTIONS.length;
-
-				await i.update({
-					components: [
-						new ContainerBuilder()
-							.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-								`✅ **${member.user.username}** has been whitelisted with **${enabledCount}/${totalCount}** action categories enabled.`
-							)),
-					],
-				}).catch(() => {});
+				if (owners.some((owner) => owner.userId === userId)) return true;
 			}
-		});
-
-		collector.on("end", async (_c, reason) => {
-			if (reason === "saved") return;
-			// Timeout — disable components
-			await msg.edit({
-				components: [
-					new ContainerBuilder()
-						.addTextDisplayComponents(new TextDisplayBuilder().setContent("Whitelist configuration timed out.")),
-				],
-			}).catch(() => {});
-		});
+		} catch (error) {
+			ctx.client.logger.error("[AntiNuke] Failed to read extra owners:", error);
+		}
+		return (await AntiNuke.get(ctx.guild.id)).admin === userId;
 	}
 
-	private async removeUser(ctx: Context): Promise<any> {
-		const settings = await AntiNuke.get(ctx.guild.id!);
-		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return ctx.sendMessage("Mention a user: `wl remove @user`");
+	private async resolveUser(ctx: Context, position: number): Promise<UserResolution> {
+		const raw = ctx.args[position];
+		const userId = parseDiscordUserId(raw);
+		if (!userId) return { user: null, error: "Provide a valid user mention or 17-20 digit Discord user ID." };
+		try {
+			const member = await ctx.guild.members.fetch(userId);
+			return { user: member.user };
+		} catch {
+			try {
+				return { user: await ctx.client.users.fetch(userId) };
+			} catch (error) {
+				ctx.client.logger.error(`[AntiNuke] Failed to resolve whitelist user ${userId}:`, error);
+				return { user: null, error: `No Discord user could be resolved for \`${userId}\`.` };
+			}
+		}
+	}
 
-		if (!settings.trustedUsers.some(u => u.id === member.id)) {
-			return ctx.sendMessage(`**${member.user.username}** is not whitelisted.`);
+	private async addUser(ctx: Context, position: number): Promise<any> {
+		const resolved = await this.resolveUser(ctx, position);
+		if (!resolved.user) return ctx.sendMessage(resolved.error);
+		const { user } = resolved;
+		if (user.id === ctx.client.user?.id) return ctx.sendMessage("The bot already bypasses its own AntiNuke enforcement.");
+
+		const settings = await AntiNuke.get(ctx.guild.id);
+		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
+		if (trustedUsers.some((entry) => entry.id === user.id)) {
+			return ctx.sendMessage(`**${user.username}** already has a full AntiNuke bypass.`);
 		}
 
-		const updated = await AntiNuke.update(ctx.guild.id!, {
-			trustedUsers: settings.trustedUsers.filter(u => u.id !== member.id),
+		const updated = await AntiNuke.update(ctx.guild.id, {
+			trustedUsers: addTrustedUser(trustedUsers, user.id),
 		});
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated)).catch(() => {});
-		await ctx.client.redis.del(WL_STATE_KEY(ctx.guild.id, member.id)).catch(() => {});
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id, updated);
+		return ctx.sendMessage(`✅ **${user.username}** now has an immediate full AntiNuke bypass.`);
+	}
 
-		return ctx.sendMessage(`✅ **${member.user.username}** removed from whitelist.`);
+	private async removeUser(ctx: Context, position: number): Promise<any> {
+		const resolved = await this.resolveUser(ctx, position);
+		if (!resolved.user) return ctx.sendMessage(resolved.error);
+		const { user } = resolved;
+
+		const settings = await AntiNuke.get(ctx.guild.id);
+		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
+		if (!trustedUsers.some((entry) => entry.id === user.id)) {
+			await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id, user.id);
+			return ctx.sendMessage(`**${user.username}** is not whitelisted. Any legacy state was cleared.`);
+		}
+
+		const updated = await AntiNuke.update(ctx.guild.id, {
+			trustedUsers: removeTrustedUser(trustedUsers, user.id),
+		});
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id, updated);
+		await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id, user.id);
+		return ctx.sendMessage(`✅ **${user.username}** removed from the AntiNuke whitelist.`);
 	}
 
 	private async listUsers(ctx: Context): Promise<any> {
-		const settings = await AntiNuke.get(ctx.guild.id!);
+		const settings = await AntiNuke.get(ctx.guild.id);
+		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
+		if (!trustedUsers.length) return ctx.sendMessage("No whitelisted users.");
 
-		if (!settings.trustedUsers.length) {
-			return ctx.sendMessage("No whitelisted users.");
-		}
-
-		const lines = await Promise.all(
-			settings.trustedUsers.map(async (u, i) => {
-				const user = await ctx.client.users.fetch(u.id).catch(() => null);
-				const name = user?.username ?? u.id;
-				return `${i + 1}. **${name}** (\`${u.id}\`)`;
-			})
-		);
-
-		return ctx.sendMessage({
-			content: `## Whitelisted Users (${settings.trustedUsers.length})\n${lines.join("\n")}\n\n-# Limit: 25 actions per 10 minutes`,
-		});
+		const lines = await Promise.all(trustedUsers.map(async (entry, index) => {
+			try {
+				const user = await ctx.client.users.fetch(entry.id);
+				return `${index + 1}. **${user.username}** (\`${entry.id}\`)`;
+			} catch (error) {
+				ctx.client.logger.error(`[AntiNuke] Failed to resolve listed user ${entry.id}:`, error);
+				return `${index + 1}. \`${entry.id}\``;
+			}
+		}));
+		return ctx.sendMessage(`## Full AntiNuke Bypasses (${lines.length})\n${lines.join("\n")}`);
 	}
 
 	private async resetAll(ctx: Context): Promise<any> {
-		const settings = await AntiNuke.get(ctx.guild.id!);
-
-		// Clear all action states
-		for (const u of settings.trustedUsers) {
-			await ctx.client.redis.del(WL_STATE_KEY(ctx.guild.id, u.id)).catch(() => {});
-		}
-
-		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: [] });
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated)).catch(() => {});
-
-		return ctx.sendMessage(`✅ Whitelist cleared (${settings.trustedUsers.length} users removed).`);
+		const settings = await AntiNuke.get(ctx.guild.id);
+		const removedCount = normalizeTrustedUsers(settings.trustedUsers).length;
+		const updated = await AntiNuke.update(ctx.guild.id, { trustedUsers: [] });
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id, updated);
+		await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id);
+		return ctx.sendMessage(`✅ Whitelist cleared (${removedCount} users removed).`);
 	}
 }

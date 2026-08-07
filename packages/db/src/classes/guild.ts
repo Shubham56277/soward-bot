@@ -25,7 +25,7 @@ import {
 	IgnoredChannelsType,
 } from "../types";
 import { db, schema } from "..";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { cacheAside, invalidateCache } from "../cache";
 
 const ignoredChannelCacheKey = (guildId: string, channelId: string) => `db:ignored-channel:${guildId}:${channelId}`;
@@ -76,7 +76,7 @@ export class Guild implements GuildType {
 			.execute();
 		await invalidateCache(guildCacheKey(guildId));
 
-		return new Guild(guildId, data!);
+		return new Guild(guildId, data ?? {});
 	}
 	public static async get(guildId: string) {
 		return cacheAside(guildCacheKey(guildId), GUILD_CACHE_TTL_SECONDS, async () => {
@@ -128,9 +128,17 @@ export class AntiNuke implements AntiNukeType {
 	public role: AntiNukeChannel[];
 	public createdAt: Date;
 
+	private static normalizeTrustedUsers(value: unknown): ID[] {
+		if (!Array.isArray(value)) return [];
+		const ids = value
+			.map((entry) => typeof entry === "string" ? entry : (entry as ID | undefined)?.id)
+			.filter((id): id is string => typeof id === "string" && /^\d{17,20}$/.test(id));
+		return [...new Set(ids)].map((id) => ({ id }));
+	}
+
 	constructor(guildId: string, data: Partial<AntiNukeType>) {
 		this.guildId = guildId;
-		this.trustedUsers = data.trustedUsers ?? [];
+		this.trustedUsers = AntiNuke.normalizeTrustedUsers(data.trustedUsers);
 		this.admin = data.admin ?? null;
 		this.enabled = data.enabled ?? false;
 		this.channel = data.channel ?? [];
@@ -149,7 +157,7 @@ export class AntiNuke implements AntiNukeType {
 		if (!guildId) {
 			throw new Error("guildId is required");
 		}
-		const antiNuke = new AntiNuke(guildId, data!);
+		const antiNuke = new AntiNuke(guildId, data ?? {});
 		await db.insert(schema.AntiNuke).values(antiNuke).onConflictDoNothing().execute();
 
 		return antiNuke;
@@ -180,6 +188,9 @@ export class AntiNuke implements AntiNukeType {
 		if (!guildId) {
 			throw new Error("guildId is required");
 		}
+		const canonicalData = data.trustedUsers === undefined
+			? data
+			: { ...data, trustedUsers: AntiNuke.normalizeTrustedUsers(data.trustedUsers) };
 		// First ensure the guild exists
 		const guild = await Guild.get(guildId);
 		if (!guild) {
@@ -190,13 +201,13 @@ export class AntiNuke implements AntiNukeType {
 		const existingAntiNuke = (await db.select().from(schema.AntiNuke).where(eq(schema.AntiNuke.guildId, guildId)).execute()).at(0);
 
 		if (!existingAntiNuke) {
-			return await AntiNuke.create(guildId, data);
+			return await AntiNuke.create(guildId, canonicalData);
 		}
 
 		await db
 			.update(schema.AntiNuke)
 			.set({
-				...data,
+				...canonicalData,
 				updatedAt: new Date(),
 			})
 			.where(eq(schema.AntiNuke.guildId, guildId))
@@ -226,7 +237,7 @@ export class AutoMod implements AutoModType {
 		if (!guildId) {
 			throw new Error("guildId is required");
 		}
-		const autoMod = new AutoMod(guildId, data!);
+		const autoMod = new AutoMod(guildId, data ?? {});
 		await db.insert(schema.AutoMod).values(autoMod).onConflictDoNothing().execute();
 
 		return autoMod;
@@ -1159,24 +1170,17 @@ export class Ticket implements TicketType {
 		return new Ticket(result);
 	}
 	public static async getNextTicketNumber(guildId: string): Promise<number> {
-		// This uses a transaction to ensure atomicity
-		return db.transaction(async (tx) => {
-			// Try to get the current counter
-			const [counter] = await tx.select().from(guildTicketCounters).where(eq(guildTicketCounters.guildId, guildId));
-
-			if (counter) {
-				// If exists, increment and return
-				const [updated] = await tx
-					.update(guildTicketCounters)
-					.set({ lastTicketNumber: counter.lastTicketNumber + 1 })
-					.where(eq(guildTicketCounters.guildId, guildId))
-					.returning();
-				return updated?.lastTicketNumber ?? 0;
-			}
-			// If not exists, create with 0 and return 0
-			const [newCounter] = await tx.insert(guildTicketCounters).values({ guildId, lastTicketNumber: 1 }).returning();
-			return newCounter?.lastTicketNumber ?? 0;
-		});
+		if (!guildId) throw new Error("guildId is required");
+		const [counter] = await db
+			.insert(guildTicketCounters)
+			.values({ guildId, lastTicketNumber: 1 })
+			.onConflictDoUpdate({
+				target: guildTicketCounters.guildId,
+				set: { lastTicketNumber: sql`${guildTicketCounters.lastTicketNumber} + 1` },
+			})
+			.returning({ lastTicketNumber: guildTicketCounters.lastTicketNumber });
+		if (!counter) throw new Error("Ticket counter update did not return a row");
+		return counter.lastTicketNumber;
 	}
 	public static async getOpenTicketByUser(guildId: string, userId: string) {
 		const result = await db
@@ -1210,25 +1214,21 @@ export class Ticket implements TicketType {
 		if (!result) return null;
 		return new Ticket(result);
 	}
-	public static async getOpenTickets(guildId: string) {
-		const result = await db
+	public static async getOpenTickets(guildId: string): Promise<Ticket[]> {
+		const rows = await db
 			.select()
 			.from(schema.tickets)
 			.where(and(eq(schema.tickets.guildId, guildId), eq(schema.tickets.status, "open")))
-			.execute()
-			.then((result) => result.at(0));
-		if (!result) return null;
-		return new Ticket(result);
+			.execute();
+		return rows.map((row) => new Ticket(row));
 	}
-	public static async getClosedTickets(guildId: string) {
-		const result = await db
+	public static async getClosedTickets(guildId: string): Promise<Ticket[]> {
+		const rows = await db
 			.select()
 			.from(schema.tickets)
 			.where(and(eq(schema.tickets.guildId, guildId), eq(schema.tickets.status, "closed")))
-			.execute()
-			.then((result) => result.at(0));
-		if (!result) return null;
-		return new Ticket(result);
+			.execute();
+		return rows.map((row) => new Ticket(row));
 	}
 	public static async updateClaimedBy(id: string, claimedBy: string | null) {
 		const result = await db
@@ -1243,12 +1243,13 @@ export class Ticket implements TicketType {
 	}
 
 	public static async update(data: Partial<Omit<TicketType, "createdAt">>) {
+		if (!data.id) throw new Error("ticket id is required");
 		const result = await db
 			.update(schema.tickets)
 			.set({
 				...data,
 			})
-			.where(eq(schema.tickets.id, data.id!))
+			.where(eq(schema.tickets.id, data.id))
 			.returning()
 			.execute()
 			.then((result) => result.at(0));
@@ -1509,7 +1510,6 @@ export class VoiceChannelRole implements VoiceChannelRoleType {
 
 
     public static async create(data: Omit<VoiceChannelRoleType, "createdAt" | "updatedAt">) {
-        const { nanoid } = await import("nanoid");
         const result = await db
             .insert(schema.voiceChannelRole)
             .values({

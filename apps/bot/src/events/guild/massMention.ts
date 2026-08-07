@@ -1,12 +1,8 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { Events, GuildChannel } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 export default class MessageCreate extends Event {
-	// Ultra-fast cache
-	private configCache = new Map<string, AntiNuke>();
-	private trustedCache = new Map<string, any>();
 	private rateLimitCache = new Map<string, number>();
 
 	constructor(client: BaseClient) {
@@ -28,20 +24,8 @@ export default class MessageCreate extends Event {
 				message.content.includes("@here");
 			if (!isMention) return;
 
-			// Rate limiting check
-			const now = Date.now();
-			const lastAction = this.rateLimitCache.get(userId) || 0;
-			if (now - lastAction < 5000) return; // 5 second cooldown
-			this.rateLimitCache.set(userId, now);
-
 			try {
-				// Ultra-fast config check with cache
-				let config = this.configCache.get(guildId);
-				if (!config) {
-					config = await this.client.services.antinukes.getConfig(guildId);
-					this.configCache.set(guildId, config);
-					setTimeout(() => this.configCache.delete(guildId), 30000);
-				}
+				const config = await this.client.services.antinukes.getConfig(guildId);
 
 				const actionConfig = config?.mention;
 				if (!actionConfig || !config.enabled) return;
@@ -51,31 +35,40 @@ export default class MessageCreate extends Event {
 					userId === this.client.user?.id ||
 					userId === config.admin) return;
 
-				// Ultra-fast trusted user check with cache
-				let trustedSet = this.trustedCache.get(guildId);
-				if (!trustedSet) {
-					trustedSet = new Set(config.trustedUsers?.map(u => u.id) || []);
-					this.trustedCache.set(guildId, trustedSet);
-					setTimeout(() => this.trustedCache.delete(guildId), 30000);
-				}
+				if (await this.client.services.antinukes.isBypassed(guild, userId)) return;
 
-				if (trustedSet.has(userId)) return;
+				// Whitelisted users bypass this listener before any local rate limiting.
+				const rateLimitKey = `${guildId}:${userId}`;
+				const now = Date.now();
+				const lastAction = this.rateLimitCache.get(rateLimitKey) ?? 0;
+				if (now - lastAction < 5000) return;
+				this.rateLimitCache.set(rateLimitKey, now);
 
 				// Fast member check using cache first
 				let member = guild.members.cache.get(userId) as any;
 				if (!member) {
-					member = await guild.members.fetch(userId).catch(() => null);
+					member = await guild.members.fetch(userId).catch(error => {
+						this.client.logger?.error?.(error);
+						return null;
+					});
 					if (!member) return;
 				}
 
 				if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
 				if (message.webhookId) {
-					message.delete().catch(() => { });
+					message.delete().catch(error => {
+						this.client.logger?.error?.(error);
+					});
 					return;
 				}
 
-				// Fire punishment immediately without waiting
-				await this.client.services.antinukes.punishUser(guild, userId, "ban", "Anti-Mention Protection | Mass Mention Detected");
+				const enforced = await this.client.services.antinukes.punishUser(
+					guild,
+					userId,
+					"ban",
+					"Anti-Mention Protection | Mass Mention Detected",
+				);
+				if (!enforced) return;
 
 				// Bulk delete messages (fire and forget)
 				setImmediate(async () => {
@@ -89,10 +82,14 @@ export default class MessageCreate extends Event {
 
 						if (everyoneMessages.size > 0) {
 							if (channel.isTextBased() && !channel.isThread() && !channel.isDMBased()) {
-								await channel.bulkDelete(everyoneMessages).catch(() => { });
+								await channel.bulkDelete(everyoneMessages).catch(error => {
+									this.client.logger?.error?.(error);
+								});
 							}
 						}
-					} catch { }
+					} catch (error) {
+						this.client.logger?.error?.(error);
+					}
 				});
 
 				// Lock channel (fire and forget)
@@ -103,7 +100,9 @@ export default class MessageCreate extends Event {
 								ViewChannel: false,
 								SendMessages: false
 							});
-						} catch { }
+						} catch (error) {
+							this.client.logger?.error?.(error);
+						}
 					});
 				}
 

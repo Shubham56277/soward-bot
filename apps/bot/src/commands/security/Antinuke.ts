@@ -5,7 +5,6 @@ import {
 	ButtonStyle,
 	ComponentType,
 	ContainerBuilder,
-	GuildMember,
 	MessageFlags,
 	ModalBuilder,
 	SeparatorBuilder,
@@ -15,16 +14,24 @@ import {
 	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
+	User,
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { AntiNuke } from "@repo/db";
 import { capitalize } from "../../utils/helper";
 import { env } from "@repo/env";
+import {
+	addTrustedUser,
+	buildDisabledAntiNukePatch,
+	buildSafeDefaultAntiNukePatch,
+	moduleIsEnabled,
+	normalizeTrustedUsers,
+	parseDiscordUserId,
+	removeTrustedUser,
+} from "../../modules/antiNukeState";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-
-const CACHE_KEY = (guildId: string) => `c:${guildId}`;
 
 const MODULES = {
 	channel: { label: "Channel", description: "Channel create, delete, update", types: ["create", "delete", "update"] },
@@ -38,6 +45,7 @@ const MODULES = {
 
 type ModuleKey = keyof typeof MODULES;
 type Punishment = "ban" | "kick" | "rolestrip";
+type UserResolution = { user: User; error?: never } | { user: null; error: string };
 
 const PUNISHMENTS: Punishment[] = ["ban", "kick", "rolestrip"];
 
@@ -85,15 +93,13 @@ function moduleStatus(settings: AntiNuke): string {
 	const lines: string[] = [];
 	for (const [key, meta] of Object.entries(MODULES)) {
 		const entries: any[] = (settings as any)[key] ?? [];
-		const active = entries.filter((e: any) => e.enabled);
+		const active = settings.enabled ? entries.filter((e: any) => e.enabled) : [];
 		const badge = active.length > 0 ? `${EMOJI.on}` : `${EMOJI.off}`;
-		const detail = active.length > 0
-			? active.map((e: any) => e.type).join(", ")
-			: "disabled";
+		const detail = active.length > 0 ? active.map((e: any) => e.type).join(", ") : "disabled";
 		lines.push(`${badge} **${meta.label}** — ${detail}`);
 	}
-	lines.push(`${settings.mention ? EMOJI.on : EMOJI.off} **Mention** — ${settings.mention ? "active" : "disabled"}`);
-	lines.push(`${settings.gateKeeper ? EMOJI.on : EMOJI.off} **GateKeeper** — ${settings.gateKeeper ? "active" : "disabled"}`);
+	lines.push(`${settings.enabled && settings.mention ? EMOJI.on : EMOJI.off} **Mention** — ${settings.enabled && settings.mention ? "active" : "disabled"}`);
+	lines.push(`${settings.enabled && settings.gateKeeper ? EMOJI.on : EMOJI.off} **GateKeeper** — ${settings.enabled && settings.gateKeeper ? "active" : "disabled"}`);
 	return lines.join("\n");
 }
 
@@ -170,16 +176,21 @@ export default class AntiNukeCommand extends Command {
 	private async isAuthorized(ctx: Context, settings: AntiNuke): Promise<boolean> {
 		const userId = ctx.author?.id ?? "";
 		if (userId === ctx.guild.ownerId || userId === settings.admin || env.DEVELOPER_IDS.includes(userId)) return true;
-		// Extra owners from the legacy trustedUsers field
-		const trustedIds = settings.trustedUsers?.map(u => u.id) ?? [];
+		// Trusted users receive the same command-level access as an AntiNuke owner.
+		const trustedIds = normalizeTrustedUsers(settings.trustedUsers).map((user) => user.id);
 		if (trustedIds.includes(userId)) return true;
 		// Extra owners from Redis-based extra owner system
-		const raw = await ctx.client.redis.get(`extraowners:${ctx.guild.id}`).catch(() => null);
+		const raw = await ctx.client.redis.get(`extraowners:${ctx.guild.id}`).catch((error) => {
+			ctx.client.logger.error("[AntiNuke] Failed to read extra owners:", error);
+			return null;
+		});
 		if (raw) {
 			try {
 				const owners = JSON.parse(raw) as { userId: string }[];
 				if (owners.some(o => o.userId === userId)) return true;
-			} catch {}
+			} catch (error) {
+				ctx.client.logger.error("[AntiNuke] Invalid extra owners cache:", error);
+			}
 		}
 		return false;
 	}
@@ -197,7 +208,8 @@ export default class AntiNukeCommand extends Command {
 			let settings: AntiNuke;
 			try {
 				settings = await AntiNuke.get(ctx.guild.id!);
-			} catch {
+			} catch (error) {
+				ctx.client.logger.error("[AntiNuke] Failed to load settings:", error);
 				return reply(ctx, "Error", "Could not load antinuke settings. Please try again.");
 			}
 
@@ -225,7 +237,8 @@ export default class AntiNukeCommand extends Command {
 				case "punishment": return this.punishment(ctx, settings);
 				default: return this.dashboard(ctx);
 			}
-		} catch {
+		} catch (error) {
+			ctx.client.logger.error("[AntiNuke] Command failed:", error);
 			return reply(ctx, "Error", "An unexpected error occurred. Please try again.");
 		}
 	}
@@ -236,7 +249,8 @@ export default class AntiNukeCommand extends Command {
 		let settings: AntiNuke;
 		try {
 			settings = await AntiNuke.get(ctx.guild.id!);
-		} catch {
+		} catch (error) {
+			ctx.client.logger.error("[AntiNuke] Dashboard load failed:", error);
 			return reply(ctx, "Error", "Could not load antinuke settings.");
 		}
 
@@ -249,7 +263,7 @@ export default class AntiNukeCommand extends Command {
 		let index = 0;
 		const render = (disabled: boolean) => ({
 			components: [plainPanel("AntiNuke", pages[index]!()), this.navRow(disabled)],
-			flags: MessageFlags.IsComponentsV2,
+			flags: MessageFlags.IsComponentsV2 as const,
 		});
 
 		const msg = await ctx.editOrReply(render(false));
@@ -262,7 +276,7 @@ export default class AntiNukeCommand extends Command {
 				i.reply({
 					components: [plainPanel("Access Denied", "Only the command author can use these controls.")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-				}).catch(() => {});
+				}).catch((error: unknown) => ctx.client.logger.error("[AntiNuke] Dashboard denial reply failed:", error));
 				return false;
 			},
 		});
@@ -281,19 +295,21 @@ export default class AntiNukeCommand extends Command {
 						break;
 					case "antinuke_close":
 						collector.stop("closed");
-						await btn.message.delete().catch(() => {});
+						await btn.message.delete();
 						return;
 					default:
 						return;
 				}
-				await btn.update(render(false)).catch(() => {});
-			} catch {
-				// Ignore interaction failures (message deleted, expired token, etc.)
+				await btn.update(render(false));
+			} catch (error) {
+				ctx.client.logger.error("[AntiNuke] Dashboard interaction failed:", error);
 			}
 		});
 
 		collector.on("end", (_c, reason) => {
-			if (reason === "time") msg.edit(render(true)).catch(() => {});
+			if (reason === "time") msg.edit(render(true)).catch((error) => {
+				ctx.client.logger.error("[AntiNuke] Dashboard timeout edit failed:", error);
+			});
 		});
 	}
 
@@ -302,12 +318,11 @@ export default class AntiNukeCommand extends Command {
 	/** Page 1 — Overview */
 	private overviewPage(settings: AntiNuke): string {
 		const moduleKeys = Object.keys(MODULES) as ModuleKey[];
-		const enabledModules = moduleKeys.filter((key) => {
-			const entries: any[] = (settings as any)[key] ?? [];
-			return entries.some((e: any) => e.enabled);
-		}).length
-			+ (settings.mention ? 1 : 0)
-			+ (settings.gateKeeper ? 1 : 0);
+		const enabledModules = settings.enabled
+			? moduleKeys.filter((key) => moduleIsEnabled(settings, key)).length
+				+ (settings.mention ? 1 : 0)
+				+ (settings.gateKeeper ? 1 : 0)
+			: 0;
 		const totalModules = moduleKeys.length + 2;
 
 		const listed = settings.trustedUsers?.length ?? 0;
@@ -342,18 +357,16 @@ export default class AntiNukeCommand extends Command {
 
 	/** Page 2 — Protection Modules */
 	private modulesPage(settings: AntiNuke): string {
-		const lines = (Object.keys(MODULES) as ModuleKey[]).map((key) => {
-			const entries: any[] = (settings as any)[key] ?? [];
-			const active = entries.some((e: any) => e.enabled);
-			return row(MODULES[key].label, active ? "Enabled" : "Disabled");
-		});
+		const lines = (Object.keys(MODULES) as ModuleKey[]).map((key) =>
+			row(MODULES[key].label, moduleIsEnabled(settings, key) ? "Enabled" : "Disabled"),
+		);
 
-		lines.push(row("Mention", settings.mention ? "Enabled" : "Disabled"));
-		lines.push(row("GateKeeper", settings.gateKeeper ? "Enabled" : "Disabled"));
+		lines.push(row("Mention", settings.enabled && settings.mention ? "Enabled" : "Disabled"));
+		lines.push(row("GateKeeper", settings.enabled && settings.gateKeeper ? "Enabled" : "Disabled"));
 
 		const header = settings.enabled
 			? "Review the protection modules currently active."
-			: "⚠️ **AntiNuke is disabled.** Modules below will not enforce until you run `?antinuke enable`.";
+			: "⚠️ **AntiNuke is disabled. Every protection module is disabled.** Run `?antinuke enable` to create the safe default configuration.";
 
 		return [
 			header,
@@ -435,23 +448,22 @@ export default class AntiNukeCommand extends Command {
 				permissions: ["Administrator"],
 				position: botMember.roles.highest.position,
 				reason: "AntiNuke activation",
-			}).catch(() => undefined);
+			}).catch((error) => {
+				ctx.client.logger.error("[AntiNuke] Role creation failed:", error);
+				return undefined;
+			});
 
 			if (!role) {
 				return reply(ctx, "Setup Failed", `${EMOJI.warn} Could not create the Soward Supreme role. Check bot permissions.`);
 			}
 		}
 
-		await botMember.roles.add(role.id).catch(() => {});
+		await botMember.roles.add(role.id).catch((error) => {
+			ctx.client.logger.error("[AntiNuke] Failed to assign protection role:", error);
+		});
 
-		const config: Record<string, any> = { enabled: true, mention: true, gateKeeper: true };
-		for (const [key, meta] of Object.entries(MODULES)) {
-			config[key] = meta.types.map((type) => ({ type, enabled: true, limit: 1, action: "ban" }));
-		}
-
-		const saved = await AntiNuke.update(ctx.guild.id!, config);
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(saved));
-		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
+		const saved = await AntiNuke.update(ctx.guild.id!, buildSafeDefaultAntiNukePatch());
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, saved);
 
 		const moduleList = Object.values(MODULES).map((m) => `${EMOJI.on} ${m.label}`).join("\n");
 
@@ -478,15 +490,14 @@ export default class AntiNukeCommand extends Command {
 	// ─── Disable ──────────────────────────────────────────────────────────
 
 	private async disable(ctx: Context, settings: AntiNuke): Promise<any> {
-		if (!settings.enabled) {
-			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection is already disabled.\nUse \`antinuke enable\` to re-activate.`);
+		const wasEnabled = settings.enabled;
+		const updated = await AntiNuke.update(ctx.guild.id!, buildDisabledAntiNukePatch(settings));
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
+
+		if (!wasEnabled) {
+			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection and every module are disabled.\nUse \`antinuke enable\` to re-activate.`);
 		}
-
-		const updated = await AntiNuke.update(ctx.guild.id!, { enabled: false });
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
-		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
-
-		return reply(ctx, "Protection Disabled", `${EMOJI.warn} Protection has been **disabled**.\n\n-# Your configuration is preserved. Use \`antinuke enable\` to re-activate.`);
+		return reply(ctx, "Protection Disabled", `${EMOJI.warn} Protection and every module have been **disabled**.\n\n-# Use \`antinuke enable\` to re-activate.`);
 	}
 
 	// ─── Punishment ───────────────────────────────────────────────────────
@@ -523,13 +534,35 @@ export default class AntiNukeCommand extends Command {
 		}
 
 		const updated = await AntiNuke.update(ctx.guild.id!, patch);
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
-		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
 
 		return reply(ctx, "Punishment Updated", `${EMOJI.check} Default action set to **${value}** across all modules.`);
 	}
 
 	// ─── Whitelist ────────────────────────────────────────────────────────
+
+	private async resolveWhitelistUser(ctx: Context, prefixPosition: number): Promise<UserResolution> {
+		if (ctx.isInteraction) {
+			const user = ctx.options.getUser("user", false) as User | null;
+			return user ? { user } : { user: null, error: "Select a Discord user." };
+		}
+
+		const raw = ctx.args[prefixPosition];
+		const userId = parseDiscordUserId(raw);
+		if (!userId) return { user: null, error: "Provide a valid user mention or 17-20 digit Discord user ID." };
+
+		try {
+			const member = await ctx.guild.members.fetch(userId);
+			return { user: member.user };
+		} catch {
+			try {
+				return { user: await ctx.client.users.fetch(userId) };
+			} catch (error) {
+				ctx.client.logger.error(`[AntiNuke] Failed to resolve whitelist user ${userId}:`, error);
+				return { user: null, error: `No Discord user could be resolved for \`${userId}\`.` };
+			}
+		}
+	}
 
 	private async whitelistHelp(ctx: Context): Promise<any> {
 		const body = [
@@ -544,51 +577,47 @@ export default class AntiNukeCommand extends Command {
 	}
 
 	private async whitelistAdd(ctx: Context, settings: AntiNuke): Promise<any> {
-		if (!settings.enabled) return reply(ctx, "Not Enabled", `${EMOJI.warn} Enable antinuke first.`);
-
-		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return reply(ctx, "Missing User", "Mention a user or bot: `antinuke whitelist add @user`");
-		if (settings.trustedUsers.some((u) => u.id === member.id)) {
-			return reply(ctx, "Already Whitelisted", `**${member.user.username}** is already on the whitelist.`);
+		const resolved = await this.resolveWhitelistUser(ctx, 2);
+		if (!resolved.user) return reply(ctx, "Invalid User", resolved.error);
+		const { user } = resolved;
+		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
+		if (trustedUsers.some((entry) => entry.id === user.id)) {
+			return reply(ctx, "Already Whitelisted", `**${user.username}** is already on the whitelist.`);
 		}
 
-		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: [...settings.trustedUsers, { id: member.id }] });
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
-		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
-		return reply(ctx, "Whitelist Updated", `${EMOJI.check} **${member.user.username}** added to the whitelist.`);
+		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: addTrustedUser(trustedUsers, user.id) });
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
+		return reply(ctx, "Whitelist Updated", `${EMOJI.check} **${user.username}** added as a full AntiNuke bypass.`);
 	}
 
 	private async whitelistRemove(ctx: Context, settings: AntiNuke): Promise<any> {
-		if (!settings.enabled) return reply(ctx, "Not Enabled", `${EMOJI.warn} Enable antinuke first.`);
-
-		const member = ctx.options.getMember("user", 1) as GuildMember | undefined;
-		if (!member) return reply(ctx, "Missing User", "Mention a user: `antinuke whitelist remove @user`");
-		if (!settings.trustedUsers.some((u) => u.id === member.id)) {
-			return reply(ctx, "Not Whitelisted", `**${member.user.username}** is not on the whitelist.`);
+		const resolved = await this.resolveWhitelistUser(ctx, 2);
+		if (!resolved.user) return reply(ctx, "Invalid User", resolved.error);
+		const { user } = resolved;
+		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
+		if (!trustedUsers.some((entry) => entry.id === user.id)) {
+			await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id!, user.id);
+			return reply(ctx, "Not Whitelisted", `**${user.username}** is not on the whitelist. Any legacy state was cleared.`);
 		}
 
-		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: settings.trustedUsers.filter((u) => u.id !== member.id) });
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
-		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
-		return reply(ctx, "Whitelist Updated", `${EMOJI.check} **${member.user.username}** removed from the whitelist.`);
+		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: removeTrustedUser(trustedUsers, user.id) });
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
+		await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id!, user.id);
+		return reply(ctx, "Whitelist Updated", `${EMOJI.check} **${user.username}** removed from the whitelist.`);
 	}
 
 	private async whitelistList(ctx: Context, settings: AntiNuke): Promise<any> {
-		if (!settings.enabled) return reply(ctx, "Not Enabled", `${EMOJI.warn} Enable antinuke first.`);
-
-		const users = settings.trustedUsers ?? [];
+		const users = normalizeTrustedUsers(settings.trustedUsers);
 		if (!users.length) return reply(ctx, "Whitelist", "No users are currently whitelisted.");
 
 		const lines = users.map((u, i) => `\`${i + 1}.\` <@${u.id}>`).join("\n");
 		return reply(ctx, "Whitelist", `**${users.length}** whitelisted user${users.length !== 1 ? "s" : ""}\n\n${lines}`);
 	}
 
-	private async whitelistReset(ctx: Context, settings: AntiNuke): Promise<any> {
-		if (!settings.enabled) return reply(ctx, "Not Enabled", `${EMOJI.warn} Enable antinuke first.`);
-
+	private async whitelistReset(ctx: Context, _settings: AntiNuke): Promise<any> {
 		const updated = await AntiNuke.update(ctx.guild.id!, { trustedUsers: [] });
-		await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(updated));
-		ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
+		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
+		await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id!);
 		return reply(ctx, "Whitelist Cleared", `${EMOJI.check} All users have been removed from the whitelist.`);
 	}
 
@@ -633,7 +662,9 @@ export default class AntiNukeCommand extends Command {
 
 		const filter = (i: any): boolean => {
 			if (i.user.id === ctx.author?.id) return true;
-			i.reply({ components: [panel("Access Denied", `${EMOJI.lock} Only the command author can use these controls.`)], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch(() => {});
+			i.reply({ components: [panel("Access Denied", `${EMOJI.lock} Only the command author can use these controls.`)], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch((error: unknown) => {
+				ctx.client.logger.error("[AntiNuke] Configuration denial reply failed:", error);
+			});
 			return false;
 		};
 
@@ -653,24 +684,28 @@ export default class AntiNukeCommand extends Command {
 					const key = selected.slice(1); // "mention" or "gateKeeper"
 					(settings as any)[key] = !(settings as any)[key];
 					settings = await AntiNuke.update(ctx.guild.id!, { [key]: (settings as any)[key] });
-					await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(settings));
-					ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
+					await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, settings);
 
 					const newPanel = panel("Configuration", buildOverview(settings));
-					await int.update({ components: [newPanel, menuRow] }).catch(() => {});
+					await int.update({ components: [newPanel, menuRow] });
 					return;
 				}
 
 				// Module drill-down
 				await this.showModuleConfig(int, selected as ModuleKey, settings, ctx, menuRow, filter, buildOverview);
-			} catch {
-				await int.reply({ components: [panel("Error", "An error occurred. Please try again.")], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch(() => {});
+			} catch (error) {
+				ctx.client.logger.error("[AntiNuke] Configuration interaction failed:", error);
+				await int.reply({ components: [panel("Error", "An error occurred. Please try again.")], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch((replyError: unknown) => {
+					ctx.client.logger.error("[AntiNuke] Configuration error reply failed:", replyError);
+				});
 			}
 		});
 
 		collector.on("end", (_c, reason) => {
 			if (reason === "time") {
-				msg.edit({ components: [panel("Configuration", "Session expired. Run the command again."), menuRow] }).catch(() => {});
+				msg.edit({ components: [panel("Configuration", "Session expired. Run the command again."), menuRow] }).catch((error) => {
+					ctx.client.logger.error("[AntiNuke] Configuration timeout edit failed:", error);
+				});
 			}
 		});
 	}
@@ -730,7 +765,7 @@ export default class AntiNukeCommand extends Command {
 		const modulePanel = panel(`${meta.label} Module`, buildModuleView(entries));
 		const buttons = buildButtons(entries);
 
-		await int.update({ components: [modulePanel, ...buttons] }).catch(() => {});
+		await int.update({ components: [modulePanel, ...buttons] });
 
 		const btnCollector = int.message.createMessageComponentCollector({
 			componentType: ComponentType.Button,
@@ -743,7 +778,7 @@ export default class AntiNukeCommand extends Command {
 				if (btn.customId === "an:back") {
 					btnCollector.stop("back");
 					const refreshedPanel = panel("Configuration", buildOverview(settings));
-					await btn.update({ components: [refreshedPanel, menuRow] }).catch(() => {});
+					await btn.update({ components: [refreshedPanel, menuRow] });
 					return;
 				}
 
@@ -811,21 +846,27 @@ export default class AntiNukeCommand extends Command {
 				}
 
 				settings = await AntiNuke.update(ctx.guild.id!, settings);
-				await ctx.client.redis.set(CACHE_KEY(ctx.guild.id!), JSON.stringify(settings));
-				ctx.client.services.antinukes.clearGuildConfig(ctx.guild.id!);
+				await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, settings);
 
 				const refreshed: any[] = (settings as any)[targetModule] ?? [];
 				const refreshedPanel = panel(`${meta.label} Module`, buildModuleView(refreshed));
 				const refreshedButtons = buildButtons(refreshed);
-				await modalInt.update({ components: [refreshedPanel, ...refreshedButtons] }).catch(() => {});
-			} catch {
-				await btn.reply({ components: [panel("Error", "An error occurred.")], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch(() => {});
+				const response = { components: [refreshedPanel, ...refreshedButtons] };
+				if (modalInt.isFromMessage()) await modalInt.update(response);
+				else await modalInt.reply({ ...response, flags: MessageFlags.IsComponentsV2 });
+			} catch (error) {
+				ctx.client.logger.error("[AntiNuke] Module configuration failed:", error);
+				await btn.reply({ components: [panel("Error", "An error occurred.")], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 }).catch((replyError: unknown) => {
+					ctx.client.logger.error("[AntiNuke] Module configuration error reply failed:", replyError);
+				});
 			}
 		});
 
 		btnCollector.on("end", (_c, reason) => {
 			if (reason === "time") {
-				int.message.edit({ components: [panel("Configuration", "Session expired."), menuRow] }).catch(() => {});
+				int.message.edit({ components: [panel("Configuration", "Session expired."), menuRow] }).catch((error) => {
+					ctx.client.logger.error("[AntiNuke] Module configuration timeout edit failed:", error);
+				});
 			}
 		});
 	}
