@@ -1,12 +1,59 @@
-import { AntiNuke, AntiNukeChannel, AntiNukeMember } from "@repo/db";
+import { AntiNuke, AntiNukeChannel, AntiNukeMember, AuditLogger } from "@repo/db";
 import BaseClient from "../base/Client";
 import { Guild, GuildMember, Routes } from "discord.js";
-import { clearLocalAntiNukeCaches, isAntiNukeBypassed, normalizeTrustedUsers } from "./antiNukeState";
+import {
+    clearLocalAntiNukeCaches,
+    isAntiNukeBypassed,
+    isFreshAntiNukeAuditEntry,
+    normalizeTrustedUsers,
+    removeTrustedUser,
+} from "./antiNukeState";
 
-// Blazing fast cache keys
 const getActionKey = (g: string, u: string, a: string) => `${g}:${u}:${a}`;
 const getConfigKey = (g: string) => `c:${g}`;
 const localPunishmentLocks = new Set<string>();
+
+export const INFINITE_VOID_THRESHOLD = 50;
+export const INFINITE_VOID_WINDOW_MS = 20 * 60 * 1000;
+const INFINITE_VOID_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000;
+const INFINITE_VOID_AUDIT_MAX_AGE_MS = 30_000;
+const INFINITE_VOID_COUNTER_TTL_SECONDS = Math.ceil(INFINITE_VOID_WINDOW_MS / 1000) + 60;
+const INFINITE_VOID_MAX_EVENTS = 200;
+
+export type InfiniteVoidKickResult = {
+    counted: boolean;
+    count: number;
+    thresholdReached: boolean;
+    incidentAcquired: boolean;
+    punished: boolean;
+    action?: "ban" | "rolestrip-timeout" | "rolestrip" | "timeout" | "none";
+};
+
+const INFINITE_VOID_COUNTER_SCRIPT = `
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+local added = redis.call("ZADD", KEYS[1], "NX", ARGV[2], ARGV[3])
+local count = redis.call("ZCARD", KEYS[1])
+if count > tonumber(ARGV[5]) then
+  redis.call("ZREMRANGEBYRANK", KEYS[1], 0, count - tonumber(ARGV[5]) - 1)
+  count = redis.call("ZCARD", KEYS[1])
+end
+redis.call("EXPIRE", KEYS[1], ARGV[4])
+return { added, count }
+`;
+
+const REVOKE_EXTRA_OWNER_SCRIPT = `
+local raw = redis.call("GET", KEYS[1])
+if not raw then return 0 end
+local ok, owners = pcall(cjson.decode, raw)
+if not ok or type(owners) ~= "table" then return redis.error_reply("invalid extra owner data") end
+local kept = {}
+local removed = 0
+for _, owner in ipairs(owners) do
+  if owner.userId == ARGV[1] then removed = removed + 1 else table.insert(kept, owner) end
+end
+if removed > 0 then redis.call("SET", KEYS[1], cjson.encode(kept)) end
+return removed
+`;
 
 export class AntiNukeService {
     private readonly actionExpiry = 45;
@@ -211,6 +258,216 @@ export class AntiNukeService {
             this.deleteKeysByPrefix(actionPrefix),
             this.deleteKeysByPrefix(`wl:actions:${guildId}:`),
         ]).catch(error => this.logError("whitelist-state-reset", error, { guildId }));
+    }
+
+    async recordInfiniteVoidKick(
+        guild: Guild,
+        executorId: string,
+        targetId: string,
+        auditEntryId: string,
+        auditCreatedTimestamp: number,
+        now = Date.now(),
+    ): Promise<InfiniteVoidKickResult> {
+        const skipped: InfiniteVoidKickResult = {
+            counted: false,
+            count: 0,
+            thresholdReached: false,
+            incidentAcquired: false,
+            punished: false,
+        };
+        const config = await this.refreshConfig(guild.id, "infinite-void-config-refresh");
+        const moduleEnabled = config?.member.some(entry => entry.type === "infiniteVoid" && entry.enabled);
+        if (!config?.enabled || !moduleEnabled) return skipped;
+        if (executorId === guild.ownerId || executorId === this.client.user?.id) return skipped;
+        if (!targetId || !auditEntryId || auditCreatedTimestamp > now + 5_000 || now - auditCreatedTimestamp > INFINITE_VOID_AUDIT_MAX_AGE_MS) {
+            this.client.logger.warn(`[AntiNuke] infinite-void-audit-rejected ${JSON.stringify({
+                guildId: guild.id,
+                executorId,
+                targetId,
+                auditEntryId,
+                auditCreatedTimestamp,
+                now,
+            })}`);
+            return skipped;
+        }
+
+        const counterKey = `antinuke:infinite-void:kicks:${guild.id}:${executorId}`;
+        let counted = false;
+        let count = 0;
+        try {
+            const result = await this.client.redis.eval(
+                INFINITE_VOID_COUNTER_SCRIPT,
+                1,
+                counterKey,
+                String(now - INFINITE_VOID_WINDOW_MS),
+                String(auditCreatedTimestamp),
+                auditEntryId,
+                String(INFINITE_VOID_COUNTER_TTL_SECONDS),
+                String(INFINITE_VOID_MAX_EVENTS),
+            ) as [number | string, number | string];
+            counted = Number(result?.[0]) === 1;
+            count = Number(result?.[1]) || 0;
+        } catch (error) {
+            this.logError("infinite-void-counter", error, { guildId: guild.id, executorId, targetId, auditEntryId });
+            return skipped;
+        }
+
+        const thresholdReached = count >= INFINITE_VOID_THRESHOLD;
+        const result: InfiniteVoidKickResult = {
+            counted,
+            count,
+            thresholdReached,
+            incidentAcquired: false,
+            punished: false,
+        };
+        if (!thresholdReached) return result;
+
+        const incidentKey = `antinuke:infinite-void:incident:${guild.id}:${executorId}`;
+        try {
+            const acquired = await this.client.redis.set(
+                incidentKey,
+                auditEntryId,
+                "EX",
+                Math.ceil(INFINITE_VOID_WINDOW_MS / 1000),
+                "NX",
+            );
+            if (acquired !== "OK") return result;
+            result.incidentAcquired = true;
+        } catch (error) {
+            this.logError("infinite-void-incident-lock", error, { guildId: guild.id, executorId, count });
+            return result;
+        }
+
+        // Bypass stores are independent. Revocation failures are logged, but an
+        // emergency punishment must not be skipped after the threshold lock is won.
+        await this.revokeInfiniteVoidBypasses(guild.id, executorId, config);
+
+        const preflight = await this.refreshConfig(guild.id, "infinite-void-preflight-refresh");
+        const stillEnabled = preflight?.enabled && preflight.member.some(entry => entry.type === "infiniteVoid" && entry.enabled);
+        if (!stillEnabled || executorId === guild.ownerId || executorId === this.client.user?.id) return result;
+
+        const punishment = await this.punishInfiniteVoidExecutor(guild, executorId);
+        result.punished = punishment.punished;
+        result.action = punishment.action;
+        await this.logInfiniteVoidIncident(guild, executorId, targetId, auditEntryId, count, punishment);
+        return result;
+    }
+
+    private async revokeInfiniteVoidBypasses(guildId: string, executorId: string, config: AntiNuke): Promise<void> {
+        try {
+            await this.client.redis.eval(
+                REVOKE_EXTRA_OWNER_SCRIPT,
+                1,
+                `extraowners:${guildId}`,
+                executorId,
+            );
+        } catch (error) {
+            this.logError("infinite-void-extra-owner-revocation", error, { guildId, executorId });
+        }
+
+        try {
+            const updated = await AntiNuke.update(guildId, {
+                trustedUsers: removeTrustedUser(config.trustedUsers, executorId),
+                admin: config.admin === executorId ? null : config.admin,
+            });
+            await this.invalidateGuild(guildId, updated);
+            await this.clearWhitelistState(guildId, executorId);
+        } catch (error) {
+            this.logError("infinite-void-database-bypass-revocation", error, { guildId, executorId });
+        }
+    }
+
+    private async punishInfiniteVoidExecutor(
+        guild: Guild,
+        executorId: string,
+    ): Promise<{ punished: boolean; action: "ban" | "rolestrip-timeout" | "rolestrip" | "timeout" | "none" }> {
+        const reason = `Infinite Void | ${INFINITE_VOID_THRESHOLD} confirmed member kicks in 20 minutes`;
+        let member = guild.members.cache.get(executorId);
+        if (!member) {
+            member = await guild.members.fetch(executorId).catch(error => {
+                this.logError("infinite-void-member-fetch", error, { guildId: guild.id, executorId });
+                return null;
+            }) ?? undefined;
+        }
+        if (!member) return { punished: false, action: "none" };
+
+        if (member.bannable) {
+            try {
+                await guild.members.ban(executorId, { deleteMessageSeconds: 0, reason });
+                return { punished: true, action: "ban" };
+            } catch (error) {
+                this.logError("infinite-void-ban", error, { guildId: guild.id, executorId });
+            }
+        }
+
+        let rolesStripped = false;
+        let timedOut = false;
+        const manageableRoles = [...member.roles.cache.values()].filter(role =>
+            role.id !== guild.id && !role.managed && role.editable,
+        );
+        if (manageableRoles.length) {
+            try {
+                await member.roles.remove(manageableRoles, reason);
+                rolesStripped = true;
+            } catch (error) {
+                this.logError("infinite-void-role-strip", error, { guildId: guild.id, executorId, roleCount: manageableRoles.length });
+            }
+        }
+        if (member.moderatable) {
+            try {
+                await member.timeout(INFINITE_VOID_TIMEOUT_MS, reason);
+                timedOut = true;
+            } catch (error) {
+                this.logError("infinite-void-timeout", error, { guildId: guild.id, executorId });
+            }
+        }
+
+        const action = rolesStripped && timedOut
+            ? "rolestrip-timeout"
+            : rolesStripped
+                ? "rolestrip"
+                : timedOut
+                    ? "timeout"
+                    : "none";
+        return { punished: rolesStripped || timedOut, action };
+    }
+
+    private async logInfiniteVoidIncident(
+        guild: Guild,
+        executorId: string,
+        targetId: string,
+        auditEntryId: string,
+        count: number,
+        punishment: { punished: boolean; action: string },
+    ): Promise<void> {
+        const incident = {
+            event: "infinite_void_incident",
+            guildId: guild.id,
+            executorId,
+            targetId,
+            auditEntryId,
+            count,
+            punishment: punishment.action,
+            punished: punishment.punished,
+        };
+        this.client.logger.info(`[AntiNuke] ${JSON.stringify(incident)}`);
+
+        if (!guild.channels?.fetch) return;
+        try {
+            const logger = await AuditLogger.get(guild.id);
+            const channelId = logger?.enabled
+                ? logger.channelAndType.find(entry => entry.type === "member_kick")?.channelId
+                : undefined;
+            if (!channelId) return;
+            const channel = await guild.channels.fetch(channelId);
+            if (!channel?.isSendable()) return;
+            await channel.send({
+                content: `⚠️ **Infinite Void incident**\nExecutor: \`${executorId}\`\nConfirmed kicks: **${count} / ${INFINITE_VOID_THRESHOLD}**\nAction: **${punishment.action}**${punishment.punished ? "" : " (not completed)"}`,
+                allowedMentions: { parse: [] },
+            });
+        } catch (error) {
+            this.logError("infinite-void-incident-log", error, incident);
+        }
     }
 
     async punishUser(guild: Guild, userId: string, action: string, reason: string): Promise<boolean> {

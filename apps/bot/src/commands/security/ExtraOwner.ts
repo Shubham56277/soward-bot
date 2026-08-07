@@ -5,19 +5,15 @@ import {
 	ButtonStyle,
 	ComponentType,
 	ContainerBuilder,
-	GuildMember,
 	MessageFlags,
 	ModalBuilder,
-	SeparatorBuilder,
-	SeparatorSpacingSize,
 	StringSelectMenuBuilder,
-	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { env } from "@repo/env";
+import { buildAntiNukePanel } from "../../modules/antiNukeUi";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -61,14 +57,15 @@ const DEFAULT_ENFORCEMENT: ExtraOwnerConfig["enforcement"] = "rolestrip";
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function panel(title: string, body: string): ContainerBuilder {
-	return new ContainerBuilder()
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+	return buildAntiNukePanel(title, [body]);
 }
 
 function reply(ctx: Context, title: string, body: string): Promise<any> {
-	return ctx.sendMessage({ components: [panel(title, body)], flags: MessageFlags.IsComponentsV2 });
+	return ctx.sendMessage({
+		components: [panel(title, body)],
+		flags: MessageFlags.IsComponentsV2,
+		allowedMentions: { parse: [] },
+	});
 }
 
 async function getExtraOwners(ctx: Context): Promise<ExtraOwnerConfig[]> {
@@ -95,41 +92,22 @@ function clampInt(value: string | undefined, min: number, max: number, fallback:
 // ─── Dashboard Builder ─────────────────────────────────────────────────────
 
 async function buildDashboard(ctx: Context, owners: ExtraOwnerConfig[]): Promise<{ container: ContainerBuilder; row: ActionRowBuilder<ButtonBuilder> }> {
-	let body: string;
-	if (owners.length === 0) {
-		body = [
-			"Extra owners receive protected administrative access with configurable security limits.",
-			"",
-			"Extra Owners",
-			"────────────────────",
-			"No extra owners configured.",
-			"",
-			`Total: 0 / ${MAX_EXTRA_OWNERS}`,
-			"",
-			"Only the Discord server owner can manage extra owners.",
-		].join("\n");
-	} else {
-		const lines: string[] = [];
-		for (let i = 0; i < owners.length; i++) {
-			const entry = owners[i];
-			const user = await ctx.client.users.fetch(entry.userId).catch(() => null);
-			const name = user?.username ?? "Unknown";
-			lines.push(`${i + 1}. @${name} — ID: ${entry.userId}`);
-		}
-		body = [
-			"Extra owners receive protected administrative access with configurable security limits.",
-			"",
-			"Extra Owners",
-			"────────────────────",
-			...lines,
-			"",
-			`Total: ${owners.length} / ${MAX_EXTRA_OWNERS}`,
-			"",
-			"Only the Discord server owner can manage extra owners.",
-		].join("\n");
+	const lines: string[] = [];
+	for (let i = 0; i < owners.length; i++) {
+		const entry = owners[i]!;
+		const user = await ctx.client.users.fetch(entry.userId).catch(() => null);
+		const name = user?.username ?? "Unknown";
+		lines.push(`\`${i + 1}.\` **${name}** (\`${entry.userId}\`)`);
 	}
 
-	const container = panel("Extra Owners", body);
+	const container = buildAntiNukePanel("Extra Owners", [
+		"Extra owners receive protected administrative access with configurable security limits.",
+		[
+			"**Configured Owners**",
+			...(lines.length ? lines : ["No extra owners configured."]),
+		].join("\n"),
+		[`**Total:** ${owners.length} / ${MAX_EXTRA_OWNERS}`, "Only the Discord server owner can manage extra owners."].join("\n"),
+	]);
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder().setCustomId("eo_add").setLabel("Add Extra Owner").setStyle(ButtonStyle.Success),
 		new ButtonBuilder().setCustomId("eo_configure").setLabel("Configure").setStyle(ButtonStyle.Primary),
@@ -145,27 +123,20 @@ async function buildDashboard(ctx: Context, owners: ExtraOwnerConfig[]): Promise
 async function buildConfigView(ctx: Context, config: ExtraOwnerConfig): Promise<{ container: ContainerBuilder; row: ActionRowBuilder<ButtonBuilder> }> {
 	const user = await ctx.client.users.fetch(config.userId).catch(() => null);
 	const name = user?.username ?? "Unknown";
-	const body = [
-		`User: ${name}`,
-		`User ID: ${config.userId}`,
-		"",
-		"Action Limits",
-		"────────────────────",
-		`Member Bans        ${config.limits.memberBan} / ${config.limits.timeWindow} seconds`,
-		`Member Kicks       ${config.limits.memberKick} / ${config.limits.timeWindow} seconds`,
-		`Channel Actions    ${config.limits.channelAction} / ${config.limits.timeWindow} seconds`,
-		`Role Actions       ${config.limits.roleAction} / ${config.limits.timeWindow} seconds`,
-		`Webhook Actions    ${config.limits.webhookAction} / ${config.limits.timeWindow} seconds`,
-		`Emoji Actions      ${config.limits.emojiAction} / ${config.limits.timeWindow} seconds`,
-		`Mention Limit      ${config.limits.mentionLimit} / ${config.limits.timeWindow} seconds`,
-		"",
-		"Enforcement",
-		"────────────────────",
-		`Action             ${capitalize(config.enforcement)}`,
-		`Protection         Enabled`,
-	].join("\n");
-
-	const container = panel("Extra Owner Configuration", body);
+	const container = buildAntiNukePanel("Extra Owner Configuration", [
+		[`**User:** ${name}`, `**User ID:** \`${config.userId}\``].join("\n"),
+		[
+			"**Action Limits**",
+			`Member Bans: **${config.limits.memberBan}** / ${config.limits.timeWindow} seconds`,
+			`Member Kicks: **${config.limits.memberKick}** / ${config.limits.timeWindow} seconds`,
+			`Channel Actions: **${config.limits.channelAction}** / ${config.limits.timeWindow} seconds`,
+			`Role Actions: **${config.limits.roleAction}** / ${config.limits.timeWindow} seconds`,
+			`Webhook Actions: **${config.limits.webhookAction}** / ${config.limits.timeWindow} seconds`,
+			`Emoji Actions: **${config.limits.emojiAction}** / ${config.limits.timeWindow} seconds`,
+			`Mention Limit: **${config.limits.mentionLimit}** / ${config.limits.timeWindow} seconds`,
+		].join("\n"),
+		[`**Enforcement:** ${capitalize(config.enforcement)}`, "**Protection:** Enabled"].join("\n"),
+	]);
 	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder().setCustomId(`eoc_member_${config.userId}`).setLabel("Member").setStyle(ButtonStyle.Primary),
 		new ButtonBuilder().setCustomId(`eoc_channel_${config.userId}`).setLabel("Channel").setStyle(ButtonStyle.Primary),
@@ -643,10 +614,11 @@ export default class ExtraOwnerCommand extends Command {
 				await interaction.reply({ components: [panel("Not Found", "This user is no longer an extra owner.")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 				return;
 			}
-			owners[idx].limits = { ...DEFAULT_LIMITS };
-			owners[idx].enforcement = DEFAULT_ENFORCEMENT;
+			const owner = owners[idx]!;
+			owner.limits = { ...DEFAULT_LIMITS };
+			owner.enforcement = DEFAULT_ENFORCEMENT;
 			await setExtraOwners(ctx, owners);
-			const { container, row } = await buildConfigView(ctx, owners[idx]);
+			const { container, row } = await buildConfigView(ctx, owner);
 			const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder().setCustomId(`eoc_resetdef_${userId}`).setLabel("Reset Defaults").setStyle(ButtonStyle.Secondary),
 				new ButtonBuilder().setCustomId(`eoc_removeuser_${userId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
@@ -714,11 +686,12 @@ export default class ExtraOwnerCommand extends Command {
 			await modalInteraction.reply({ components: [panel("Not Found", "This user is no longer an extra owner.")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 			return;
 		}
-		currentOwners[idx].limits.memberBan = banLimit;
-		currentOwners[idx].limits.memberKick = kickLimit;
+		const currentOwner = currentOwners[idx]!;
+		currentOwner.limits.memberBan = banLimit;
+		currentOwner.limits.memberKick = kickLimit;
 		await setExtraOwners(ctx, currentOwners);
 
-		const { container, row } = await buildConfigView(ctx, currentOwners[idx]);
+		const { container, row } = await buildConfigView(ctx, currentOwner);
 		const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setCustomId(`eoc_resetdef_${userId}`).setLabel("Reset Defaults").setStyle(ButtonStyle.Secondary),
 			new ButtonBuilder().setCustomId(`eoc_removeuser_${userId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
@@ -758,10 +731,11 @@ export default class ExtraOwnerCommand extends Command {
 			await modalInteraction.reply({ components: [panel("Not Found", "This user is no longer an extra owner.")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 			return;
 		}
-		currentOwners[idx].limits.channelAction = channelLimit;
+		const currentOwner = currentOwners[idx]!;
+		currentOwner.limits.channelAction = channelLimit;
 		await setExtraOwners(ctx, currentOwners);
 
-		const { container, row } = await buildConfigView(ctx, currentOwners[idx]);
+		const { container, row } = await buildConfigView(ctx, currentOwner);
 		const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setCustomId(`eoc_resetdef_${userId}`).setLabel("Reset Defaults").setStyle(ButtonStyle.Secondary),
 			new ButtonBuilder().setCustomId(`eoc_removeuser_${userId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
@@ -801,10 +775,11 @@ export default class ExtraOwnerCommand extends Command {
 			await modalInteraction.reply({ components: [panel("Not Found", "This user is no longer an extra owner.")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 			return;
 		}
-		currentOwners[idx].limits.roleAction = roleLimit;
+		const currentOwner = currentOwners[idx]!;
+		currentOwner.limits.roleAction = roleLimit;
 		await setExtraOwners(ctx, currentOwners);
 
-		const { container, row } = await buildConfigView(ctx, currentOwners[idx]);
+		const { container, row } = await buildConfigView(ctx, currentOwner);
 		const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setCustomId(`eoc_resetdef_${userId}`).setLabel("Reset Defaults").setStyle(ButtonStyle.Secondary),
 			new ButtonBuilder().setCustomId(`eoc_removeuser_${userId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
@@ -844,10 +819,11 @@ export default class ExtraOwnerCommand extends Command {
 			await modalInteraction.reply({ components: [panel("Not Found", "This user is no longer an extra owner.")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 			return;
 		}
-		currentOwners[idx].limits.webhookAction = webhookLimit;
+		const currentOwner = currentOwners[idx]!;
+		currentOwner.limits.webhookAction = webhookLimit;
 		await setExtraOwners(ctx, currentOwners);
 
-		const { container, row } = await buildConfigView(ctx, currentOwners[idx]);
+		const { container, row } = await buildConfigView(ctx, currentOwner);
 		const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setCustomId(`eoc_resetdef_${userId}`).setLabel("Reset Defaults").setStyle(ButtonStyle.Secondary),
 			new ButtonBuilder().setCustomId(`eoc_removeuser_${userId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),
@@ -901,13 +877,14 @@ export default class ExtraOwnerCommand extends Command {
 			await modalInteraction.reply({ components: [panel("Not Found", "This user is no longer an extra owner.")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 			return;
 		}
-		currentOwners[idx].limits.emojiAction = emojiLimit;
-		currentOwners[idx].limits.mentionLimit = mentionLimit;
-		currentOwners[idx].limits.timeWindow = timeWindow;
-		currentOwners[idx].enforcement = enforcement;
+		const currentOwner = currentOwners[idx]!;
+		currentOwner.limits.emojiAction = emojiLimit;
+		currentOwner.limits.mentionLimit = mentionLimit;
+		currentOwner.limits.timeWindow = timeWindow;
+		currentOwner.enforcement = enforcement;
 		await setExtraOwners(ctx, currentOwners);
 
-		const { container, row } = await buildConfigView(ctx, currentOwners[idx]);
+		const { container, row } = await buildConfigView(ctx, currentOwner);
 		const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 			new ButtonBuilder().setCustomId(`eoc_resetdef_${userId}`).setLabel("Reset Defaults").setStyle(ButtonStyle.Secondary),
 			new ButtonBuilder().setCustomId(`eoc_removeuser_${userId}`).setLabel("Remove").setStyle(ButtonStyle.Danger),

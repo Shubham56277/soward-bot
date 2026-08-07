@@ -1,7 +1,22 @@
-import type { AntiNuke, ID } from "@repo/db";
+import type { AntiNuke, AntiNukeMember, ID } from "@repo/db";
 
 export const ANTI_NUKE_MODULES = ["channel", "role", "member", "emoji", "webhook", "sticker", "guild"] as const;
 export type AntiNukeModuleKey = typeof ANTI_NUKE_MODULES[number];
+
+export const ANTI_NUKE_AUDIT_MAX_AGE_MS = 30_000;
+
+export function isFreshAntiNukeAuditEntry(createdTimestamp: number, now = Date.now()): boolean {
+	return Number.isFinite(createdTimestamp) && createdTimestamp <= now + 5_000 && now - createdTimestamp <= ANTI_NUKE_AUDIT_MAX_AGE_MS;
+}
+
+export function isMatchingFreshAntiNukeAuditEntry(
+	expectedTargetId: string,
+	actualTargetId: string | undefined,
+	createdTimestamp: number,
+	now = Date.now(),
+): boolean {
+	return actualTargetId === expectedTargetId && isFreshAntiNukeAuditEntry(createdTimestamp, now);
+}
 
 export function normalizeTrustedUsers(value: unknown): ID[] {
 	if (!Array.isArray(value)) return [];
@@ -38,7 +53,12 @@ export function buildSafeDefaultAntiNukePatch(): Partial<AntiNuke> {
 		gateKeeper: true,
 		channel: [entry("create"), entry("delete"), entry("update")],
 		role: [entry("create"), entry("delete"), entry("update")],
-		member: [entry("kick"), entry("ban"), entry("unban"), entry("update")],
+		member: [entry("kick"), entry("ban"), entry("unban"), entry("update"), {
+			type: "infiniteVoid",
+			enabled: true,
+			limit: 50,
+			action: "ban" as const,
+		}],
 		emoji: [entry("create"), entry("delete"), entry("update")],
 		webhook: [entry("create"), entry("delete"), entry("update")],
 		sticker: [entry("create"), entry("delete"), entry("update")],
@@ -55,7 +75,16 @@ export function buildDisabledAntiNukePatch(settings: AntiNuke): Partial<AntiNuke
 }
 
 export function moduleIsEnabled(settings: AntiNuke, key: AntiNukeModuleKey): boolean {
-	return settings.enabled && settings[key].some((entry) => entry.enabled);
+	return settings.enabled && settings[key].some((entry) => entry.enabled && entry.type !== "infiniteVoid");
+}
+
+export function infiniteVoidIsEnabled(settings: AntiNuke): boolean {
+	return settings.enabled && settings.member.some((entry) => entry.type === "infiniteVoid" && entry.enabled);
+}
+
+export function setInfiniteVoidEnabled(settings: AntiNuke, enabled: boolean): AntiNukeMember[] {
+	const entries = settings.member.filter((entry) => entry.type !== "infiniteVoid");
+	return [...entries, { type: "infiniteVoid", enabled, limit: 50, action: "ban" }];
 }
 
 export function isAntiNukeBypassed(settings: AntiNuke, ownerId: string, botId: string | undefined, userId: string): boolean {

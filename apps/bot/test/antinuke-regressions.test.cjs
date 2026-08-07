@@ -23,8 +23,11 @@ Object.assign(process.env, {
 	NODE_ENV: "development",
 });
 
+const fs = require("node:fs");
+const path = require("node:path");
 const state = require("../dist/modules/antiNukeState.js");
-const { AntiNukeService } = require("../dist/modules/antinuke.js");
+const ui = require("../dist/modules/antiNukeUi.js");
+const { AntiNukeService, INFINITE_VOID_THRESHOLD, INFINITE_VOID_WINDOW_MS } = require("../dist/modules/antinuke.js");
 const { AntiNuke } = require("@repo/db");
 
 function settings(overrides = {}) {
@@ -35,7 +38,7 @@ function settings(overrides = {}) {
 		admin: null,
 		channel: [entry("create"), entry("delete"), entry("update")],
 		role: [entry("create"), entry("delete"), entry("update")],
-		member: [entry("kick"), entry("ban"), entry("unban"), entry("update")],
+		member: [entry("kick"), entry("ban"), entry("unban"), entry("update"), { type: "infiniteVoid", enabled: true, limit: 50, action: "ban" }],
 		emoji: [entry("create"), entry("delete"), entry("update")],
 		webhook: [entry("create"), entry("delete"), entry("update")],
 		sticker: [entry("create"), entry("delete"), entry("update")],
@@ -168,8 +171,11 @@ test("safe enable defaults and whitelist mutations stay canonical", () => {
 	assert.equal(defaults.gateKeeper, true);
 	for (const key of state.ANTI_NUKE_MODULES) {
 		assert.ok(defaults[key].length > 0);
-		assert.ok(defaults[key].every((entry) => entry.enabled && entry.limit === 1 && entry.action === "ban"));
+		const normalEntries = defaults[key].filter((entry) => entry.type !== "infiniteVoid");
+		assert.ok(normalEntries.every((entry) => entry.enabled && entry.limit === 1 && entry.action === "ban"));
 	}
+	const infiniteVoid = defaults.member.find((entry) => entry.type === "infiniteVoid");
+	assert.deepEqual(infiniteVoid, { type: "infiniteVoid", enabled: true, limit: 50, action: "ban" });
 
 	const first = "678901234567890123";
 	const second = "789012345678901234";
@@ -309,4 +315,276 @@ test("Redis outage uses one process-local punishment lock before side effects", 
 	} finally {
 		AntiNuke.get = originalGet;
 	}
+});
+
+
+function createInfiniteVoidRedis({ failEval = false, failRevoke = false } = {}) {
+	const sortedSets = new Map();
+	const strings = new Map();
+	const locks = new Set();
+	let evalCalls = 0;
+	return {
+		sortedSets,
+		strings,
+		get evalCalls() { return evalCalls; },
+		async eval(script, _keyCount, key, ...args) {
+			evalCalls++;
+			if (failEval) throw new Error("redis unavailable");
+			if (script.includes("ZREMRANGEBYSCORE")) {
+				const [cutoffRaw, scoreRaw, auditId, , maxRaw] = args;
+				const cutoff = Number(cutoffRaw);
+				const score = Number(scoreRaw);
+				const max = Number(maxRaw);
+				const entries = sortedSets.get(key) ?? new Map();
+				for (const [id, value] of entries) if (value <= cutoff) entries.delete(id);
+				const added = entries.has(auditId) ? 0 : 1;
+				if (added) entries.set(auditId, score);
+				if (entries.size > max) {
+					const oldest = [...entries.entries()].sort((a, b) => a[1] - b[1]);
+					for (const [id] of oldest.slice(0, entries.size - max)) entries.delete(id);
+				}
+				sortedSets.set(key, entries);
+				return [added, entries.size];
+			}
+			if (script.includes("cjson.decode")) {
+				if (failRevoke) throw new Error("extra owner store unavailable");
+				const raw = strings.get(key);
+				if (!raw) return 0;
+				const owners = JSON.parse(raw);
+				const kept = owners.filter((owner) => owner.userId !== args[0]);
+				strings.set(key, JSON.stringify(kept));
+				return owners.length - kept.length;
+			}
+			throw new Error("unexpected script");
+		},
+		async set(key, value, ...args) {
+			if (args.includes("NX")) {
+				if (locks.has(key)) return null;
+				locks.add(key);
+				return "OK";
+			}
+			strings.set(key, value);
+			return "OK";
+		},
+		async get(key) { return strings.get(key) ?? null; },
+		async del(...keys) { for (const key of keys) strings.delete(key); return keys.length; },
+		async scan() { return ["0", []]; },
+		async unlink() { return 0; },
+	};
+}
+
+function createInfiniteVoidRuntime(redis, executorId = "567890123456789012") {
+	let bans = 0;
+	const member = {
+		id: executorId,
+		bannable: true,
+		moderatable: true,
+		roles: { cache: new Map(), remove: async () => {} },
+		timeout: async () => {},
+	};
+	const guild = {
+		id: "123456789012345678",
+		ownerId: "345678901234567890",
+		members: {
+			cache: new Map([[executorId, member]]),
+			fetch: async () => member,
+			ban: async () => { bans++; },
+		},
+	};
+	const client = {
+		user: { id: "456789012345678901" },
+		logger: { error: () => {}, warn: () => {}, info: () => {} },
+		redis,
+	};
+	return { client, guild, get bans() { return bans; } };
+}
+
+test("Infinite Void keeps a rolling Redis window and deduplicates audit entries", async () => {
+	const originalGet = AntiNuke.get;
+	const redis = createInfiniteVoidRedis();
+	const runtime = createInfiniteVoidRuntime(redis);
+	const service = new AntiNukeService(runtime.client);
+	const base = 1_700_000_000_000;
+	try {
+		AntiNuke.get = async () => settings();
+		const first = await service.recordInfiniteVoidKick(runtime.guild, "567890123456789012", "600000000000000001", "audit-1", base, base);
+		const duplicate = await service.recordInfiniteVoidKick(runtime.guild, "567890123456789012", "600000000000000001", "audit-1", base, base + 1);
+		assert.equal(first.count, 1);
+		assert.equal(duplicate.counted, false);
+		assert.equal(duplicate.count, 1);
+
+		for (let i = 2; i <= 49; i++) {
+			const eventTime = base + i * 100;
+			await service.recordInfiniteVoidKick(runtime.guild, "567890123456789012", String(600000000000000000n + BigInt(i)), `audit-${i}`, eventTime, eventTime);
+		}
+		const newWindowTime = base + INFINITE_VOID_WINDOW_MS + 10_000;
+		const rolled = await service.recordInfiniteVoidKick(runtime.guild, "567890123456789012", "600000000000000099", "audit-new-window", newWindowTime, newWindowTime);
+		assert.equal(rolled.count, 1);
+		assert.equal(rolled.thresholdReached, false);
+		assert.equal(runtime.bans, 0);
+	} finally {
+		AntiNuke.get = originalGet;
+	}
+});
+
+test("Infinite Void threshold is atomic across processes and revokes bypasses", async () => {
+	const originalGet = AntiNuke.get;
+	const originalUpdate = AntiNuke.update;
+	const executorId = "567890123456789012";
+	const otherOwnerId = "678901234567890123";
+	const redis = createInfiniteVoidRedis();
+	redis.strings.set(`extraowners:123456789012345678`, JSON.stringify([
+		{ userId: executorId, limits: {} },
+		{ userId: otherOwnerId, limits: {} },
+	]));
+	const runtime = createInfiniteVoidRuntime(redis, executorId);
+	let current = settings({ trustedUsers: [{ id: executorId }], admin: executorId });
+	let updates = 0;
+	try {
+		AntiNuke.get = async () => current;
+		AntiNuke.update = async (_guildId, patch) => {
+			updates++;
+			current = settings({ ...current, ...patch });
+			return new AntiNuke(runtime.guild.id, current);
+		};
+		const firstProcess = new AntiNukeService(runtime.client);
+		const secondProcess = new AntiNukeService(runtime.client);
+		const now = 1_700_000_100_000;
+		for (let i = 1; i < INFINITE_VOID_THRESHOLD; i++) {
+			await firstProcess.recordInfiniteVoidKick(runtime.guild, executorId, String(700000000000000000n + BigInt(i)), `incident-${i}`, now + i, now + i);
+		}
+		const results = await Promise.all([
+			firstProcess.recordInfiniteVoidKick(runtime.guild, executorId, "700000000000000050", "incident-50", now + 50, now + 50),
+			secondProcess.recordInfiniteVoidKick(runtime.guild, executorId, "700000000000000050", "incident-50", now + 50, now + 50),
+		]);
+		assert.equal(results.filter((result) => result.incidentAcquired).length, 1);
+		assert.equal(results.filter((result) => result.punished).length, 1);
+		assert.equal(runtime.bans, 1);
+		assert.equal(updates, 1);
+		assert.deepEqual(current.trustedUsers, []);
+		assert.equal(current.admin, null);
+		assert.deepEqual(JSON.parse(redis.strings.get(`extraowners:${runtime.guild.id}`)), [{ userId: otherOwnerId, limits: {} }]);
+	} finally {
+		AntiNuke.get = originalGet;
+		AntiNuke.update = originalUpdate;
+	}
+});
+
+test("Infinite Void still punishes when independent bypass revocations fail", async () => {
+	const originalGet = AntiNuke.get;
+	const originalUpdate = AntiNuke.update;
+	const executorId = "567890123456789012";
+	const redis = createInfiniteVoidRedis({ failRevoke: true });
+	const runtime = createInfiniteVoidRuntime(redis, executorId);
+	try {
+		AntiNuke.get = async () => settings({ trustedUsers: [{ id: executorId }], admin: executorId });
+		AntiNuke.update = async () => { throw new Error("database unavailable"); };
+		const service = new AntiNukeService(runtime.client);
+		const now = 1_700_000_200_000;
+		let result;
+		for (let i = 1; i <= INFINITE_VOID_THRESHOLD; i++) {
+			result = await service.recordInfiniteVoidKick(
+				runtime.guild,
+				executorId,
+				String(710000000000000000n + BigInt(i)),
+				`revocation-failure-${i}`,
+				now + i,
+				now + i,
+			);
+		}
+		assert.equal(result.incidentAcquired, true);
+		assert.equal(result.punished, true);
+		assert.equal(runtime.bans, 1);
+	} finally {
+		AntiNuke.get = originalGet;
+		AntiNuke.update = originalUpdate;
+	}
+});
+
+test("Infinite Void rejects stale and future audit entries", async () => {
+	const originalGet = AntiNuke.get;
+	const redis = createInfiniteVoidRedis();
+	const runtime = createInfiniteVoidRuntime(redis);
+	const service = new AntiNukeService(runtime.client);
+	const now = 1_700_000_300_000;
+	try {
+		AntiNuke.get = async () => settings();
+		const stale = await service.recordInfiniteVoidKick(runtime.guild, "567890123456789012", "720000000000000001", "stale", now - 30_001, now);
+		const future = await service.recordInfiniteVoidKick(runtime.guild, "567890123456789012", "720000000000000002", "future", now + 5_001, now);
+		assert.equal(stale.counted, false);
+		assert.equal(future.counted, false);
+		assert.equal(redis.evalCalls, 0);
+		assert.equal(runtime.bans, 0);
+	} finally {
+		AntiNuke.get = originalGet;
+	}
+});
+
+test("Infinite Void is inert for owners, bots, disabled states, and Redis failures", async () => {
+	const originalGet = AntiNuke.get;
+	const originalUpdate = AntiNuke.update;
+	const executorId = "567890123456789012";
+	let updates = 0;
+	try {
+		const redis = createInfiniteVoidRedis();
+		const runtime = createInfiniteVoidRuntime(redis, executorId);
+		const service = new AntiNukeService(runtime.client);
+		AntiNuke.update = async () => { updates++; throw new Error("must not update"); };
+
+		AntiNuke.get = async () => settings({ enabled: false });
+		await service.recordInfiniteVoidKick(runtime.guild, executorId, "800000000000000001", "disabled-global", 1000, 1000);
+		AntiNuke.get = async () => settings({ member: settings().member.map((entry) => entry.type === "infiniteVoid" ? { ...entry, enabled: false } : entry) });
+		await service.recordInfiniteVoidKick(runtime.guild, executorId, "800000000000000002", "disabled-module", 2000, 2000);
+		AntiNuke.get = async () => settings();
+		await service.recordInfiniteVoidKick(runtime.guild, runtime.guild.ownerId, "800000000000000003", "owner", 3000, 3000);
+		await service.recordInfiniteVoidKick(runtime.guild, runtime.client.user.id, "800000000000000004", "bot", 4000, 4000);
+		assert.equal(redis.evalCalls, 0);
+		assert.equal(runtime.bans, 0);
+
+		const failedRedis = createInfiniteVoidRedis({ failEval: true });
+		const failedRuntime = createInfiniteVoidRuntime(failedRedis, executorId);
+		const failedService = new AntiNukeService(failedRuntime.client);
+		const result = await failedService.recordInfiniteVoidKick(failedRuntime.guild, executorId, "800000000000000005", "redis-failure", 5000, 5000);
+		assert.equal(result.counted, false);
+		assert.equal(result.punished, false);
+		assert.equal(failedRuntime.bans, 0);
+		assert.equal(updates, 0);
+	} finally {
+		AntiNuke.get = originalGet;
+		AntiNuke.update = originalUpdate;
+	}
+});
+
+test("progressive setup formatting reveals only reached execution lines", () => {
+	const steps = ["Checking permissions", "Persisting configuration", "Completed"];
+	assert.equal(
+		ui.formatSetupProgress(steps, { completed: 0, active: 0 }),
+		"<a:arrow:1535258533900193792> **Checking permissions**",
+	);
+	const progress = ui.formatSetupProgress(steps, { completed: 1, active: 1 });
+	assert.equal(progress, [
+		"<:tick:1533150498973155490> Checking permissions",
+		"<a:arrow:1535258533900193792> **Persisting configuration**",
+	].join("\n"));
+	assert.doesNotMatch(progress, /Completed/);
+	const completed = ui.formatSetupProgress(steps, { completed: steps.length });
+	assert.equal(completed.split("\n").length, steps.length);
+	assert.ok(completed.split("\n").every((line) => line.startsWith("<:tick:1533150498973155490>")));
+	const failed = ui.formatSetupProgress(steps, { completed: 1, failure: { index: 1, message: "database unavailable" } });
+	assert.match(failed, /⚠️ \*\*Persisting configuration failed:\*\* database unavailable/);
+	assert.doesNotMatch(failed, /Completed/);
+});
+
+test("AntiNuke UI source uses real separators instead of drawn separator text", () => {
+	const files = [
+		"src/commands/security/Antinuke.ts",
+		"src/commands/security/Whitelist.ts",
+		"src/commands/security/ExtraOwner.ts",
+		"src/modules/antiNukeUi.ts",
+	];
+	const source = files.map((file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8"))
+		.join("\n")
+		.replace(/^\s*\/\/.*$/gm, "");
+	assert.doesNotMatch(source, /[━─]{4,}|-{5,}/);
+	assert.match(source, /SeparatorBuilder/);
 });

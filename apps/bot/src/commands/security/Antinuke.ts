@@ -7,11 +7,9 @@ import {
 	ContainerBuilder,
 	MessageFlags,
 	ModalBuilder,
-	SeparatorBuilder,
-	SeparatorSpacingSize,
+	PermissionsBitField,
 	StringSelectMenuBuilder,
 	StringSelectMenuInteraction,
-	TextDisplayBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 	User,
@@ -25,11 +23,22 @@ import {
 	addTrustedUser,
 	buildDisabledAntiNukePatch,
 	buildSafeDefaultAntiNukePatch,
+	infiniteVoidIsEnabled,
 	moduleIsEnabled,
 	normalizeTrustedUsers,
 	parseDiscordUserId,
 	removeTrustedUser,
+	setInfiniteVoidEnabled,
 } from "../../modules/antiNukeState";
+import {
+	ANTINUKE_ARROW,
+	ANTINUKE_LOCK,
+	ANTINUKE_OFF,
+	ANTINUKE_TICK,
+	ANTINUKE_WARNING,
+	buildAntiNukePanel,
+	formatSetupProgress,
+} from "../../modules/antiNukeUi";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -50,30 +59,20 @@ type UserResolution = { user: User; error?: never } | { user: null; error: strin
 const PUNISHMENTS: Punishment[] = ["ban", "kick", "rolestrip"];
 
 const EMOJI = {
-	on: "◈",
-	off: "◇",
-	shield: "🛡",
-	lock: "🔒",
-	warn: "⚠",
-	check: "✓",
-	dot: "•",
+	on: ANTINUKE_TICK,
+	off: ANTINUKE_OFF,
+	lock: ANTINUKE_LOCK,
+	warn: ANTINUKE_WARNING,
+	check: ANTINUKE_TICK,
+	arrow: ANTINUKE_ARROW,
 } as const;
 
-// ─── UI Builders ───────────────────────────────────────────────────────────
-
 function panel(title: string, body: string): ContainerBuilder {
-	return new ContainerBuilder()
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${EMOJI.shield} ${title}`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+	return buildAntiNukePanel(title, [body]);
 }
 
-/** Emoji-free panel used by the paginated dashboard. */
 function plainPanel(title: string, body: string): ContainerBuilder {
-	return new ContainerBuilder()
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
-		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+	return buildAntiNukePanel(title, [body]);
 }
 
 /** Aligned `label ... value` row using a fixed-width label column. */
@@ -82,7 +81,11 @@ function row(label: string, value: string): string {
 }
 
 function reply(ctx: Context, title: string, body: string): Promise<any> {
-	return ctx.editOrReply({ components: [panel(title, body)], flags: MessageFlags.IsComponentsV2 });
+	return ctx.editOrReply({
+		components: [panel(title, body)],
+		flags: MessageFlags.IsComponentsV2,
+		allowedMentions: { parse: [] },
+	});
 }
 
 function statusBadge(enabled: boolean): string {
@@ -93,13 +96,14 @@ function moduleStatus(settings: AntiNuke): string {
 	const lines: string[] = [];
 	for (const [key, meta] of Object.entries(MODULES)) {
 		const entries: any[] = (settings as any)[key] ?? [];
-		const active = settings.enabled ? entries.filter((e: any) => e.enabled) : [];
+		const active = settings.enabled ? entries.filter((e: any) => e.enabled && e.type !== "infiniteVoid") : [];
 		const badge = active.length > 0 ? `${EMOJI.on}` : `${EMOJI.off}`;
 		const detail = active.length > 0 ? active.map((e: any) => e.type).join(", ") : "disabled";
 		lines.push(`${badge} **${meta.label}** — ${detail}`);
 	}
 	lines.push(`${settings.enabled && settings.mention ? EMOJI.on : EMOJI.off} **Mention** — ${settings.enabled && settings.mention ? "active" : "disabled"}`);
 	lines.push(`${settings.enabled && settings.gateKeeper ? EMOJI.on : EMOJI.off} **GateKeeper** — ${settings.enabled && settings.gateKeeper ? "active" : "disabled"}`);
+	lines.push(`${infiniteVoidIsEnabled(settings) ? EMOJI.on : EMOJI.off} **Infinite Void** — ${infiniteVoidIsEnabled(settings) ? "50 confirmed kicks / 20 minutes" : "disabled"}`);
 	return lines.join("\n");
 }
 
@@ -322,8 +326,9 @@ export default class AntiNukeCommand extends Command {
 			? moduleKeys.filter((key) => moduleIsEnabled(settings, key)).length
 				+ (settings.mention ? 1 : 0)
 				+ (settings.gateKeeper ? 1 : 0)
+				+ (infiniteVoidIsEnabled(settings) ? 1 : 0)
 			: 0;
-		const totalModules = moduleKeys.length + 2;
+		const totalModules = moduleKeys.length + 3;
 
 		const listed = settings.trustedUsers?.length ?? 0;
 
@@ -363,6 +368,7 @@ export default class AntiNukeCommand extends Command {
 
 		lines.push(row("Mention", settings.enabled && settings.mention ? "Enabled" : "Disabled"));
 		lines.push(row("GateKeeper", settings.enabled && settings.gateKeeper ? "Enabled" : "Disabled"));
+		lines.push(row("Infinite Void", infiniteVoidIsEnabled(settings) ? "Enabled" : "Disabled"));
 
 		const header = settings.enabled
 			? "Review the protection modules currently active."
@@ -388,8 +394,8 @@ export default class AntiNukeCommand extends Command {
 			"Manage users excluded from automatic enforcement.",
 			"",
 			"**Whitelist**",
-			"`?wl add @user` — Add with action panel",
-			"`?wl remove @user` — Remove from whitelist",
+			"`?wl <mention|userId>` — Grant a full normal AntiNuke bypass",
+			"`?wl remove <mention|userId>` — Remove a bypass",
 			"`?wl list` — View whitelist",
 			"`?wl reset` — Clear whitelist",
 			"",
@@ -438,53 +444,80 @@ export default class AntiNukeCommand extends Command {
 			return reply(ctx, "Already Active", `${EMOJI.check} Protection is already enabled.\nUse \`antinuke config\` to adjust modules.`);
 		}
 
-		const botMember = await ctx.guild.members.fetch(ctx.client.user!.id);
-		let role = ctx.guild.roles.cache.find((r) => r.name === "Soward Supreme");
-
-		if (!role) {
-			role = await ctx.guild.roles.create({
-				name: "Soward Supreme",
-				color: ctx.client.config.colors.main,
-				permissions: ["Administrator"],
-				position: botMember.roles.highest.position,
-				reason: "AntiNuke activation",
-			}).catch((error) => {
-				ctx.client.logger.error("[AntiNuke] Role creation failed:", error);
-				return undefined;
-			});
-
-			if (!role) {
-				return reply(ctx, "Setup Failed", `${EMOJI.warn} Could not create the Soward Supreme role. Check bot permissions.`);
-			}
-		}
-
-		await botMember.roles.add(role.id).catch((error) => {
-			ctx.client.logger.error("[AntiNuke] Failed to assign protection role:", error);
+		const steps = [
+			"Checking bot permissions and role hierarchy",
+			"Creating or finding the Elfaria protection role",
+			"Assigning the protection role",
+			"Enabling AntiNuke modules",
+			"Configuring Infinite Void",
+			"Persisting the protection configuration",
+			"Invalidating protection caches",
+			"AntiNuke setup completed",
+		] as const;
+		let activeStep = 0;
+		const render = (completed: number, active?: number, failure?: { index: number; message: string }) => ({
+			components: [buildAntiNukePanel("Elfaria AntiNuke Setup", [
+				"Setting up server protection with safe defaults.",
+				formatSetupProgress(steps, { completed, active, failure }),
+			])],
+			flags: MessageFlags.IsComponentsV2 as const,
+			allowedMentions: { parse: [] },
 		});
 
-		const saved = await AntiNuke.update(ctx.guild.id!, buildSafeDefaultAntiNukePatch());
-		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, saved);
+		const message = await ctx.editOrReply(render(0, activeStep));
+		const updateProgress = async (completed: number, active?: number, failure?: { index: number; message: string }) => {
+			await message.edit(render(completed, active, failure)).catch((error: unknown) => {
+				ctx.client.logger.error("[AntiNuke] Setup progress edit failed:", error);
+			});
+		};
 
-		const moduleList = Object.values(MODULES).map((m) => `${EMOJI.on} ${m.label}`).join("\n");
+		try {
+			const botMember = await ctx.guild.members.fetch(ctx.client.user!.id);
+			if (!botMember.permissions.has(PermissionsBitField.Flags.Administrator)) {
+				throw new Error("Bot is missing Administrator permission");
+			}
+			await updateProgress(1, ++activeStep);
 
-		const body = [
-			`${EMOJI.check} **Protection is now active.**`,
-			"",
-			`${EMOJI.warn} **Important:** Drag the \`Soward Supreme\` role to the top of your role list.`,
-			"",
-			"━━━━━━━━━━━━━━━━━━━━━━━",
-			"**Enabled Modules**",
-			"━━━━━━━━━━━━━━━━━━━━━━━",
-			moduleList,
-			`${EMOJI.on} Mention Protection`,
-			`${EMOJI.on} GateKeeper`,
-			"",
-			"**Default Action:** `ban`",
-			"",
-			"-# Use `antinuke config` to customize individual modules.",
-		].join("\n");
+			let role = ctx.guild.roles.cache.find((candidate) =>
+				candidate.name === "Elfaria Sentinel" || candidate.name === "Soward Supreme",
+			);
+			if (!role) {
+				role = await ctx.guild.roles.create({
+					name: "Elfaria Sentinel",
+					color: ctx.client.config.colors.main,
+					permissions: [PermissionsBitField.Flags.Administrator],
+					reason: "Elfaria AntiNuke activation",
+				});
+			}
+			if (!botMember.roles.cache.has(role.id) && role.position >= botMember.roles.highest.position) {
+				throw new Error("Protection role is above the bot's highest role");
+			}
+			await updateProgress(2, ++activeStep);
 
-		return reply(ctx, "Protection Enabled", body);
+			if (!botMember.roles.cache.has(role.id)) await botMember.roles.add(role.id, "Elfaria AntiNuke activation");
+			await updateProgress(3, ++activeStep);
+
+			const patch = buildSafeDefaultAntiNukePatch();
+			await updateProgress(4, ++activeStep);
+
+			if (!patch.member?.some((entry) => entry.type === "infiniteVoid" && entry.enabled)) {
+				throw new Error("Infinite Void safe defaults were not configured");
+			}
+			await updateProgress(5, ++activeStep);
+
+			const saved = await AntiNuke.update(ctx.guild.id!, patch);
+			await updateProgress(6, ++activeStep);
+
+			await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, saved);
+			await updateProgress(7, ++activeStep);
+			await updateProgress(steps.length);
+			return message;
+		} catch (error) {
+			const messageText = error instanceof Error ? error.message : "Unknown setup error";
+			ctx.client.logger.error(`[AntiNuke] Setup failed at step ${activeStep}:`, error);
+			await updateProgress(activeStep, undefined, { index: activeStep, message: messageText });
+			return message;
+		}
 	}
 
 	// ─── Disable ──────────────────────────────────────────────────────────
@@ -518,9 +551,9 @@ export default class AntiNukeCommand extends Command {
 				"",
 				"Usage: `antinuke punishment <action>`",
 				"",
-				`${EMOJI.dot} \`ban\` — Permanently ban the offender`,
-				`${EMOJI.dot} \`kick\` — Kick the offender`,
-				`${EMOJI.dot} \`rolestrip\` — Remove all roles`,
+				`${EMOJI.arrow} \`ban\` — Permanently ban the offender`,
+				`${EMOJI.arrow} \`kick\` — Kick the offender`,
+				`${EMOJI.arrow} \`rolestrip\` — Remove manageable roles`,
 			].join("\n");
 			return reply(ctx, "Punishment", body);
 		}
@@ -529,7 +562,7 @@ export default class AntiNukeCommand extends Command {
 		for (const key of Object.keys(MODULES) as ModuleKey[]) {
 			const entries: any[] = (settings as any)[key] ?? [];
 			if (entries.length) {
-				patch[key] = entries.map((e: any) => ({ ...e, action: value }));
+				patch[key] = entries.map((e: any) => e.type === "infiniteVoid" ? e : { ...e, action: value });
 			}
 		}
 
@@ -568,10 +601,10 @@ export default class AntiNukeCommand extends Command {
 		const body = [
 			"**Manage users exempt from antinuke checks.**",
 			"",
-			`${EMOJI.dot} \`antinuke whitelist add @user\``,
-			`${EMOJI.dot} \`antinuke whitelist remove @user\``,
-			`${EMOJI.dot} \`antinuke whitelist list\``,
-			`${EMOJI.dot} \`antinuke whitelist reset\``,
+			`${EMOJI.arrow} \`antinuke whitelist add @user\``,
+			`${EMOJI.arrow} \`antinuke whitelist remove @user\``,
+			`${EMOJI.arrow} \`antinuke whitelist list\``,
+			`${EMOJI.arrow} \`antinuke whitelist reset\``,
 		].join("\n");
 		return reply(ctx, "Whitelist", body);
 	}
@@ -610,8 +643,13 @@ export default class AntiNukeCommand extends Command {
 		const users = normalizeTrustedUsers(settings.trustedUsers);
 		if (!users.length) return reply(ctx, "Whitelist", "No users are currently whitelisted.");
 
-		const lines = users.map((u, i) => `\`${i + 1}.\` <@${u.id}>`).join("\n");
-		return reply(ctx, "Whitelist", `**${users.length}** whitelisted user${users.length !== 1 ? "s" : ""}\n\n${lines}`);
+		const lines = await Promise.all(users.map(async (entry, index) => {
+			const user = await ctx.client.users.fetch(entry.id).catch(() => null);
+			return user
+				? `${EMOJI.check} **${user.username}** (\`${entry.id}\`)`
+				: `${EMOJI.check} \`${entry.id}\``;
+		}));
+		return reply(ctx, "Whitelist", `**${users.length}** whitelisted user${users.length !== 1 ? "s" : ""}\n\n${lines.join("\n")}`);
 	}
 
 	private async whitelistReset(ctx: Context, _settings: AntiNuke): Promise<any> {
@@ -631,9 +669,7 @@ export default class AntiNukeCommand extends Command {
 		const buildOverview = (s: AntiNuke): string => [
 			`Status: ${statusBadge(s.enabled)}`,
 			"",
-			"━━━━━━━━━━━━━━━━━━━━━━━",
 			"**Module Overview**",
-			"━━━━━━━━━━━━━━━━━━━━━━━",
 			moduleStatus(s),
 			"",
 			"-# Select a module below to configure it.",
@@ -650,6 +686,7 @@ export default class AntiNukeCommand extends Command {
 				})),
 				{ label: "Mention", value: "_mention", description: "Toggle @everyone / @here protection" },
 				{ label: "GateKeeper", value: "_gateKeeper", description: "Toggle unauthorized bot-add protection" },
+				{ label: "Infinite Void", value: "_infiniteVoid", description: "50 confirmed kicks in a rolling 20-minute window" },
 			]);
 
 		const menuRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(moduleMenu);
@@ -679,15 +716,21 @@ export default class AntiNukeCommand extends Command {
 				const selected = int.values[0];
 				if (!selected) return;
 
-				// Toggle switches for mention and gateKeeper
+				if (selected === "_infiniteVoid") {
+					settings = await AntiNuke.update(ctx.guild.id!, {
+						member: setInfiniteVoidEnabled(settings, !infiniteVoidIsEnabled(settings)),
+					});
+					await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, settings);
+					await int.update({ components: [panel("Configuration", buildOverview(settings)), menuRow] });
+					return;
+				}
+
 				if (selected === "_mention" || selected === "_gateKeeper") {
-					const key = selected.slice(1); // "mention" or "gateKeeper"
+					const key = selected.slice(1);
 					(settings as any)[key] = !(settings as any)[key];
 					settings = await AntiNuke.update(ctx.guild.id!, { [key]: (settings as any)[key] });
 					await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, settings);
-
-					const newPanel = panel("Configuration", buildOverview(settings));
-					await int.update({ components: [newPanel, menuRow] });
+					await int.update({ components: [panel("Configuration", buildOverview(settings)), menuRow] });
 					return;
 				}
 
@@ -722,7 +765,7 @@ export default class AntiNukeCommand extends Command {
 		buildOverview: (s: AntiNuke) => string,
 	): Promise<void> {
 		const meta = MODULES[module];
-		const entries: any[] = (settings as any)[module] ?? [];
+		const entries: any[] = ((settings as any)[module] ?? []).filter((entry: any) => entry.type !== "infiniteVoid");
 
 		const buildModuleView = (items: any[]): string => {
 			const lines = items.map((e: any) => {
@@ -734,9 +777,7 @@ export default class AntiNukeCommand extends Command {
 				`Module: **${meta.label}**`,
 				`Description: ${meta.description}`,
 				"",
-				"────────────────────",
 				"**Protection Types**",
-				"────────────────────",
 				...lines,
 				"",
 				"-# Click a button to configure limit and action for each type.",
@@ -848,7 +889,7 @@ export default class AntiNukeCommand extends Command {
 				settings = await AntiNuke.update(ctx.guild.id!, settings);
 				await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, settings);
 
-				const refreshed: any[] = (settings as any)[targetModule] ?? [];
+				const refreshed: any[] = ((settings as any)[targetModule] ?? []).filter((item: any) => item.type !== "infiniteVoid");
 				const refreshedPanel = panel(`${meta.label} Module`, buildModuleView(refreshed));
 				const refreshedButtons = buildButtons(refreshed);
 				const response = { components: [refreshedPanel, ...refreshedButtons] };

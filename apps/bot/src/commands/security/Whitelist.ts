@@ -1,12 +1,31 @@
-import type { User } from "discord.js";
-import Command from "../../abstract/Command";
-import Context from "../../lib/Context";
 import { AntiNuke } from "@repo/db";
 import { env } from "@repo/env";
-import { addTrustedUser, normalizeTrustedUsers, parseDiscordUserId, removeTrustedUser } from "../../modules/antiNukeState";
-import Help from "../utils/Help";
+import { MessageFlags, type User } from "discord.js";
+import Command from "../../abstract/Command";
+import Context from "../../lib/Context";
+import {
+	addTrustedUser,
+	normalizeTrustedUsers,
+	parseDiscordUserId,
+	removeTrustedUser,
+} from "../../modules/antiNukeState";
+import {
+	ANTINUKE_ARROW,
+	ANTINUKE_LOCK,
+	ANTINUKE_TICK,
+	ANTINUKE_WARNING,
+	buildAntiNukePanel,
+} from "../../modules/antiNukeUi";
 
 type UserResolution = { user: User; error?: never } | { user: null; error: string };
+
+function reply(ctx: Context, title: string, body: string): Promise<any> {
+	return ctx.sendMessage({
+		components: [buildAntiNukePanel(title, [body])],
+		flags: MessageFlags.IsComponentsV2,
+		allowedMentions: { parse: [] },
+	});
+}
 
 export default class WhitelistCommand extends Command {
 	constructor() {
@@ -14,8 +33,8 @@ export default class WhitelistCommand extends Command {
 			name: "wl",
 			description: {
 				content: "Manage full AntiNuke bypasses",
-				examples: ["wl @user", "wl 123456789012345678", "wl add @user", "wl remove @user", "wl list"],
-				usage: "wl <mention|user-id> | wl <add|remove|list|reset> [user]",
+				examples: ["wl @user", "wl 123456789012345678", "wl remove @user", "wl list"],
+				usage: "wl <mention|user-id> | wl <remove|list|reset> [user]",
 			},
 			category: "security",
 			aliases: ["whitelist"],
@@ -34,7 +53,7 @@ export default class WhitelistCommand extends Command {
 	public async run(ctx: Context): Promise<any> {
 		try {
 			if (!(await this.isAuthorized(ctx))) {
-				return ctx.sendMessage("Only the server owner, an extra owner, or the AntiNuke admin can manage the whitelist.");
+				return reply(ctx, "Access Denied", `${ANTINUKE_LOCK} Only the server owner, an extra owner, or the AntiNuke admin can manage bypasses.`);
 			}
 
 			const sub = (ctx.args[0] ?? "").toLowerCase();
@@ -43,13 +62,26 @@ export default class WhitelistCommand extends Command {
 				case "remove": return this.removeUser(ctx, 1);
 				case "list": return this.listUsers(ctx);
 				case "reset": return this.resetAll(ctx);
-				case "": return new Help().showCommand(ctx, "wl");
+				case "": return this.showHelp(ctx);
 				default: return this.addUser(ctx, 0);
 			}
 		} catch (error) {
 			ctx.client.logger.error("[AntiNuke] Whitelist command failed:", error);
-			return ctx.sendMessage("Could not update the AntiNuke whitelist. Please try again.");
+			return reply(ctx, "Whitelist Error", `${ANTINUKE_WARNING} Could not update AntiNuke bypasses. Please try again.`);
 		}
+	}
+
+	private showHelp(ctx: Context): Promise<any> {
+		return reply(ctx, "Full AntiNuke Bypasses", [
+			"A direct target grants a full owner-like bypass for normal AntiNuke enforcement.",
+			"",
+			`${ANTINUKE_ARROW} \`?wl <mention|userId>\` — Add a full bypass`,
+			`${ANTINUKE_ARROW} \`?wl remove <mention|userId>\` — Remove a bypass`,
+			`${ANTINUKE_ARROW} \`?wl list\` — List bypasses`,
+			`${ANTINUKE_ARROW} \`?wl reset\` — Clear bypasses`,
+			"",
+			"-# Infinite Void remains an emergency override at its confirmed-kick threshold.",
+		].join("\n"));
 	}
 
 	private async isAuthorized(ctx: Context): Promise<boolean> {
@@ -86,33 +118,33 @@ export default class WhitelistCommand extends Command {
 
 	private async addUser(ctx: Context, position: number): Promise<any> {
 		const resolved = await this.resolveUser(ctx, position);
-		if (!resolved.user) return ctx.sendMessage(resolved.error);
+		if (!resolved.user) return reply(ctx, "Invalid User", `${ANTINUKE_WARNING} ${resolved.error}`);
 		const { user } = resolved;
-		if (user.id === ctx.client.user?.id) return ctx.sendMessage("The bot already bypasses its own AntiNuke enforcement.");
+		if (user.id === ctx.client.user?.id) return reply(ctx, "Already Protected", "The bot already bypasses its own normal AntiNuke enforcement.");
 
 		const settings = await AntiNuke.get(ctx.guild.id);
 		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
 		if (trustedUsers.some((entry) => entry.id === user.id)) {
-			return ctx.sendMessage(`**${user.username}** already has a full AntiNuke bypass.`);
+			return reply(ctx, "Already Whitelisted", `**${user.username}** already has a full AntiNuke bypass.`);
 		}
 
 		const updated = await AntiNuke.update(ctx.guild.id, {
 			trustedUsers: addTrustedUser(trustedUsers, user.id),
 		});
 		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id, updated);
-		return ctx.sendMessage(`✅ **${user.username}** now has an immediate full AntiNuke bypass.`);
+		return reply(ctx, "Whitelist Updated", `${ANTINUKE_TICK} **${user.username}** now has an immediate full normal AntiNuke bypass.`);
 	}
 
 	private async removeUser(ctx: Context, position: number): Promise<any> {
 		const resolved = await this.resolveUser(ctx, position);
-		if (!resolved.user) return ctx.sendMessage(resolved.error);
+		if (!resolved.user) return reply(ctx, "Invalid User", `${ANTINUKE_WARNING} ${resolved.error}`);
 		const { user } = resolved;
 
 		const settings = await AntiNuke.get(ctx.guild.id);
 		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
 		if (!trustedUsers.some((entry) => entry.id === user.id)) {
 			await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id, user.id);
-			return ctx.sendMessage(`**${user.username}** is not whitelisted. Any legacy state was cleared.`);
+			return reply(ctx, "Not Whitelisted", `**${user.username}** is not whitelisted. Any legacy state was cleared.`);
 		}
 
 		const updated = await AntiNuke.update(ctx.guild.id, {
@@ -120,24 +152,24 @@ export default class WhitelistCommand extends Command {
 		});
 		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id, updated);
 		await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id, user.id);
-		return ctx.sendMessage(`✅ **${user.username}** removed from the AntiNuke whitelist.`);
+		return reply(ctx, "Whitelist Updated", `${ANTINUKE_TICK} **${user.username}** was removed from the AntiNuke whitelist.`);
 	}
 
 	private async listUsers(ctx: Context): Promise<any> {
 		const settings = await AntiNuke.get(ctx.guild.id);
 		const trustedUsers = normalizeTrustedUsers(settings.trustedUsers);
-		if (!trustedUsers.length) return ctx.sendMessage("No whitelisted users.");
+		if (!trustedUsers.length) return reply(ctx, "Full AntiNuke Bypasses", "No users are currently whitelisted.");
 
 		const lines = await Promise.all(trustedUsers.map(async (entry, index) => {
 			try {
 				const user = await ctx.client.users.fetch(entry.id);
-				return `${index + 1}. **${user.username}** (\`${entry.id}\`)`;
+				return `\`${index + 1}.\` **${user.username}** (\`${entry.id}\`)`;
 			} catch (error) {
 				ctx.client.logger.error(`[AntiNuke] Failed to resolve listed user ${entry.id}:`, error);
-				return `${index + 1}. \`${entry.id}\``;
+				return `\`${index + 1}.\` \`${entry.id}\``;
 			}
 		}));
-		return ctx.sendMessage(`## Full AntiNuke Bypasses (${lines.length})\n${lines.join("\n")}`);
+		return reply(ctx, `Full AntiNuke Bypasses (${lines.length})`, lines.join("\n"));
 	}
 
 	private async resetAll(ctx: Context): Promise<any> {
@@ -146,6 +178,6 @@ export default class WhitelistCommand extends Command {
 		const updated = await AntiNuke.update(ctx.guild.id, { trustedUsers: [] });
 		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id, updated);
 		await ctx.client.services.antinukes.clearWhitelistState(ctx.guild.id);
-		return ctx.sendMessage(`✅ Whitelist cleared (${removedCount} users removed).`);
+		return reply(ctx, "Whitelist Cleared", `${ANTINUKE_TICK} Removed ${removedCount} full AntiNuke bypass${removedCount === 1 ? "" : "es"}.`);
 	}
 }
