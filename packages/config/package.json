@@ -12,14 +12,16 @@
   },
   "scripts": {
     "build": "tsup",
-    "lint": "biome lint --write ./src",
+    "check": "biome check ./src",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ./src",
     "format": "biome format --write ./src"
   },
   "dependencies": {
-    "@repo/env": "*",
-    "seyfert": "^5.0.0"
+    "@repo/env": "0.0.0",
+    "seyfert": "5.0.0"
   },
   "devDependencies": {
-    "@repo/typescript-config": "*"
+    "@repo/typescript-config": "0.0.0"
   }
 }

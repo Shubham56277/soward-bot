@@ -1,6 +1,6 @@
 import { IgnoredChannel } from "@repo/db";
 import { env } from "@repo/env";
-import { ApplicationCommandType, EmbedBuilder, Events, GuildMember, GuildMemberRoleManager, MessageFlags, PermissionFlagsBits, PermissionsBitField, TextChannel, WebhookClient } from "discord.js";
+import { ApplicationCommandType, ChannelType, EmbedBuilder, Events, GuildMember, GuildMemberRoleManager, MessageFlags, PermissionFlagsBits, PermissionsBitField, TextChannel, WebhookClient } from "discord.js";
 import Event from "../../abstract/Event";
 import BaseClient from "../../base/Client";
 import Context from "../../lib/Context";
@@ -8,6 +8,8 @@ import { compactReply } from "../../utils/compactReply";
 import { handleInteractionError } from "../../utils/errorHandler";
 import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../utils/musicCommandSafety";
 import { checkPremium } from "../../utils/premiumCheck";
+
+const commandLogWebhook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 export default class InteractionCreate extends Event {
 	constructor(client: BaseClient) {
@@ -18,6 +20,7 @@ export default class InteractionCreate extends Event {
 
 	public async execute(): Promise<any> {
 		this.client.on(Events.InteractionCreate, async (interaction) => {
+			const interactionId = interaction.id;
 			try {
 			if (interaction.isButton()) {
 				const { buttons } = this.client;
@@ -301,15 +304,23 @@ export default class InteractionCreate extends Event {
 									});
 								}
 
-								if (!clientMember.permissions.has(PermissionFlagsBits.Connect)) {
+								const voiceChannel = interaction.member.voice.channel;
+								const voicePermissions = voiceChannel.permissionsFor(clientMember);
+								if (!voicePermissions?.has(PermissionFlagsBits.Connect)) {
 									return await safeInteractionReply(interaction, {
-										content: "I need the following permissions to run this command: Connect",
+										content: "I need the Connect permission in your voice channel.",
 									});
 								}
 
-								if (!clientMember.permissions.has(PermissionFlagsBits.Speak)) {
+								if (!voicePermissions.has(PermissionFlagsBits.Speak)) {
 									return await safeInteractionReply(interaction, {
-										content: "I need the following permissions to run this command: Connect, Speak",
+										content: "I need the Speak permission in your voice channel.",
+									});
+								}
+
+								if (voiceChannel.type === ChannelType.GuildStageVoice && !voicePermissions.has(PermissionFlagsBits.RequestToSpeak)) {
+									return await safeInteractionReply(interaction, {
+										content: "I need the Request to Speak permission in your stage channel.",
 									});
 								}
 
@@ -351,7 +362,6 @@ export default class InteractionCreate extends Event {
 							await handleInteractionError(this.client, interaction, error, { source: "slash", command: command.name });
 						} finally {
 							await releaseMusicLock?.();
-							const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 							const embed = new EmbedBuilder()
 								.setColor(0x000000)
@@ -366,7 +376,7 @@ export default class InteractionCreate extends Event {
 									{ name: "Interaction ID", value: interaction.id },
 								);
 
-							hook?.send({ embeds: [embed] }).catch((error) => this.client.logger.error("[command-log] Webhook failed", error));
+							commandLogWebhook?.send({ embeds: [embed] }).catch((error) => this.client.logger.error("[command-log] Webhook failed", error));
 						}
 					}
 					break;
@@ -418,7 +428,7 @@ export default class InteractionCreate extends Event {
 				if (interaction.isRepliable()) {
 					await handleInteractionError(this.client, interaction as any, error, { source: "event" });
 				} else {
-					this.client.logger.error(`[interaction:${interaction.id}] Unhandled non-repliable interaction failure`, error);
+					this.client.logger.error(`[interaction:${interactionId}] Unhandled non-repliable interaction failure`, error);
 				}
 			}
 		});

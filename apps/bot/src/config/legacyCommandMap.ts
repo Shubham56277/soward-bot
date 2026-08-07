@@ -1,3 +1,5 @@
+import { COMMAND_REGISTRY_BY_NAME, buildUniqueRegistryMap, normalizeRegistryKey } from "./commandRegistry";
+
 export interface LegacyCommandMapping {
 	legacyName: string;
 	replacement: string;
@@ -77,7 +79,7 @@ export const LEGACY_COMMANDS: readonly LegacyCommandMapping[] = [
 	migration("unmute", "/untimeout", "Unmute is now untimeout"),
 ];
 
-export const LEGACY_COMMANDS_BY_NAME = new Map(LEGACY_COMMANDS.map((mapping) => [mapping.legacyName, mapping]));
+export const LEGACY_COMMANDS_BY_NAME = buildUniqueRegistryMap(LEGACY_COMMANDS, (mapping) => mapping.legacyName, "legacy command mapping");
 
 export function replacementRoot(replacement: string): string {
 	return replacement.replace(/^\//, "").trim().split(/\s+/, 1)[0] ?? "";
@@ -87,13 +89,29 @@ export function replacementArguments(replacement: string): string[] {
 	return replacement.replace(/^\//, "").trim().split(/\s+/).slice(1);
 }
 
-export function validateLegacyCommandMap(): string[] {
+export function validateLegacyCommandMap(mappings: readonly LegacyCommandMapping[] = LEGACY_COMMANDS): string[] {
 	const errors: string[] = [];
-	const names = new Set<string>();
-	for (const mapping of LEGACY_COMMANDS) {
-		if (names.has(mapping.legacyName)) errors.push(`Duplicate legacy mapping: ${mapping.legacyName}`);
-		names.add(mapping.legacyName);
-		if (!replacementRoot(mapping.replacement)) errors.push(`Invalid replacement for ${mapping.legacyName}`);
+	const names = new Map<string, string>();
+	for (const mapping of mappings) {
+		const normalizedName = normalizeRegistryKey(mapping.legacyName);
+		const existing = names.get(normalizedName);
+		if (existing) {
+			errors.push(`Duplicate legacy mapping after normalization: ${mapping.legacyName} conflicts with ${existing}`);
+		} else {
+			names.set(normalizedName, mapping.legacyName);
+		}
+		if (!/^[a-z0-9_-]{1,32}$/.test(mapping.legacyName)) {
+			errors.push(`Invalid legacy command name: ${mapping.legacyName}`);
+		}
+		if (COMMAND_REGISTRY_BY_NAME.has(normalizedName)) {
+			errors.push(`Legacy command collides with canonical command: ${mapping.legacyName}`);
+		}
+		const root = normalizeRegistryKey(replacementRoot(mapping.replacement));
+		if (!root) {
+			errors.push(`Invalid replacement for ${mapping.legacyName}`);
+		} else if (!COMMAND_REGISTRY_BY_NAME.has(root)) {
+			errors.push(`Unknown replacement root "${root}" for ${mapping.legacyName}`);
+		}
 	}
-	return errors;
+	return errors.sort();
 }

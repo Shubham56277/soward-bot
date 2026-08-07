@@ -1,9 +1,9 @@
 import { lookup } from "node:dns/promises";
-import { realpath, readFile, stat } from "node:fs/promises";
-import { isIP } from "node:net";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { BlockList, isIP } from "node:net";
 import path from "node:path";
-import { Agent, request } from "undici";
 import type { BadgeAsset } from "@repo/db";
+import { Agent, request } from "undici";
 import { isPrivateAddress, isPrivateHostname } from "../../utils/botSettingsValidation";
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -15,6 +15,32 @@ const CACHE_MAX_BYTES = 32 * 1024 * 1024;
 const CACHE_LIMIT = 128;
 const DISCORD_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const EXTRA_RESTRICTED_ADDRESSES = new BlockList();
+for (const [network, prefix] of [
+	["::", 96], // IPv4-compatible and other low-address forms.
+	["::ffff:0:0", 96], // IPv4-mapped addresses, including hexadecimal forms.
+	["64:ff9b::", 96], // Well-known NAT64 translation prefix.
+	["64:ff9b:1::", 48], // Local-use NAT64 translation prefix.
+	["2001::", 32], // Teredo can encapsulate otherwise restricted IPv4 targets.
+	["2001:2::", 48],
+	["2001:10::", 28],
+	["2001:20::", 28],
+	["2002::", 16], // 6to4 embeds an IPv4 destination.
+] as const)
+	EXTRA_RESTRICTED_ADDRESSES.addSubnet(network, prefix, "ipv6");
+
+type ResolvedAddress = { address: string; family: number };
+export interface ProfileAssetRemoteBody extends AsyncIterable<Uint8Array> {
+	dump(): Promise<void>;
+	destroy(error?: Error): void;
+}
+export interface ProfileAssetRemoteResponse {
+	statusCode: number;
+	headers: Record<string, string | string[] | undefined>;
+	body: ProfileAssetRemoteBody;
+	close(): Promise<void>;
+}
+export type ProfileAssetRequest = (url: URL, addresses: readonly ResolvedAddress[], signal: AbortSignal) => Promise<ProfileAssetRemoteResponse>;
 
 type CacheEntry = { expiresAt: number; value: Promise<Buffer | null>; bytes: number; settled: boolean };
 export type ProfileAssetSource = string | Buffer | Uint8Array | null | undefined;
@@ -25,24 +51,38 @@ export interface ProfileAssetCacheOptions {
 	successTtlMs?: number;
 	negativeTtlMs?: number;
 	now?: () => number;
+	/** Testable DNS boundary; production uses the system resolver. */
+	lookup?: (hostname: string) => Promise<ResolvedAddress[]>;
+	/** Testable HTTP boundary; production pins requests to the validated DNS result. */
+	request?: ProfileAssetRequest;
+	timeoutMs?: number;
+}
+
+/** Rejects non-IP and non-global address forms, including IPv4 embedded in IPv6. */
+export function isPublicProfileAddress(address: string): boolean {
+	const family = isIP(address);
+	if (family === 0 || isPrivateAddress(address)) return false;
+	return family !== 6 || !EXTRA_RESTRICTED_ADDRESSES.check(address, "ipv6");
+}
+
+function detectImageMime(buffer: Buffer): string | null {
+	if (buffer.length < 12) return null;
+	if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
+	if (buffer.subarray(0, 3).equals(Buffer.from([255, 216, 255]))) return "image/jpeg";
+	if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") return "image/gif";
+	if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+	return null;
 }
 
 function isImageBuffer(buffer: Buffer): boolean {
-	if (buffer.length < 12) return false;
-	return buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-		|| buffer.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
-		|| buffer.subarray(0, 6).toString("ascii") === "GIF87a"
-		|| buffer.subarray(0, 6).toString("ascii") === "GIF89a"
-		|| (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP");
+	return detectImageMime(buffer) !== null;
 }
 
 export function isOfficialDiscordAssetUrl(value: string): boolean {
 	try {
 		const url = new URL(value);
-		if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash
-			|| !DISCORD_HOSTS.has(url.hostname.toLowerCase())) return false;
-		const expectedPath = /^\/(?:avatars|banners)\/\d{17,20}\/[a-zA-Z0-9_]+\.(?:png|jpe?g|webp|gif)$/i.test(url.pathname)
-			|| /^\/embed\/avatars\/[0-5]\.png$/i.test(url.pathname);
+		if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash || !DISCORD_HOSTS.has(url.hostname.toLowerCase())) return false;
+		const expectedPath = /^\/(?:avatars|banners)\/\d{17,20}\/[a-zA-Z0-9_]+\.(?:png|jpe?g|webp|gif)$/i.test(url.pathname) || /^\/embed\/avatars\/[0-5]\.png$/i.test(url.pathname);
 		if (!expectedPath) return false;
 		for (const [key, valuePart] of url.searchParams) {
 			if (key !== "size" || !/^(?:16|32|64|128|256|512|1024|2048|4096)$/.test(valuePart)) return false;
@@ -67,6 +107,9 @@ export class ProfileAssetLoader {
 	private readonly successTtlMs: number;
 	private readonly negativeTtlMs: number;
 	private readonly now: () => number;
+	private readonly lookupHost: (hostname: string) => Promise<ResolvedAddress[]>;
+	private readonly requestRemote: ProfileAssetRequest;
+	private readonly timeoutMs: number;
 	private cacheBytes = 0;
 
 	public constructor(imagesRoot = path.resolve(__dirname, "..", "..", "..", "images"), options: ProfileAssetCacheOptions = {}) {
@@ -76,6 +119,9 @@ export class ProfileAssetLoader {
 		this.successTtlMs = options.successTtlMs ?? CACHE_TTL_MS;
 		this.negativeTtlMs = options.negativeTtlMs ?? NEGATIVE_CACHE_TTL_MS;
 		this.now = options.now ?? Date.now;
+		this.lookupHost = options.lookup ?? ((hostname) => lookup(hostname, { all: true, verbatim: true }));
+		this.requestRemote = options.request ?? ((url, addresses, signal) => this.requestPinned(url, addresses, signal));
+		this.timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? TIMEOUT_MS, TIMEOUT_MS));
 	}
 
 	public loadDiscord(source: ProfileAssetSource): Promise<Buffer | null> {
@@ -91,9 +137,7 @@ export class ProfileAssetLoader {
 			if (/^https:/i.test(asset)) return this.cached(`remote:${asset}`, () => this.fetchRemote(asset, false));
 			return this.cached(`local:${asset}`, () => this.readLocal(asset));
 		}
-		return asset.kind === "remote"
-			? this.cached(`remote:${asset.url}`, () => this.fetchRemote(asset.url, false))
-			: this.cached(`local:${asset.path}`, () => this.readLocal(asset.path));
+		return asset.kind === "remote" ? this.cached(`remote:${asset.url}`, () => this.fetchRemote(asset.url, false)) : this.cached(`local:${asset.path}`, () => this.readLocal(asset.path));
 	}
 
 	public async isSafeBadgeAsset(asset: BadgeAsset): Promise<boolean> {
@@ -142,6 +186,12 @@ export class ProfileAssetLoader {
 			return found.value;
 		}
 		if (found) this.removeCacheEntry(key, found);
+		// Keep the configured entry cap hard even when every existing request is unresolved.
+		while (this.cache.size >= this.maxCacheEntries) {
+			const candidate = [...this.cache.entries()].find(([, entry]) => entry.settled);
+			if (!candidate) return Promise.resolve(null);
+			this.removeCacheEntry(candidate[0], candidate[1]);
+		}
 		const entry: CacheEntry = { expiresAt: Number.POSITIVE_INFINITY, value: Promise.resolve(null), bytes: 0, settled: false };
 		entry.value = factory()
 			.catch(() => null)
@@ -159,23 +209,42 @@ export class ProfileAssetLoader {
 		return entry.value;
 	}
 
-	private async resolvePublicHost(url: URL): Promise<Array<{ address: string; family: number }> | null> {
+	private async withinDeadline<T>(value: Promise<T>, deadline: number): Promise<T> {
+		const waitMs = deadline - Date.now();
+		if (waitMs <= 0) throw new Error("Profile asset request timed out");
+		let timer: NodeJS.Timeout | undefined;
+		try {
+			return await Promise.race([
+				value,
+				new Promise<T>((_resolve, reject) => {
+					timer = setTimeout(() => reject(new Error("Profile asset request timed out")), waitMs);
+					timer.unref();
+				}),
+			]);
+		} finally {
+			if (timer) clearTimeout(timer);
+		}
+	}
+
+	private async resolvePublicHost(url: URL, deadline: number): Promise<ResolvedAddress[] | null> {
 		const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
 		if (isPrivateHostname(hostname)) return null;
 		try {
-			const addresses = await lookup(hostname, { all: true, verbatim: true });
-			return addresses.length > 0 && addresses.every(({ address }) => isIP(address) !== 0 && !isPrivateAddress(address))
-				? addresses
-				: null;
+			const resolved = await this.withinDeadline(this.lookupHost(hostname), deadline);
+			if (!resolved.length || resolved.length > 16) return null;
+			const addresses = [...new Map(resolved.map((item) => [`${item.family}:${item.address}`, item])).values()];
+			if (addresses.length > 8) return null;
+			return addresses.every(({ address, family }) => family === isIP(address) && isPublicProfileAddress(address)) ? addresses : null;
 		} catch {
 			return null;
 		}
 	}
 
 	private parseRemote(value: string, discordOnly: boolean): URL | null {
+		if (!value || value.length > 2_048) return null;
 		try {
 			const url = new URL(value);
-			if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
+			if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) return null;
 			if (discordOnly && !isOfficialDiscordAssetUrl(url.toString())) return null;
 			return url;
 		} catch {
@@ -183,59 +252,98 @@ export class ProfileAssetLoader {
 		}
 	}
 
-	private async fetchRemote(value: string, discordOnly: boolean, redirects = 0): Promise<Buffer | null> {
-		const url = this.parseRemote(value, discordOnly);
-		if (!url) return null;
-		const addresses = await this.resolvePublicHost(url);
-		if (!addresses) return null;
+	private async requestPinned(url: URL, addresses: readonly ResolvedAddress[], signal: AbortSignal): Promise<ProfileAssetRemoteResponse> {
 		const dispatcher = new Agent({
 			connect: {
 				lookup: ((_hostname: string, options: { family?: number; all?: boolean }, callback: (...args: any[]) => void) => {
-					const candidates = options.family
-						? addresses.filter(({ family }) => family === options.family)
-						: addresses;
-					const selected = candidates[0] ?? addresses[0];
-					if (options.all) callback(null, candidates.length ? candidates : addresses);
-					else callback(null, selected?.address, selected?.family);
+					const candidates = options.family ? addresses.filter(({ family }) => family === options.family) : [...addresses];
+					if (!candidates.length) {
+						callback(new Error("No validated address for requested family"));
+						return;
+					}
+					if (options.all) callback(null, candidates);
+					else callback(null, candidates[0]!.address, candidates[0]!.family);
 				}) as any,
 			},
 		});
 		try {
 			const response = await request(url, {
-				method: "GET", dispatcher,
-				headersTimeout: TIMEOUT_MS, bodyTimeout: TIMEOUT_MS,
-				signal: AbortSignal.timeout(TIMEOUT_MS),
+				method: "GET",
+				dispatcher,
+				headersTimeout: this.timeoutMs,
+				bodyTimeout: this.timeoutMs,
+				signal,
 				headers: { accept: "image/png,image/jpeg,image/webp,image/gif", "user-agent": "Elfaria-Profile/1.0" },
 			});
+			return {
+				statusCode: response.statusCode,
+				headers: response.headers as Record<string, string | string[] | undefined>,
+				body: response.body,
+				close: () => dispatcher.destroy(),
+			};
+		} catch (error) {
+			await dispatcher.destroy().catch(() => undefined);
+			throw error;
+		}
+	}
+
+	private async fetchRemote(value: string, discordOnly: boolean, redirects = 0, deadline = Date.now() + this.timeoutMs): Promise<Buffer | null> {
+		const url = this.parseRemote(value, discordOnly);
+		if (!url || deadline <= Date.now()) return null;
+		const addresses = await this.resolvePublicHost(url, deadline);
+		if (!addresses) return null;
+		const controller = new AbortController();
+		const waitMs = deadline - Date.now();
+		if (waitMs <= 0) return null;
+		const timer = setTimeout(() => controller.abort(), waitMs);
+		timer.unref();
+		let response: ProfileAssetRemoteResponse | null = null;
+		try {
+			response = await this.withinDeadline(this.requestRemote(url, addresses, controller.signal), deadline);
 			if (response.statusCode >= 300 && response.statusCode < 400) {
-				await response.body.dump();
-				const locationHeader = response.headers.location;
-				const location = Array.isArray(locationHeader) ? locationHeader[0] : locationHeader;
-				if (!location || redirects >= MAX_REDIRECTS) return null;
-				return this.fetchRemote(new URL(location, url).toString(), discordOnly, redirects + 1);
+				await this.withinDeadline(response.body.dump(), deadline);
+				const location = response.headers.location;
+				if (typeof location !== "string" || !location || redirects >= MAX_REDIRECTS) return null;
+				return this.fetchRemote(new URL(location, url).toString(), discordOnly, redirects + 1, deadline);
 			}
 			if (response.statusCode !== 200) {
-				await response.body.dump();
+				await this.withinDeadline(response.body.dump(), deadline);
 				return null;
 			}
-			const mime = String(response.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase();
-			const declaredLength = Number(response.headers["content-length"] ?? 0);
-			if (!mime || !IMAGE_MIMES.has(mime) || (declaredLength > 0 && declaredLength > MAX_BYTES)) {
-				await response.body.dump();
+			const contentType = response.headers["content-type"];
+			const mime = typeof contentType === "string" ? contentType.split(";", 1)[0]!.trim().toLowerCase() : "";
+			const contentLength = response.headers["content-length"];
+			const contentEncoding = response.headers["content-encoding"];
+			const hasSafeEncoding = contentEncoding === undefined || (typeof contentEncoding === "string" && contentEncoding.trim().toLowerCase() === "identity");
+			if (!mime || !IMAGE_MIMES.has(mime) || !hasSafeEncoding || (contentLength !== undefined && (typeof contentLength !== "string" || !/^\d+$/.test(contentLength) || Number(contentLength) > MAX_BYTES))) {
+				await this.withinDeadline(response.body.dump(), deadline);
 				return null;
 			}
 			const chunks: Buffer[] = [];
 			let total = 0;
-			for await (const chunk of response.body) {
-				const buffer = Buffer.from(chunk);
-				total += buffer.length;
-				if (total > MAX_BYTES) { response.body.destroy(); return null; }
-				chunks.push(buffer);
+			const iterator = response.body[Symbol.asyncIterator]();
+			while (true) {
+				const next = await this.withinDeadline(iterator.next(), deadline);
+				if (next.done) break;
+				total += next.value.byteLength;
+				if (total > MAX_BYTES) return null;
+				chunks.push(Buffer.from(next.value));
 			}
 			const result = Buffer.concat(chunks, total);
-			return isImageBuffer(result) ? result : null;
+			return detectImageMime(result) === mime ? result : null;
 		} finally {
-			await dispatcher.close();
+			clearTimeout(timer);
+			controller.abort();
+			if (response) {
+				try {
+					response.body.destroy();
+				} catch {
+					/* best-effort stream cleanup */
+				}
+				await Promise.resolve()
+					.then(() => response!.close())
+					.catch(() => undefined);
+			}
 		}
 	}
 
@@ -243,10 +351,7 @@ export class ProfileAssetLoader {
 		try {
 			const normalized = value.replaceAll("\\", "/").replace(/^images\//i, "");
 			if (!normalized || path.isAbsolute(normalized) || normalized.split("/").includes("..")) return null;
-			const [root, candidate] = await Promise.all([
-				realpath(this.imagesRoot),
-				realpath(path.resolve(this.imagesRoot, normalized)),
-			]);
+			const [root, candidate] = await Promise.all([realpath(this.imagesRoot), realpath(path.resolve(this.imagesRoot, normalized))]);
 			const relative = path.relative(root, candidate);
 			if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
 			const info = await stat(candidate);

@@ -1,7 +1,6 @@
-import { ChannelType, EmbedBuilder, Events, GuildMember, Message, MessageFlags, PermissionFlagsBits, PermissionResolvable, WebhookClient } from "discord.js";
+import { ChannelType, EmbedBuilder, Events, GuildMember, Message, MessageFlags, PermissionFlagsBits, PermissionResolvable, WebhookClient, type ButtonBuilder as ButtonBuilderType } from "discord.js";
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
-import { Premium } from "@repo/db";
 import Context from "../../lib/Context";
 import { env } from "@repo/env";
 import { sendCommandHelp } from "../../utils/helper";
@@ -11,11 +10,13 @@ import { compactReplyText } from "../../utils/compactReply";
 import { getCachedNoPrefix, getCachedPrefix, getCachedPrefixes } from "../../utils/commandStateCache";
 import { splitDiscordMessage, type AiRequestResult, type AiScope } from "../../service/aiService";
 import type { RagResult } from "../../service/ragService";
-import { aiChannelQueue } from "../../queues";
+import { enqueueAiChannelRequest } from "../../queues";
 import { LEGACY_COMMANDS_BY_NAME, replacementArguments, replacementRoot, type LegacyCommandMapping } from "../../config/legacyCommandMap";
 import { handleMessageError } from "../../utils/errorHandler";
 import { checkPremium } from "../../utils/premiumCheck";
 import { handleGwfCommand } from "../../lib/giveaways/gwfHandler";
+
+const commandLogWebhook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 export default class MessageCreate extends Event {
 	constructor(client: BaseClient) {
@@ -34,7 +35,7 @@ export default class MessageCreate extends Event {
 					aliases: ["dokdo", "dok"],
 					owners: env.DEVELOPER_IDS,
 					prefix: ".",
-					noPerm: (message) => message.reply("You have no permission to use dokdo."),
+					noPerm: (message: Message) => message.reply("You have no permission to use dokdo."),
 					globalVariable: { WONDER_IS_COOL: true },
 				});
 				this.client.logger.info("Dokdo developer tooling enabled (development mode).");
@@ -69,12 +70,14 @@ export default class MessageCreate extends Event {
 					// Will be handled below by the channel session handler
 				} else {
 				if (await isCommandIgnored(message)) {
-					return message
-						.reply({
-							content: "Commands are disabled in this channel.",
-						})
-						.then((msg) => setTimeout(() => msg.delete().catch(() => { }), 5000))
-						.catch(() => { });
+		return message
+			.reply({
+				content: "Commands are disabled in this channel.",
+			})
+			.then((msg) => {
+				setTimeout(() => msg.delete().catch(() => undefined), 5000).unref();
+			})
+			.catch(() => undefined);
 				}
 				const { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import("discord.js");
 				const botName = this.client.user?.username || "Elfaria";
@@ -89,7 +92,7 @@ export default class MessageCreate extends Event {
 					)
 					.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 					.addActionRowComponents(
-						new ActionRowBuilder<ButtonBuilder>().addComponents(
+						new ActionRowBuilder<ButtonBuilderType>().addComponents(
 							new ButtonBuilder()
 								.setLabel("Commands")
 								.setStyle(ButtonStyle.Secondary)
@@ -116,42 +119,55 @@ export default class MessageCreate extends Event {
 			const mentionPrefix = new RegExp(`^<@!?${this.client.user?.id}>\\s*`);
 			const wasMentioned = mentionPrefix.test(message.content);
 			const mentionText = wasMentioned ? message.content.replace(mentionPrefix, "").trim() : "";
-			const firstWord = (wasMentioned ? mentionText : message.content).trim().split(/\s+/, 1)[0]?.toLowerCase() || "";
-			const isKnownCommand = this.client.commands.has(firstWord);
-			const aiControlAction = wasMentioned ? mentionText.split(/\s+/, 1)[0]?.toLowerCase() : "";
+			const matchedConfiguredPrefix = [...configuredPrefixes]
+				.sort((a, b) => b.length - a.length)
+				.find((candidate) => message.content.startsWith(candidate));
+			const commandText = wasMentioned
+				? mentionText
+				: matchedConfiguredPrefix
+					? message.content.slice(matchedConfiguredPrefix.length).trim()
+					: message.content.trim();
+			const commandKey = commandText.split(/\s+/, 1)[0]?.toLowerCase() || "";
+			const canonicalCommand = this.client.commands.has(commandKey)
+				? commandKey
+				: this.client.aliases.get(commandKey);
+			const isKnownCommand = Boolean(canonicalCommand && this.client.commands.has(canonicalCommand));
+			const isCommandInvocation = isKnownCommand && (wasMentioned || Boolean(matchedConfiguredPrefix) || noPrefix);
+			const aiControlAction = wasMentioned ? (mentionText.split(/\s+/, 1)[0]?.toLowerCase() ?? "") : "";
 			const aiControl = wasMentioned && ["start", "stop", "status", "reset"].includes(aiControlAction);
 			const canBeSessionMessage = !wasMentioned
-				&& !configuredPrefixes.some((candidate) => message.content.startsWith(candidate))
+				&& !matchedConfiguredPrefix
 				&& !(noPrefix && isKnownCommand);
 			const aiScope: AiScope = { guildId: message.guildId, channelId: message.channelId, userId: message.author.id };
 			const activeAiSession = canBeSessionMessage ? await this.client.ai.isSessionActive(aiScope) : false;
-			// Channel sessions apply to everyone — check regardless of mention or prefix
+			// Channel sessions apply to normal messages, but command invocations must still reach dispatch.
 			const activeChannelSession = await this.client.ai.isChannelSessionActive(message.guildId, message.channelId);
 
-			// Channel session: intercept ALL messages (except commands with prefix) and route to AI
-			if (activeChannelSession && !aiControl) {
+			if (activeChannelSession && !aiControl && !isCommandInvocation) {
 				let question = wasMentioned ? mentionText : message.content.trim();
-				// Bare mention with no text → treat as greeting
 				if (wasMentioned && !question) question = "hey";
-				// Skip only empty messages
 				if (!question) return;
 
+				const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
 				try {
-					const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
-					const onCooldown = await this.client.redis.exists(cooldownKey);
-					if (onCooldown) return;
-					await this.client.redis.set(cooldownKey, "1", "EX", 7);
+					const admitted = await this.client.redis.set(cooldownKey, message.id, "EX", 7, "NX");
+					if (admitted !== "OK") return;
 
-					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => {});
+					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
 
-					await aiChannelQueue.add("ai-reply", {
+					await enqueueAiChannelRequest({
 						guildId: message.guildId,
 						channelId: message.channelId,
 						userId: message.author.id,
 						messageId: message.id,
 						question,
 					});
-				} catch {}
+				} catch (error) {
+					await this.client.redis
+						.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, cooldownKey, message.id)
+						.catch(() => undefined);
+					this.client.logger.error("[ai-channel] Failed to enqueue response", error);
+				}
 				return;
 			}
 
@@ -274,7 +290,6 @@ export default class MessageCreate extends Event {
 							});
 					}
 
-					const now = Date.now();
 					const cooldownAmount = command.cooldown || 5;
 
 					if (!isDev) {
@@ -341,19 +356,21 @@ export default class MessageCreate extends Event {
 								});
 							}
 
-							if (!clientMember.permissions.has(PermissionFlagsBits.Connect)) {
+							const voiceChannel = message.member.voice.channel;
+							const voicePermissions = voiceChannel.permissionsFor(clientMember);
+							if (!voicePermissions?.has(PermissionFlagsBits.Connect)) {
 								return await message.reply({
-									content: "I need the Connect permission to join your voice channel.",
+									content: "I need the Connect permission in your voice channel.",
 								});
 							}
 
-							if (!clientMember.permissions.has(PermissionFlagsBits.Speak)) {
+							if (!voicePermissions.has(PermissionFlagsBits.Speak)) {
 								return await message.reply({
-									content: "I need the Speak permission to join your voice channel.",
+									content: "I need the Speak permission in your voice channel.",
 								});
 							}
 
-							if ((message.member as GuildMember).voice.channel?.type === ChannelType.GuildStageVoice && !clientMember.permissions.has(PermissionFlagsBits.RequestToSpeak)) {
+							if (voiceChannel.type === ChannelType.GuildStageVoice && !voicePermissions.has(PermissionFlagsBits.RequestToSpeak)) {
 								return await message.reply({
 									content: "I need the Request to Speak permission to join your voice channel.",
 								});
@@ -397,7 +414,6 @@ export default class MessageCreate extends Event {
 						await handleMessageError(this.client, message, error, { source: "prefix", command: command.name });
 					} finally {
 						await releaseMusicLock?.();
-						const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 						const embed = new EmbedBuilder()
 							.setColor(0x000000)
@@ -412,7 +428,7 @@ export default class MessageCreate extends Event {
 								{ name: "Message ID", value: message.id },
 							);
 
-						hook?.send({ embeds: [embed] }).catch((error) => this.client.logger.error("[command-log] Webhook failed", error));
+						commandLogWebhook?.send({ embeds: [embed] }).catch((error) => this.client.logger.error("[command-log] Webhook failed", error));
 					}
 				}
 			}

@@ -49,26 +49,26 @@ export class AiClusterManager {
 
 		// Groq nodes
 		const groqEntries = this.parseKeyEntries(env.GROQ_API_KEYS, env.GROQ_API_KEY, env.GROQ_MODEL);
-		for (let i = 0; i < groqEntries.length; i++) {
-			this.nodes.push(this.createNode(`groq:${i}`, "Groq", groqEntries[i].model, groqEntries[i].key));
+		for (const [index, entry] of groqEntries.entries()) {
+			this.nodes.push(this.createNode(`groq:${index}`, "Groq", entry.model, entry.key));
 		}
 
 		// Gemini nodes
 		const geminiEntries = this.parseKeyEntries(env.GEMINI_API_KEYS, env.GEMINI_API_KEY, env.GEMINI_MODEL);
-		for (let i = 0; i < geminiEntries.length; i++) {
-			this.nodes.push(this.createNode(`gemini:${i}`, "Gemini", geminiEntries[i].model, geminiEntries[i].key));
+		for (const [index, entry] of geminiEntries.entries()) {
+			this.nodes.push(this.createNode(`gemini:${index}`, "Gemini", entry.model, entry.key));
 		}
 
 		// OpenRouter nodes
 		const orEntries = this.parseKeyEntries(env.OPENROUTER_API_KEYS, env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL);
-		for (let i = 0; i < orEntries.length; i++) {
-			this.nodes.push(this.createNode(`openrouter:${i}`, "OpenRouter", orEntries[i].model, orEntries[i].key));
+		for (const [index, entry] of orEntries.entries()) {
+			this.nodes.push(this.createNode(`openrouter:${index}`, "OpenRouter", entry.model, entry.key));
 		}
 
 		// HuggingFace nodes
 		const hfEntries = this.parseKeyEntries(env.HUGGINGFACE_TOKENS, env.HUGGINGFACE_TOKEN, env.HUGGINGFACE_MODEL);
-		for (let i = 0; i < hfEntries.length; i++) {
-			this.nodes.push(this.createNode(`hf:${i}`, "HuggingFace", hfEntries[i].model, hfEntries[i].key));
+		for (const [index, entry] of hfEntries.entries()) {
+			this.nodes.push(this.createNode(`hf:${index}`, "HuggingFace", entry.model, entry.key));
 		}
 	}
 
@@ -113,13 +113,16 @@ export class AiClusterManager {
 
 	/** Score-based selection: higher score = better node */
 	private pickBest(nodes: AiNode[]): AiNode {
-		let best = nodes[0];
-		let bestScore = this.healthScore(best);
+		const [first, ...rest] = nodes;
+		if (!first) throw new Error("Cannot select an AI node from an empty list");
 
-		for (let i = 1; i < nodes.length; i++) {
-			const score = this.healthScore(nodes[i]);
+		let best = first;
+		let bestScore = this.healthScore(first);
+
+		for (const node of rest) {
+			const score = this.healthScore(node);
 			if (score > bestScore) {
-				best = nodes[i];
+				best = node;
 				bestScore = score;
 			}
 		}

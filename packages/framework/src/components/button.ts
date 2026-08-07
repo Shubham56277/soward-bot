@@ -1,43 +1,33 @@
-import {
-    type APIButtonComponent,
-    type APIMessageComponentEmoji,
-    ButtonStyle,
-    ComponentType,
-    type APIButtonComponentBase,
-} from "discord-api-types/v10";
+import { type APIButtonComponent, type APIMessageComponentEmoji, ButtonStyle, ComponentType } from "discord-api-types/v10";
 
-export function createButton({
-    label,
-    customId,
-    style,
-    url,
-    disabled,
-    emoji,
-}: {
-    customId?: string | undefined;
-    disabled?: boolean | undefined;
-    emoji?: APIMessageComponentEmoji | undefined;
-    label: string;
-    style?: ButtonStyle | undefined;
-    url?: string | undefined;
-}): APIButtonComponent {
-    const button: APIButtonComponentBase<any> = {
-        type: ComponentType.Button,
-        label,
-        style: style ?? ButtonStyle.Primary,
-        disabled,
-        emoji,
-    };
+type InteractiveButtonStyle = Exclude<ButtonStyle, ButtonStyle.Link | ButtonStyle.Premium>;
+type ButtonBaseOptions = {
+	disabled?: boolean;
+	emoji?: APIMessageComponentEmoji;
+	label: string;
+};
 
-    if (style === ButtonStyle.Link && url) {
-        return {
-            ...button,
-            url,
-        };
-    }
+export type CreateButtonOptions = ButtonBaseOptions & ({ customId: string; style?: InteractiveButtonStyle; url?: never } | { customId?: never; style: ButtonStyle.Link; url: string });
 
-    return {
-        ...button,
-        custom_id: customId!,
-    };
+export function createButton(options: CreateButtonOptions): APIButtonComponent {
+	const common = {
+		type: ComponentType.Button as const,
+		label: options.label,
+		disabled: options.disabled,
+		emoji: options.emoji,
+	};
+
+	if (options.style === ButtonStyle.Link) {
+		return {
+			...common,
+			style: ButtonStyle.Link,
+			url: options.url,
+		};
+	}
+
+	return {
+		...common,
+		style: options.style ?? ButtonStyle.Primary,
+		custom_id: options.customId,
+	};
 }

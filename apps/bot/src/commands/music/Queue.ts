@@ -40,6 +40,15 @@ export default class Queue extends Command {
         };
     }
 
+    private requesterId(requester: unknown): string {
+        if (typeof requester === "string") return requester;
+        if (typeof requester === "object" && requester !== null && "id" in requester) {
+            const id = (requester as { id?: unknown }).id;
+            if (typeof id === "string") return id;
+        }
+        return "unknown";
+    }
+
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
@@ -51,7 +60,7 @@ export default class Queue extends Command {
             const container = new ContainerBuilder().addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
                     `**Now Playing**\n[${player.queue.current.info.title}](${player.queue.current.info.uri}) ` +
-                    `- <@${(player.queue.current.requester as any).id}>\n` +
+                    `- <@${this.requesterId(player.queue.current.requester)}>\n` +
                     `Duration: ${player.queue.current.info.isStream ? 'LIVE' : TimeFormat.toDotted(player.queue.current.info.duration)}`
                 )
             );
@@ -75,11 +84,11 @@ export default class Queue extends Command {
                 const pos = i + index;
                 if (pos === 0) {
                     return `**Now Playing**\n[${track?.info.title}](${track?.info.uri}) ` +
-                        `- <@${track?.requester?.id ?? "unknown"}>\n` +
+                        `- <@${this.requesterId(track?.requester)}>\n` +
                         `Duration: ${track?.info.isStream ? 'LIVE' : TimeFormat.toDotted(track?.info.duration)}`;
                 }
                 return `${pos}. [${track?.info.title}](${track?.info.uri}) ` +
-                    `- <@${track?.requester?.id ?? "unknown"}>\n` +
+                    `- <@${this.requesterId(track?.requester)}>\n` +
                     `Duration: ${track?.info.isStream ? 'LIVE' : TimeFormat.toDotted(track?.info.duration)}`;
             }).join('\n\n');
 

@@ -50,6 +50,13 @@
       "when": 1784666944209,
       "tag": "0006_profile_badges",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784666944210,
+      "tag": "0007_profile_badges_compatibility",
+      "breakpoints": true
     }
   ]
 }

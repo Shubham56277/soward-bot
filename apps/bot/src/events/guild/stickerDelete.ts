@@ -1,12 +1,8 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 export default class GuildStickerDelete extends Event {
-    // Ultra-fast cache
-    private configCache = new Map<string, AntiNuke>();
-    private trustedCache = new Map<string, any>();
     private stickerDeleteCache = new Map<string, { executorId: string, timestamp: number }>();
 
     constructor(client: BaseClient) {
@@ -22,13 +18,7 @@ export default class GuildStickerDelete extends Event {
             const guildId = guild.id;
 
             try {
-                // Ultra-fast config check with cache
-                let config = this.configCache.get(guildId);
-                if (!config) {
-                    config = await this.client.services.antinukes.getConfig(guildId);
-                    this.configCache.set(guildId, config);
-                    setTimeout(() => this.configCache.delete(guildId), 30000);
-                }
+                const config = await this.client.services.antinukes.getConfig(guildId);
 
                 const actionConfig = config?.sticker?.find(c => c.type === "delete");
                 if (!actionConfig?.enabled || !config.enabled) return;
@@ -43,7 +33,10 @@ export default class GuildStickerDelete extends Event {
                 const logs = await guild.fetchAuditLogs({
                     limit: 1,
                     type: AuditLogEvent.StickerDelete
-                }).catch(() => null);
+                }).catch(error => {
+                    this.client.logger?.error?.(error);
+                    return null;
+                });
 
                 if (!logs) return;
                 const log = logs.entries.first();
@@ -54,7 +47,7 @@ export default class GuildStickerDelete extends Event {
 
                 // Cache this sticker deletion for future checks
                 this.stickerDeleteCache.set(stickerId, { executorId, timestamp: now });
-                setTimeout(() => this.stickerDeleteCache.delete(stickerId), 120000);
+                setTimeout(() => this.stickerDeleteCache.delete(stickerId), 120000).unref();
 
                 // Fast early returns
                 if (executorId === guild.ownerId ||
@@ -72,21 +65,15 @@ export default class GuildStickerDelete extends Event {
 
     private async handleStickerDeletion(guild: any, executorId: string, actionConfig: any): Promise<void> {
         try {
-            // Ultra-fast trusted user check with cache
-            let trustedSet = this.trustedCache.get(guild.id);
-            if (!trustedSet) {
-                const config = this.configCache.get(guild.id);
-                trustedSet = new Set(config?.trustedUsers?.map(u => u.id) || []);
-                this.trustedCache.set(guild.id, trustedSet);
-                setTimeout(() => this.trustedCache.delete(guild.id), 30000);
-            }
-
-            if (trustedSet.has(executorId)) return;
+            if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
             // Fast member check using cache first
             let member = guild.members.cache.get(executorId) as any;
             if (!member) {
-                member = await guild.members.fetch(executorId).catch(() => null);
+                member = await guild.members.fetch(executorId).catch((error: unknown) => {
+                    this.client.logger?.error?.(error);
+                    return null;
+                });
                 if (!member) return;
             }
 
@@ -98,6 +85,7 @@ export default class GuildStickerDelete extends Event {
                     actionConfig.action,
                     "Anti-Sticker Protection | Unauthorized Deletion"
                 );
+                return;
             }
             const tracked = await this.client.services.antinukes.trackAction(
                 guild,

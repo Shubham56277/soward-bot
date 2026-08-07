@@ -10,6 +10,9 @@ import type { ProfileBadgeEntry, ProfileBadgeView } from "./ProfileBadgeService"
 const OUTPUT_LIMIT = Math.floor(7.5 * 1024 * 1024);
 const CACHE_TTL_MS = 90_000;
 const CACHE_MAX_BYTES = 24 * 1024 * 1024;
+const CACHE_MAX_ENTRIES = 128;
+const IN_FLIGHT_LIMIT = 32;
+const USER_GENERATION_LIMIT = 1_024;
 const TRANSIENT_FALLBACK_TTL_MS = 7_500;
 export const OUTPUT_POLICY_VERSION = "profile-card-v4-raw-rgba";
 const FALLBACK_BIO = "No bio set — a quiet story waiting to be written.";
@@ -116,7 +119,7 @@ function sourceVersion(source: ProfileAssetSource): string {
 	return "none";
 }
 
-export function buildProfileRenderCacheKey(input: ProfileCardRenderInput, generation = 0): string {
+export function buildProfileRenderCacheKey(input: ProfileCardRenderInput, generation: string | number = 0): string {
 	const badges = input.premium ? badgeEntries(input.badges) : { entries: [], overflow: 0, version: "hidden" };
 	const avatar = discordAvatar(input);
 	const banner = discordBanner(input);
@@ -148,6 +151,7 @@ export class ProfileCardRenderer {
 	private readonly inFlight = new Map<string, Promise<ProfileCardRenderOutput | null>>();
 	private readonly userGeneration = new Map<string, number>();
 	private cacheBytes = 0;
+	private cacheEpoch = 0;
 
 	public constructor(private readonly assets: ProfileAssetLoader = profileAssetLoader) {}
 
@@ -208,7 +212,7 @@ export class ProfileCardRenderer {
 
 	private store(key: string, userId: string, output: ProfileCardRenderOutput): void {
 		if (output.buffer.length > CACHE_MAX_BYTES) return;
-		while (this.cacheBytes + output.buffer.length > CACHE_MAX_BYTES && this.cache.size) {
+		while ((this.cacheBytes + output.buffer.length > CACHE_MAX_BYTES || this.cache.size >= CACHE_MAX_ENTRIES) && this.cache.size) {
 			const oldestKey = this.cache.keys().next().value as string;
 			const oldest = this.cache.get(oldestKey);
 			if (oldest) this.removeCacheEntry(oldestKey, oldest);
@@ -253,13 +257,17 @@ export class ProfileCardRenderer {
 		}, OUTPUT_LIMIT, input.acquireAnimationLease);
 		if (animated.ok) return { buffer: animated.buffer, format: "gif" };
 
-		let output = await this.paint(canvasApi, input, badges, staticAvatar, staticBanner, badgeImages, 1200, 675, false);
-		if (output.length > OUTPUT_LIMIT) {
-			output = await this.paint(canvasApi, input, badges, staticAvatar, staticBanner, badgeImages, 960, 540, false);
+		for (const [width, height] of [[1200, 675], [960, 540]] as const) {
+			try {
+				const output = await this.paint(canvasApi, input, badges, staticAvatar, staticBanner, badgeImages, width, height, false);
+				if (output.length <= OUTPUT_LIMIT) {
+					return { buffer: output, format: "png", cacheTtlMs: profileFallbackCacheTtl(animated.transient) };
+				}
+			} catch {
+				// Retry the lower-memory canvas before declaring the renderer unavailable.
+			}
 		}
-		return output.length <= OUTPUT_LIMIT
-			? { buffer: output, format: "png", cacheTtlMs: profileFallbackCacheTtl(animated.transient) }
-			: null;
+		return null;
 	}
 
 	private async paint(

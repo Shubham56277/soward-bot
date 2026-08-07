@@ -3,7 +3,6 @@ import {
 	ContainerBuilder,
 	Message,
 	MessageFlags,
-	TextBasedChannel,
 	TextDisplayBuilder,
 	ApplicationCommandOptionType,
 } from "discord.js";
@@ -14,7 +13,7 @@ import Help from "../utils/Help";
 function cv2(text: string) {
 	return {
 		components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
-		flags: MessageFlags.IsComponentsV2,
+		flags: MessageFlags.IsComponentsV2 as const,
 	};
 }
 
@@ -54,11 +53,11 @@ export default class Purge extends Command {
 	public async run(ctx: Context): Promise<any> {
 		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "purge");
 
-		if (!ctx.channel?.isTextBased() || ctx.channel.isDMBased()) {
+		if (!ctx.channel.isTextBased() || ctx.channel.isDMBased() || !ctx.channel.isSendable()) {
 			return ctx.sendMessage(cv2("This command can only be used in text channels."));
 		}
 
-		const channel = ctx.channel as TextBasedChannel;
+		const channel = ctx.channel;
 
 		// Parse arguments
 		let amount = 20;

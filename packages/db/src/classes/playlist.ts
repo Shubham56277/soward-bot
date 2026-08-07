@@ -86,43 +86,68 @@ export class Playlist {
 
 	/** Append a track to the end of a playlist. */
 	public static async addTrack(playlistId: string, track: PlaylistTrackInput): Promise<PlaylistTrackData | null> {
+		if (!playlistId || !track.uri.trim()) throw new Error("playlistId and track URI are required");
 		const { nanoid } = await import("nanoid");
-		const position = (await Playlist.countTracks(playlistId)) + 1;
-		const rows = await db
-			.insert(schema.playlistTracks)
-			.values({
-				id: nanoid(),
-				playlistId,
-				title: track.title ?? null,
-				uri: track.uri,
-				author: track.author ?? null,
-				duration: track.duration ?? null,
-				position,
-				createdAt: new Date(),
-			})
-			.returning()
-			.execute();
-		await db.update(schema.playlists).set({ updatedAt: new Date() }).where(eq(schema.playlists.id, playlistId)).execute();
-		return rows[0] ?? null;
+
+		return db.transaction(async (tx) => {
+			const parent = await tx
+				.select({ id: schema.playlists.id })
+				.from(schema.playlists)
+				.where(eq(schema.playlists.id, playlistId))
+				.limit(1)
+				.for("update");
+			if (!parent[0]) return null;
+
+			const positions = await tx
+				.select({ maximum: sql<number>`coalesce(max(${schema.playlistTracks.position}), 0)` })
+				.from(schema.playlistTracks)
+				.where(eq(schema.playlistTracks.playlistId, playlistId));
+			const position = Number(positions[0]?.maximum ?? 0) + 1;
+			const rows = await tx
+				.insert(schema.playlistTracks)
+				.values({
+					id: nanoid(),
+					playlistId,
+					title: track.title ?? null,
+					uri: track.uri,
+					author: track.author ?? null,
+					duration: track.duration ?? null,
+					position,
+					createdAt: new Date(),
+				})
+				.returning();
+			await tx.update(schema.playlists).set({ updatedAt: new Date() }).where(eq(schema.playlists.id, playlistId));
+			return rows[0] ?? null;
+		});
 	}
 
 	/** Remove the track at a 1-based position and close the gap in remaining positions. */
 	public static async removeTrack(playlistId: string, position: number): Promise<PlaylistTrackData | null> {
-		const rows = await db
-			.delete(schema.playlistTracks)
-			.where(and(eq(schema.playlistTracks.playlistId, playlistId), eq(schema.playlistTracks.position, position)))
-			.returning()
-			.execute();
-		const removed = rows[0];
-		if (!removed) return null;
+		if (!Number.isSafeInteger(position) || position < 1) throw new Error("position must be a positive integer");
 
-		await db
-			.update(schema.playlistTracks)
-			.set({ position: sql`${schema.playlistTracks.position} - 1` })
-			.where(and(eq(schema.playlistTracks.playlistId, playlistId), gt(schema.playlistTracks.position, position)))
-			.execute();
-		await db.update(schema.playlists).set({ updatedAt: new Date() }).where(eq(schema.playlists.id, playlistId)).execute();
-		return removed;
+		return db.transaction(async (tx) => {
+			const parent = await tx
+				.select({ id: schema.playlists.id })
+				.from(schema.playlists)
+				.where(eq(schema.playlists.id, playlistId))
+				.limit(1)
+				.for("update");
+			if (!parent[0]) return null;
+
+			const rows = await tx
+				.delete(schema.playlistTracks)
+				.where(and(eq(schema.playlistTracks.playlistId, playlistId), eq(schema.playlistTracks.position, position)))
+				.returning();
+			const removed = rows[0];
+			if (!removed) return null;
+
+			await tx
+				.update(schema.playlistTracks)
+				.set({ position: sql`${schema.playlistTracks.position} - 1` })
+				.where(and(eq(schema.playlistTracks.playlistId, playlistId), gt(schema.playlistTracks.position, position)));
+			await tx.update(schema.playlists).set({ updatedAt: new Date() }).where(eq(schema.playlists.id, playlistId));
+			return removed;
+		});
 	}
 
 	/** Every stored track of a playlist in playback order. */

@@ -1,21 +1,17 @@
-import type {
-    APIModalInteractionResponseCallbackData,
-    APIActionRowComponent,
-    APIComponentInModalActionRow,
-} from "discord-api-types/v10";
+import type { APIActionRowComponent, APIComponentInModalActionRow, APIModalInteractionResponseCallbackData } from "discord-api-types/v10";
 
 export function createModal({
-    customId,
-    title,
-    components,
+	customId,
+	title,
+	components,
 }: {
-    components: APIActionRowComponent<APIComponentInModalActionRow>[];
-    customId: string;
-    title: string;
+	components: APIActionRowComponent<APIComponentInModalActionRow>[];
+	customId: string;
+	title: string;
 }): APIModalInteractionResponseCallbackData {
-    return {
-        custom_id: customId,
-        title,
-        components,
-    } as const;
+	return {
+		custom_id: customId,
+		title,
+		components,
+	} as const;
 }

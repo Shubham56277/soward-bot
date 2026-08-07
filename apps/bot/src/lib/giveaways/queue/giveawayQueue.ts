@@ -1,11 +1,11 @@
 import { Queue } from "bullmq";
 import { GiveawayJobData } from "../types/GiveawayJobData";
-import BaseClient from "../../../base/Client";
+import type BaseClient from "../../../base/Client";
 
 
-let giveawayQueue: Queue<GiveawayJobData>;
+let giveawayQueue: Queue<GiveawayJobData> | null = null;
 
-export function createGiveawayQueue(client: BaseClient) {
+export function createGiveawayQueue(client: BaseClient): Queue<GiveawayJobData> {
 	if (!giveawayQueue) {
 		giveawayQueue = new Queue<GiveawayJobData>("giveaway", {
 			connection: client.redis,
@@ -16,4 +16,10 @@ export function createGiveawayQueue(client: BaseClient) {
 		});
 	}
 	return giveawayQueue;
+}
+
+export async function shutdownGiveawayQueue(): Promise<void> {
+	const queue = giveawayQueue;
+	giveawayQueue = null;
+	await queue?.close();
 }

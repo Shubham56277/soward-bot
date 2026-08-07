@@ -1,15 +1,9 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 
 export default class GuildEmojiUpdate extends Event {
-	// Ultra-fast cache
-	private configCache = new Map<string, AntiNuke>();
-	private trustedCache = new Map<string, any>();
-
-
 	constructor(client: BaseClient) {
 		super(client, {
 			event: Events.GuildEmojiUpdate,
@@ -24,13 +18,7 @@ export default class GuildEmojiUpdate extends Event {
 
 
 			try {
-				// Ultra-fast config check with cache
-				let config = this.configCache.get(guildId);
-				if (!config) {
-					config = await this.client.services.antinukes.getConfig(guildId);
-					this.configCache.set(guildId, config);
-					setTimeout(() => this.configCache.delete(guildId), 30000);
-				}
+				const config = await this.client.services.antinukes.getConfig(guildId);
 
 				const actionConfig = config?.emoji?.find(c => c.type === "update");
 				if (!actionConfig?.enabled || !config.enabled) return;
@@ -39,7 +27,10 @@ export default class GuildEmojiUpdate extends Event {
 				const logs = await guild.fetchAuditLogs({
 					limit: 1,
 					type: AuditLogEvent.EmojiUpdate
-				}).catch(() => null);
+				}).catch(error => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
 
 				if (!logs) return;
 				const log = logs.entries.first();
@@ -54,30 +45,24 @@ export default class GuildEmojiUpdate extends Event {
 					executorId === config.admin ||
 					(now - log.createdTimestamp) > 120000) return;
 
-				// Ultra-fast trusted user check with cache
-				let trustedSet = this.trustedCache.get(guildId);
-				if (!trustedSet) {
-					trustedSet = new Set(config.trustedUsers?.map(u => u.id) || []);
-					this.trustedCache.set(guildId, trustedSet);
-					setTimeout(() => this.trustedCache.delete(guildId), 30000);
-				}
-
-				if (trustedSet.has(executorId)) return;
+				if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
 				// Fast member check using cache first
 				let member = guild.members.cache.get(executorId) as any;
 				if (!member) {
-					member = await guild.members.fetch(executorId).catch(() => null);
+					member = await guild.members.fetch(executorId).catch(error => {
+						this.client.logger?.error?.(error);
+						return null;
+					});
 					if (!member) return;
 				}
 
 				if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
 
 				if (actionConfig.limit <= 1) {
+					const enforced = await this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
 
-					this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
-
-					if (oldEmoji.name !== newEmoji.name) {
+					if (enforced && oldEmoji.name !== newEmoji.name) {
 						newEmoji.setName(oldEmoji.name || `emoji-${Date.now()}`, "Anti-Emoji Protection").catch(() => {
 							this.client.logger?.error?.(`Failed to reset emoji name for ${newEmoji.id} in ${guild.name}`);
 						});
@@ -87,10 +72,9 @@ export default class GuildEmojiUpdate extends Event {
 				const tracked = await this.client.services.antinukes.trackAction(guild, executorId, "emojiUpdate", actionConfig);
 
 				if (tracked) {
+					const enforced = await this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
 
-					this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
-
-					if (oldEmoji.name !== newEmoji.name) {
+					if (enforced && oldEmoji.name !== newEmoji.name) {
 						newEmoji.setName(oldEmoji.name || `emoji-${Date.now()}`, "Anti-Emoji Protection").catch(() => {
 							this.client.logger?.error?.(`Failed to reset emoji name for ${newEmoji.id} in ${guild.name}`);
 						});

@@ -1,13 +1,7 @@
-import { config } from "seyfert";
-import type { InternalRuntimeConfig } from "seyfert/lib/client/base";
 import { env } from "@repo/env";
+import { type BotConfig, config } from "seyfert";
 
-
-if (!env.DISCORD_APP_TOKEN) {
-	throw new Error("Missing DISCORD_APP_TOKEN");
-}
-
-export const runtimeConfig: InternalRuntimeConfig = config.bot({
+export const runtimeConfig: BotConfig = config.bot({
 	locations: {
 		base: "dist",
 		commands: "commands",
@@ -21,7 +15,6 @@ export const runtimeConfig: InternalRuntimeConfig = config.bot({
 		"DirectMessagePolls",
 		"DirectMessageReactions",
 		"DirectMessageTyping",
-		"DirectMessages",
 		"DirectMessages",
 		"GuildExpressions",
 		"GuildIntegrations",

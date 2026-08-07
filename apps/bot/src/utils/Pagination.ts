@@ -1,11 +1,22 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, EmbedBuilder, Message, MessageFlags } from "discord.js";
+import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
+	type ButtonInteraction,
+	ComponentType,
+	ContainerBuilder,
+	EmbedBuilder,
+	type InteractionCollector,
+	Message,
+	MessageFlags,
+} from "discord.js";
 import Context from "../lib/Context";
 import { compactReplyText } from "./compactReply";
 
 export class Pagination {
 	private currentPage = 0;
 	private message: Message | undefined;
-	private timeout: NodeJS.Timeout | undefined;
+	private collector: InteractionCollector<ButtonInteraction> | undefined;
 
 	constructor(
 		private readonly ctx: Context,
@@ -58,29 +69,31 @@ export class Pagination {
 	}
 
 	private setupCollector(): void {
+		this.collector?.stop("replaced");
 		const collector = this.message?.createMessageComponentCollector({
-			time: this.timeoutDuration,
+			idle: this.timeoutDuration,
 			componentType: ComponentType.Button,
 			filter: (interaction) => {
 				if (interaction.user.id !== this.ctx.author?.id) {
-					interaction.reply({
+					void interaction.reply({
 						content: compactReplyText("Only the command author can use these buttons."),
 						flags: MessageFlags.Ephemeral,
-					});
+					}).catch(() => undefined);
 					return false;
 				}
 				return true;
 			},
 		});
+		this.collector = collector;
 
 		collector?.on("collect", async (interaction) => {
 			try {
 				if (interaction.customId === "pagination_first") {
 					this.currentPage = 0;
 				} else if (interaction.customId === "pagination_previous") {
-					this.currentPage--;
+					this.currentPage = Math.max(0, this.currentPage - 1);
 				} else if (interaction.customId === "pagination_next") {
-					this.currentPage++;
+					this.currentPage = Math.min(this.embeds.length - 1, this.currentPage + 1);
 				} else if (interaction.customId === "pagination_last") {
 					this.currentPage = this.embeds.length - 1;
 				}
@@ -90,44 +103,30 @@ export class Pagination {
 					components: [this.createComponents()],
 				});
 			} catch {
-				// Guarantee acknowledgement even if the update above failed, otherwise
-				// Discord shows "didn't respond in time" to the user.
 				if (!interaction.deferred && !interaction.replied) {
 					await interaction.deferUpdate().catch(() => undefined);
 				}
-			} finally {
-				this.resetTimeout();
 			}
 		});
 
-		collector?.on("end", () => {
-			this.cleanup();
+		collector?.once("end", () => {
+			if (this.collector === collector) this.collector = undefined;
+			this.disableComponents();
 		});
-
-		this.resetTimeout();
 	}
 
-	private resetTimeout(): void {
-		if (this.timeout) clearTimeout(this.timeout);
-		this.timeout = setTimeout(() => {
-			this.cleanup();
-		}, this.timeoutDuration);
+	public stop(): void {
+		const collector = this.collector;
+		this.collector = undefined;
+		if (collector && !collector.ended) collector.stop("stopped");
+		this.disableComponents();
 	}
 
-	private cleanup(): void {
-		if (this.message?.editable) {
-			const components = this.createComponents();
-			// biome-ignore lint/complexity/noForEach: <explanation>
-			components.components.forEach((component) => {
-				component.setDisabled(true);
-			});
-			this.message
-				.edit({
-					components: [components],
-				})
-				.catch(() => {});
-		}
-		if (this.timeout) clearTimeout(this.timeout);
+	private disableComponents(): void {
+		if (!this.message?.editable) return;
+		const components = this.createComponents();
+		for (const component of components.components) component.setDisabled(true);
+		void this.message.edit({ components: [components] }).catch(() => undefined);
 	}
 }
 
@@ -135,7 +134,7 @@ export class Pagination {
 export class ContainerPagination {
 	private currentPage = 0;
 	private message: Message | undefined;
-	private timeout: NodeJS.Timeout | undefined;
+	private collector: InteractionCollector<ButtonInteraction> | undefined;
 
 	constructor(
 		private readonly ctx: Context,
@@ -166,26 +165,28 @@ export class ContainerPagination {
 	}
 
 	private setupCollector(): void {
+		this.collector?.stop("replaced");
 		const collector = this.message?.createMessageComponentCollector({
-			time: this.timeoutDuration,
+			idle: this.timeoutDuration,
 			componentType: ComponentType.Button,
 			filter: (interaction) => {
 				if (interaction.user.id !== this.ctx.author?.id) {
-					interaction.reply({
+					void interaction.reply({
 						content: compactReplyText("Only the command author can use these buttons."),
 						flags: MessageFlags.Ephemeral,
-					});
+					}).catch(() => undefined);
 					return false;
 				}
 				return true;
 			},
 		});
+		this.collector = collector;
 
 		collector?.on("collect", async (interaction) => {
 			try {
 				if (interaction.customId === "cpg_first") this.currentPage = 0;
-				else if (interaction.customId === "cpg_prev") this.currentPage--;
-				else if (interaction.customId === "cpg_next") this.currentPage++;
+				else if (interaction.customId === "cpg_prev") this.currentPage = Math.max(0, this.currentPage - 1);
+				else if (interaction.customId === "cpg_next") this.currentPage = Math.min(this.pages.length - 1, this.currentPage + 1);
 				else if (interaction.customId === "cpg_last") this.currentPage = this.pages.length - 1;
 
 				await interaction.update({ components: [this.pages[this.currentPage]!, this.createNav()] });
@@ -193,26 +194,26 @@ export class ContainerPagination {
 				if (!interaction.deferred && !interaction.replied) {
 					await interaction.deferUpdate().catch(() => undefined);
 				}
-			} finally {
-				this.resetTimeout();
 			}
 		});
 
-		collector?.on("end", () => { this.cleanup(); });
-		this.resetTimeout();
+		collector?.once("end", () => {
+			if (this.collector === collector) this.collector = undefined;
+			this.disableComponents();
+		});
 	}
 
-	private resetTimeout(): void {
-		if (this.timeout) clearTimeout(this.timeout);
-		this.timeout = setTimeout(() => { this.cleanup(); }, this.timeoutDuration);
+	public stop(): void {
+		const collector = this.collector;
+		this.collector = undefined;
+		if (collector && !collector.ended) collector.stop("stopped");
+		this.disableComponents();
 	}
 
-	private cleanup(): void {
-		if (this.message?.editable) {
-			const nav = this.createNav();
-			nav.components.forEach((c) => c.setDisabled(true));
-			this.message.edit({ components: [this.pages[this.currentPage]!, nav] }).catch(() => {});
-		}
-		if (this.timeout) clearTimeout(this.timeout);
+	private disableComponents(): void {
+		if (!this.message?.editable) return;
+		const nav = this.createNav();
+		for (const component of nav.components) component.setDisabled(true);
+		void this.message.edit({ components: [this.pages[this.currentPage]!, nav] }).catch(() => undefined);
 	}
 }

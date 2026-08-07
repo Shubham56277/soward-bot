@@ -72,13 +72,12 @@ export class AiService {
 	}
 
 	public configuredProviders(): string[] {
-		const single = this.providers().map((provider) => provider.name);
+		const providers = new Set<string>(this.providers().map((provider) => provider.name));
 		const cluster = (this as any)._cluster as import("./aiClusterManager").AiClusterManager | undefined;
 		if (cluster && cluster.totalNodes > 0) {
-			const clusterProviders = new Set(cluster.getMetrics().map(m => m.provider));
-			for (const p of clusterProviders) single.push(p);
+			for (const provider of cluster.getMetrics()) providers.add(provider.provider);
 		}
-		return [...new Set(single)];
+		return [...providers];
 	}
 
 	public async startSession(scope: AiScope): Promise<void> {
@@ -161,13 +160,13 @@ export class AiService {
 		}
 
 		// Skip lock for non-session queries (faster, lock only prevents duplicate session requests)
+		let sessionLock: { key: string; token: string } | null = null;
 		if (useHistory) {
-			const lockKey = `ai:lock:${this.scopeId(scope)}`;
-			const lockToken = randomUUID();
-			const acquired = await this.redis.set(lockKey, lockToken, "PX", env.AI_TIMEOUT_SECONDS * 2_000 + 5_000, "NX");
+			const key = `ai:lock:${this.scopeId(scope)}`;
+			const token = randomUUID();
+			const acquired = await this.redis.set(key, token, "PX", env.AI_TIMEOUT_SECONDS * 2_000 + 5_000, "NX");
 			if (acquired !== "OK") return { ok: false, reason: "busy", retryAfter: 2 };
-			// Release lock in background after response
-			setTimeout(() => { this.redis.eval(RELEASE_LOCK_SCRIPT, 1, lockKey, lockToken).catch(() => undefined); }, 0);
+			sessionLock = { key, token };
 		}
 
 		this.activeRequests += 1;
@@ -181,8 +180,8 @@ export class AiService {
 				latencyMs: Math.round(performance.now() - startedAt),
 				cached: false,
 			};
-			// Save history and cache in background (don't block response)
-			if (useHistory) this.saveHistory(scope, [...messages, { role: "assistant", content: answer.text }]).catch(() => undefined);
+			// Session history must be persisted before releasing its serialization lock.
+			if (useHistory) await this.saveHistory(scope, [...messages, { role: "assistant", content: answer.text }]);
 			if (!useHistory && env.AI_RESPONSE_CACHE_SECONDS > 0) {
 				this.redis.set(answerCacheKey, JSON.stringify(answer), "EX", env.AI_RESPONSE_CACHE_SECONDS).catch(() => undefined);
 			}
@@ -191,6 +190,9 @@ export class AiService {
 			return { ok: false, reason: "unavailable" };
 		} finally {
 			this.activeRequests -= 1;
+			if (sessionLock) {
+				await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, sessionLock.key, sessionLock.token).catch(() => undefined);
+			}
 		}
 	}
 
@@ -209,12 +211,14 @@ export class AiService {
 				try {
 					let text: string;
 					if (node.provider === "Gemini") {
-						text = await this.gemini(messages, new AbortController().signal, node.apiKey);
+						text = await this.gemini(messages, new AbortController().signal, node.apiKey, node.model);
 					} else {
 						const url = node.provider === "Groq" ? "https://api.groq.com/openai/v1/chat/completions"
 							: node.provider === "OpenRouter" ? "https://openrouter.ai/api/v1/chat/completions"
 							: "https://router.huggingface.co/v1/chat/completions";
-						const extraHeaders = node.provider === "OpenRouter" ? { "HTTP-Referer": env.NEXT_PUBLIC_BASE_URL || "https://discord.com", "X-Title": "Soward Discord Bot" } : {};
+						const extraHeaders: Record<string, string> = node.provider === "OpenRouter"
+							? { "HTTP-Referer": env.NEXT_PUBLIC_BASE_URL || "https://discord.com", "X-Title": "Soward Discord Bot" }
+							: {};
 						text = await this.openAiCompatible(url, node.apiKey, node.model, messages, new AbortController().signal, extraHeaders);
 					}
 
@@ -310,8 +314,8 @@ export class AiService {
 		return text;
 	}
 
-	private async gemini(messages: AiMessage[], parentSignal: AbortSignal, apiKey?: string): Promise<string> {
-		const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_MODEL)}:generateContent`;
+	private async gemini(messages: AiMessage[], parentSignal: AbortSignal, apiKey?: string, model = env.GEMINI_MODEL): Promise<string> {
+		const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 		const response = await this.fetchWithTimeout(url, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey ?? env.GEMINI_API_KEY! },

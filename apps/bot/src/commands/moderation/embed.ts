@@ -18,7 +18,7 @@ import {
 	ChannelType,
 	ComponentType,
 } from "discord.js";
-import {} from "../../utils/colors";
+import { colors } from "../../utils/colors";
 
 export default class EmbedBuilderCommand extends Command {
 	private embed: EmbedBuilder = new EmbedBuilder();
@@ -676,7 +676,7 @@ export default class EmbedBuilderCommand extends Command {
 			// Check if it's a color name in the colors object
 			else {
 				const lowerInput = colorInput.toLowerCase();
-				if (Object.hasOwn(lowerInput)) {
+				if (Object.hasOwn(colors, lowerInput)) {
 					validColor = colors[lowerInput as keyof typeof colors];
 				}
 			}

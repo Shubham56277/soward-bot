@@ -194,7 +194,7 @@ export class Services {
 
 
 			const limit = await rateLimiter.checkRateLimit(
-				`${guildId}`,
+				`${guildId}:${userId}`,
 				VOICE_STATE_UPDATE_RATE_LIMIT,
 			);
 

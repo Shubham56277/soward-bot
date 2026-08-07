@@ -1,13 +1,9 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 
 export default class GuildStickerCreate extends Event {
-	// Ultra-fast cache
-	private configCache = new Map<string, AntiNuke>();
-	private trustedCache = new Map<string, any>();
 	private stickerCreateCache = new Map<string, { executorId: string, timestamp: number }>();
 
 	constructor(client: BaseClient) {
@@ -23,13 +19,7 @@ export default class GuildStickerCreate extends Event {
 			const guildId = guild.id;
 
 			try {
-				// Ultra-fast config check with cache
-				let config = this.configCache.get(guildId);
-				if (!config) {
-					config = await this.client.services.antinukes.getConfig(guildId);
-					this.configCache.set(guildId, config);
-					setTimeout(() => this.configCache.delete(guildId), 30000);
-				}
+				const config = await this.client.services.antinukes.getConfig(guildId);
 
 				const actionConfig = config?.sticker?.find(c => c.type === "create");
 				if (!actionConfig?.enabled || !config.enabled) return;
@@ -44,7 +34,10 @@ export default class GuildStickerCreate extends Event {
 				const logs = await guild.fetchAuditLogs({
 					limit: 1,
 					type: AuditLogEvent.StickerCreate
-				}).catch(() => null);
+				}).catch(error => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
 
 				if (!logs) return;
 				const log = logs.entries.first();
@@ -55,7 +48,7 @@ export default class GuildStickerCreate extends Event {
 
 				// Cache this sticker creation for future checks
 				this.stickerCreateCache.set(stickerId, { executorId, timestamp: now });
-				setTimeout(() => this.stickerCreateCache.delete(stickerId), 120000);
+				setTimeout(() => this.stickerCreateCache.delete(stickerId), 120000).unref();
 
 				// Fast early returns
 				if (executorId === guild.ownerId ||
@@ -73,56 +66,55 @@ export default class GuildStickerCreate extends Event {
 
 	private async handleStickerCreation(guild: any, executorId: string, stickerId: string, actionConfig: any): Promise<void> {
 		try {
-			// Ultra-fast trusted user check with cache
-			let trustedSet = this.trustedCache.get(guild.id);
-			if (!trustedSet) {
-				const config = this.configCache.get(guild.id);
-				trustedSet = new Set(config?.trustedUsers?.map(u => u.id) || []);
-				this.trustedCache.set(guild.id, trustedSet);
-				setTimeout(() => this.trustedCache.delete(guild.id), 30000);
-			}
-
-			if (trustedSet.has(executorId)) return;
+			if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
 			// Fast member check using cache first
 			let member = guild.members.cache.get(executorId) as any;
 			if (!member) {
-				member = await guild.members.fetch(executorId).catch(() => null);
+				member = await guild.members.fetch(executorId).catch((error: unknown) => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
 				if (!member) return;
 			}
 
 			if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
 			if (actionConfig.limit <= 1) {
-				// Fire actions immediately without waiting
-				await this.client.services.antinukes.punishUser(
+				const enforced = await this.client.services.antinukes.punishUser(
 					guild,
 					executorId,
 					actionConfig.action,
 					"Anti-Sticker Protection | Unauthorized Sticker"
 				);
 
-				await guild.stickers.delete(
-					stickerId,
-					"Anti-Sticker Protection | Unauthorized Sticker"
-				).catch(() => { });
+				if (enforced) {
+					await guild.stickers.delete(
+						stickerId,
+						"Anti-Sticker Protection | Unauthorized Sticker"
+					).catch((error: unknown) => {
+						this.client.logger?.error?.(error);
+					});
+				}
 				return;
 			}
 			const tracked = await this.client.services.antinukes.trackAction(guild, executorId, "stickerCreate", actionConfig);
 
 			if (tracked) {
-				// Fire actions immediately without waiting
-				await this.client.services.antinukes.punishUser(
+				const enforced = await this.client.services.antinukes.punishUser(
 					guild,
 					executorId,
 					actionConfig.action,
 					"Anti-Sticker Protection | Unauthorized Sticker"
 				);
 
-				await guild.stickers.delete(
-					stickerId,
-					"Anti-Sticker Protection | Unauthorized Sticker"
-				).catch(() => { })
-
+				if (enforced) {
+					await guild.stickers.delete(
+						stickerId,
+						"Anti-Sticker Protection | Unauthorized Sticker"
+					).catch((error: unknown) => {
+						this.client.logger?.error?.(error);
+					});
+				}
 			}
 
 		} catch (error) {

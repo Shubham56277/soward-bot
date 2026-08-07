@@ -4,23 +4,23 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, mock } from "node:test";
 import { ProfileBadges, UserProfile, type UserProfileData } from "@repo/db";
+import { layoutOfficialBadges, mapOfficialProfileBadges } from "../src/services/profile/OfficialProfileBadges.ts";
+import { AnimationGate, animationPlans, expectedRgbaBytes, selectTimelineFrameIndex } from "../src/services/profile/ProfileAnimationCodec.ts";
+import { acquireProfileAnimationLease } from "../src/services/profile/ProfileAnimationLease.ts";
+import { isAnimatedDiscordAsset, isOfficialDiscordAssetUrl, isPublicProfileAddress, ProfileAssetLoader, type ProfileAssetRemoteResponse } from "../src/services/profile/ProfileAssetLoader.ts";
 import { ProfileBadgeService } from "../src/services/profile/ProfileBadgeService.ts";
 import {
 	buildProfileRenderCacheKey,
 	OUTPUT_POLICY_VERSION,
+	ProfileCardRenderer,
+	type ProfileCardRenderInput,
 	preferredProfileFormat,
 	profileAttachmentName,
 	profileBioDigest,
 	profileFallbackCacheTtl,
-	ProfileCardRenderer,
 	resolveProfileBio,
 	sanitizeProfileText,
-	type ProfileCardRenderInput,
 } from "../src/services/profile/ProfileCardRenderer.ts";
-import { isAnimatedDiscordAsset, isOfficialDiscordAssetUrl, ProfileAssetLoader } from "../src/services/profile/ProfileAssetLoader.ts";
-import { AnimationGate, animationPlans, expectedRgbaBytes, selectTimelineFrameIndex } from "../src/services/profile/ProfileAnimationCodec.ts";
-import { acquireProfileAnimationLease } from "../src/services/profile/ProfileAnimationLease.ts";
-import { layoutOfficialBadges, mapOfficialProfileBadges } from "../src/services/profile/OfficialProfileBadges.ts";
 
 describe("profile text safety", () => {
 	it("neutralizes mentions, markdown, controls, and excessive length", () => {
@@ -48,12 +48,275 @@ describe("official Discord asset validation", () => {
 	});
 });
 
+const TEST_PNG = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(8)]);
+
+type RemoteState = { dumped: boolean; destroyed: boolean; closed: boolean; yielded: number };
+function remoteResponse(
+	statusCode = 200,
+	headers: Record<string, string | string[] | undefined> = {
+		"content-type": "image/png",
+		"content-length": String(TEST_PNG.length),
+	},
+	chunks: readonly Buffer[] = [TEST_PNG],
+): { response: ProfileAssetRemoteResponse; state: RemoteState } {
+	const state: RemoteState = { dumped: false, destroyed: false, closed: false, yielded: 0 };
+	return {
+		state,
+		response: {
+			statusCode,
+			headers,
+			body: {
+				async dump() {
+					state.dumped = true;
+				},
+				destroy() {
+					state.destroyed = true;
+				},
+				async *[Symbol.asyncIterator]() {
+					for (const chunk of chunks) {
+						state.yielded += 1;
+						yield chunk;
+					}
+				},
+			},
+			async close() {
+				state.closed = true;
+			},
+		},
+	};
+}
+
 describe("profile asset loader", () => {
 	it("rejects unsafe local and non-Discord remote sources without throwing", async () => {
 		const loader = new ProfileAssetLoader();
 		assert.equal(await loader.loadDiscord("https://example.com/avatar.png"), null);
 		assert.equal(await loader.loadBadge({ kind: "local", path: "images/../.env" }), null);
 		assert.equal(await loader.loadBadge("http://example.com/badge.png"), null);
+	});
+
+	it("hard-bounds unresolved entries instead of allowing unique stalled requests to grow the cache", async () => {
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => { release = resolve; });
+		const loader = new ProfileAssetLoader(undefined, {
+			maxEntries: 2,
+			timeoutMs: 100,
+			lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+			request: async () => {
+				await blocked;
+				return remoteResponse().response;
+			},
+		});
+		const first = loader.loadBadge("https://one.example/badge.png");
+		const second = loader.loadBadge("https://two.example/badge.png");
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.deepEqual(loader.cacheState(), { entries: 2, bytes: 0 });
+		assert.equal(await loader.loadBadge("https://three.example/badge.png"), null);
+		assert.deepEqual(loader.cacheState(), { entries: 2, bytes: 0 });
+		release();
+		await Promise.all([first, second]);
+	});
+
+	it("rejects private, special-use, mapped, translated, and malformed resolved addresses", async () => {
+		for (const address of [
+			"0.0.0.0",
+			"10.0.0.1",
+			"100.64.0.1",
+			"127.0.0.1",
+			"169.254.169.254",
+			"172.16.0.1",
+			"192.168.1.1",
+			"::",
+			"::1",
+			"::ffff:127.0.0.1",
+			"::ffff:7f00:1",
+			"64:ff9b::7f00:1",
+			"64:ff9b:1::a00:1",
+			"2001::1",
+			"2002:7f00:1::",
+			"fc00::1",
+			"fe80::1",
+			"ff02::1",
+			"not-an-ip",
+		])
+			assert.equal(isPublicProfileAddress(address), false, address);
+		assert.equal(isPublicProfileAddress("8.8.8.8"), true);
+		assert.equal(isPublicProfileAddress("2606:4700:4700::1111"), true);
+
+		let requests = 0;
+		const blockedSets = [
+			[
+				{ address: "8.8.8.8", family: 4 },
+				{ address: "127.0.0.1", family: 4 },
+			],
+			[{ address: "::ffff:7f00:1", family: 6 }],
+			[{ address: "8.8.8.8", family: 6 }],
+		];
+		for (let index = 0; index < blockedSets.length; index += 1) {
+			const loader = new ProfileAssetLoader(undefined, {
+				lookup: async () => blockedSets[index]!,
+				request: async () => {
+					requests += 1;
+					return remoteResponse().response;
+				},
+			});
+			assert.equal(await loader.loadBadge(`https://blocked-${index}.example/badge.png`), null);
+		}
+		const direct = new ProfileAssetLoader(undefined, {
+			lookup: async () => {
+				throw new Error("private literals must not resolve");
+			},
+			request: async () => {
+				requests += 1;
+				return remoteResponse().response;
+			},
+		});
+		assert.equal(await direct.loadBadge("https://127.1/badge.png"), null);
+		assert.equal(await direct.loadBadge("https://[::ffff:7f00:1]/badge.png"), null);
+		assert.equal(requests, 0);
+	});
+
+	it("pins every request to validated DNS results and revalidates redirects", async () => {
+		const first = remoteResponse(302, { location: "https://next.example/badge.png" }, []);
+		const second = remoteResponse();
+		const seen: Array<{ url: string; addresses: readonly string[] }> = [];
+		const responses = [first.response, second.response];
+		const loader = new ProfileAssetLoader(undefined, {
+			lookup: async (hostname) => (hostname === "next.example" ? [{ address: "2606:4700:4700::1111", family: 6 }] : [{ address: "8.8.8.8", family: 4 }]),
+			request: async (url, addresses) => {
+				seen.push({ url: url.toString(), addresses: addresses.map(({ address }) => address) });
+				return responses.shift()!;
+			},
+		});
+		assert.deepEqual(await loader.loadBadge("https://start.example/badge.png"), TEST_PNG);
+		assert.deepEqual(seen, [
+			{ url: "https://start.example/badge.png", addresses: ["8.8.8.8"] },
+			{ url: "https://next.example/badge.png", addresses: ["2606:4700:4700::1111"] },
+		]);
+		assert.deepEqual([first.state.dumped, first.state.destroyed, first.state.closed], [true, true, true]);
+		assert.deepEqual([second.state.destroyed, second.state.closed], [true, true]);
+	});
+
+	it("blocks private and off-domain Discord redirects before a second request", async () => {
+		for (const [initial, redirected] of [
+			["https://assets.example/badge.png", "https://[::ffff:7f00:1]/secret.png"],
+			["https://cdn.discordapp.com/embed/avatars/0.png", "https://example.com/avatar.png"],
+		] as const) {
+			const redirect = remoteResponse(302, { location: redirected }, []);
+			let requests = 0;
+			const loader = new ProfileAssetLoader(undefined, {
+				lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+				request: async () => {
+					requests += 1;
+					return redirect.response;
+				},
+			});
+			const result = initial.includes("discordapp.com") ? loader.loadDiscord(initial) : loader.loadBadge(initial);
+			assert.equal(await result, null);
+			assert.equal(requests, 1);
+			assert.deepEqual([redirect.state.dumped, redirect.state.destroyed, redirect.state.closed], [true, true, true]);
+		}
+	});
+
+	it("rejects bad status, content type, declared length, and image signatures with cleanup", async () => {
+		const cases = [
+			remoteResponse(404),
+			remoteResponse(200, { "content-type": "text/html" }),
+			remoteResponse(200, { "content-type": "image/png", "content-encoding": "gzip" }),
+			remoteResponse(200, { "content-type": "image/gif" }),
+			remoteResponse(200, { "content-type": "image/png", "content-length": "-1" }),
+			remoteResponse(200, { "content-type": "image/png", "content-length": String(4 * 1024 * 1024 + 1) }),
+			remoteResponse(200, { "content-type": ["image/png", "image/gif"] }),
+			remoteResponse(200, { "content-type": "image/png" }, [Buffer.from("not an image")]),
+		];
+		for (let index = 0; index < cases.length; index += 1) {
+			const current = cases[index]!;
+			const loader = new ProfileAssetLoader(undefined, {
+				lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+				request: async () => current.response,
+			});
+			assert.equal(await loader.loadBadge(`https://policy-${index}.example/badge.png`), null);
+			assert.equal(current.state.destroyed, true);
+			assert.equal(current.state.closed, true);
+		}
+	});
+
+	it("stops buffering beyond the streaming limit and closes the response", async () => {
+		const maximum = Buffer.alloc(4 * 1024 * 1024);
+		TEST_PNG.copy(maximum);
+		const oversized = remoteResponse(200, { "content-type": "image/png" }, [maximum, Buffer.from([1])]);
+		const loader = new ProfileAssetLoader(undefined, {
+			lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+			request: async () => oversized.response,
+		});
+		assert.equal(await loader.loadBadge("https://large.example/badge.png"), null);
+		assert.equal(oversized.state.yielded, 2);
+		assert.deepEqual([oversized.state.destroyed, oversized.state.closed], [true, true]);
+	});
+
+	it("times out a transport that ignores abort without growing the cache indefinitely", async () => {
+		let observedSignal: AbortSignal | null = null;
+		const loader = new ProfileAssetLoader(undefined, {
+			timeoutMs: 15,
+			lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+			request: async (_url, _addresses, signal) => {
+				observedSignal = signal;
+				return new Promise<ProfileAssetRemoteResponse>(() => undefined);
+			},
+		});
+		assert.equal(await loader.loadBadge("https://stalled-transport.example/badge.png"), null);
+		assert.equal(observedSignal?.aborted, true);
+		assert.deepEqual(loader.cacheState(), { entries: 1, bytes: 0 });
+	});
+
+	it("aborts a stalled body, closes resources, and contains transport errors", async () => {
+		const state: RemoteState = { dumped: false, destroyed: false, closed: false, yielded: 0 };
+		let observedSignal: AbortSignal | null = null;
+		const loader = new ProfileAssetLoader(undefined, {
+			timeoutMs: 15,
+			lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+			request: async (_url, _addresses, signal) => {
+				observedSignal = signal;
+				return {
+					statusCode: 200,
+					headers: { "content-type": "image/png" },
+					body: {
+						async dump() {
+							state.dumped = true;
+						},
+						destroy() {
+							state.destroyed = true;
+						},
+						async *[Symbol.asyncIterator]() {
+							await new Promise<void>((_resolve, reject) => {
+								const fallback = setTimeout(() => reject(new Error("abort was not delivered")), 200);
+								signal.addEventListener(
+									"abort",
+									() => {
+										clearTimeout(fallback);
+										reject(new Error("aborted"));
+									},
+									{ once: true },
+								);
+							});
+						},
+					},
+					async close() {
+						state.closed = true;
+					},
+				};
+			},
+		});
+		assert.equal(await loader.loadBadge("https://slow.example/badge.png"), null);
+		assert.equal(observedSignal?.aborted, true);
+		assert.deepEqual([state.destroyed, state.closed], [true, true]);
+
+		const failing = new ProfileAssetLoader(undefined, {
+			lookup: async () => [{ address: "8.8.8.8", family: 4 }],
+			request: async () => {
+				throw new Error("transport failed");
+			},
+		});
+		assert.equal(await failing.loadBadge("https://failure.example/badge.png"), null);
 	});
 });
 
@@ -140,8 +403,14 @@ describe("official Discord profile badges", () => {
 	it("maps only display flags in stable order and never infers Nitro", () => {
 		const enabled = new Set(["ActiveDeveloper", "Staff", "PremiumPromoDismissed", "BugHunterLevel2"]);
 		const badges = mapOfficialProfileBadges({ has: (flag) => enabled.has(String(flag)) });
-		assert.deepEqual(badges.map((badge) => badge.key), ["staff", "bug-hunter-2", "active-developer"]);
-		assert.equal(badges.some((badge) => /nitro/i.test(badge.key + badge.label)), false);
+		assert.deepEqual(
+			badges.map((badge) => badge.key),
+			["staff", "bug-hunter-2", "active-developer"],
+		);
+		assert.equal(
+			badges.some((badge) => /nitro/i.test(badge.key + badge.label)),
+			false,
+		);
 	});
 
 	it("keeps server booster explicit and bounds overflow", () => {
@@ -149,7 +418,10 @@ describe("official Discord profile badges", () => {
 		const badges = mapOfficialProfileBadges({ has: (flag) => enabled.has(String(flag)) }, true);
 		assert.equal(badges.at(-1)?.key, "server-booster");
 		const layout = layoutOfficialBadges(badges, 100);
-		assert.deepEqual(layout.visible.map((badge) => badge.key), ["staff", "partner"]);
+		assert.deepEqual(
+			layout.visible.map((badge) => badge.key),
+			["staff", "partner"],
+		);
 		assert.equal(layout.overflow, 3);
 	});
 });
@@ -163,7 +435,6 @@ describe("profile attachment format", () => {
 		assert.equal(profileAttachmentName("123", "gif"), "elfaria-profile-123.gif");
 	});
 });
-
 
 describe("profile animation adaptive plans", () => {
 	it("uses the approved avatar, banner, and retry quality ladder", () => {
@@ -241,6 +512,39 @@ describe("distributed profile animation slots", () => {
 		assert.equal(redis.values.get("profile:animation:slot:0"), "replacement-token");
 		await second();
 		assert.equal(redis.values.has("profile:animation:slot:1"), false);
+	});
+
+	it("fails closed on Redis errors and contains synchronous release failures", async () => {
+		assert.equal(
+			await acquireProfileAnimationLease(
+				{
+					set() {
+						throw new Error("Redis unavailable");
+					},
+					eval() {
+						throw new Error("unexpected eval");
+					},
+				} as any,
+				"failed-acquire",
+			),
+			null,
+		);
+
+		let releases = 0;
+		const release = await acquireProfileAnimationLease(
+			{
+				set: async () => "OK",
+				eval() {
+					releases += 1;
+					throw new Error("synchronous release failure");
+				},
+			} as any,
+			"release-error",
+		);
+		assert.ok(release);
+		await assert.doesNotReject(release());
+		await assert.doesNotReject(release());
+		assert.equal(releases, 1);
 	});
 });
 

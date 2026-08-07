@@ -20,27 +20,21 @@ export class User implements UserType {
 	createdAt?: Date | undefined;
 	updatedAt?: Date | undefined;
 
-	constructor(userId: string, data: Partial<UserType>) {
+	constructor(userId: string, data: Partial<UserType> = {}) {
 		this.userId = userId;
 		this.noPrefix = data.noPrefix ?? false;
 		this.noPrefixAllowed = data.noPrefixAllowed ?? false;
-		this.noPrefixExpiresAt = data.noPrefixExpiresAt ? new Date(data.noPrefixExpiresAt) : data.noPrefixExpiresAt;
+		this.noPrefixExpiresAt = data.noPrefixExpiresAt ? new Date(data.noPrefixExpiresAt) : null;
 		this.level = data.level ?? 0;
-		this.xp = data.xp;
-		this.relationships = data.relationships;
-		this.createdAt = data.createdAt ? new Date(data.createdAt) : data.createdAt;
-		this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : data.updatedAt;
-
-		// Check if no-prefix access has expired
-		if (this.noPrefixExpiresAt && new Date() > this.noPrefixExpiresAt) {
-			this.noPrefix = false;
-			this.noPrefixAllowed = false;
-			this.noPrefixExpiresAt = null;
-		}
+		this.xp = data.xp ?? 0;
+		this.relationships = data.relationships ?? "single";
+		this.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
+		this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : new Date();
 	}
 
-	public static async create(userId: string, data?: Partial<UserType>) {
-		const user = new User(userId, data!);
+	public static async create(userId: string, data: Partial<UserType> = {}) {
+		if (!userId) throw new Error("userId is required");
+		const user = new User(userId, data);
 		await db.insert(schema.users).values(user).onConflictDoNothing().execute();
 		await invalidateCache(userCacheKey(userId));
 		return user;
@@ -71,7 +65,10 @@ export class User implements UserType {
 	}
 
 	public static async setNoPrefix(userId: string, durationMs: number, addedBy: string) {
-		const expiresAt = new Date(Date.now() + durationMs);
+		if (!Number.isSafeInteger(durationMs) || durationMs <= 0) throw new Error("durationMs must be a positive integer");
+		const expiresAtMs = Date.now() + durationMs;
+		if (!Number.isSafeInteger(expiresAtMs)) throw new Error("No-prefix expiry exceeds the supported date range");
+		const expiresAt = new Date(expiresAtMs);
 		await User.update(userId, {
 			noPrefix: true,
 			noPrefixExpiresAt: expiresAt,
@@ -149,6 +146,9 @@ export class User implements UserType {
 
 	/** Toggle a user's own no-prefix on/off, preserving any access-expiry window. */
 	public static async setNoPrefixEnabled(userId: string, enabled: boolean) {
+		if (enabled && !(await User.isNoPrefixAllowed(userId))) {
+			throw new Error("No-prefix access is not enabled for this user");
+		}
 		await User.update(userId, { noPrefix: enabled });
 	}
 
@@ -306,7 +306,7 @@ export class Warning implements WarningsType {
 			.execute()
 			.then((result) => result.at(0));
 
-		return result?.count ?? 0;
+		return Number(result?.count ?? 0);
 	}
 
 	public static async create(data: Omit<WarningsType, "id" | "createdAt" | "updatedAt">) {

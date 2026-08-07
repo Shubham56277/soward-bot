@@ -49,7 +49,7 @@ apt-get install -y -qq \
     unzip \
     jq \
     htop \
-    flock \
+    util-linux \
     fontconfig \
     libfontconfig1 \
     libcairo2-dev \
@@ -64,10 +64,10 @@ apt-get install -y -qq \
 # ─── Install Node.js (via NodeSource) ────────────────────────────────────────
 if command -v node &>/dev/null; then
     CURRENT_NODE=$(node --version | sed 's/v//' | cut -d. -f1)
-    if [[ "$CURRENT_NODE" -ge "$NODE_VERSION" ]]; then
+    if [[ "$CURRENT_NODE" -eq "$NODE_VERSION" ]]; then
         log "Node.js $(node --version) already installed."
     else
-        warn "Node.js $CURRENT_NODE found but need $NODE_VERSION+. Upgrading..."
+        warn "Node.js $CURRENT_NODE found; Node.js $NODE_VERSION is required. Reinstalling..."
         INSTALL_NODE=true
     fi
 else

@@ -201,7 +201,7 @@ export default class Logger extends Command {
                         flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
                     });
                     collector.stop();
-                } catch (_error) {
+                } catch (error) {
                     console.error(error);
                     await i.reply({
                         embeds: [
@@ -575,7 +575,7 @@ export default class Logger extends Command {
                             } else {
                                 await this.handleExistingLogger(ctx, updatedLogger, loggerTypes, filter);
                             }
-                        } catch (_error) {
+                        } catch (error) {
                             console.error(error);
                             await interaction.update({
                                 components: [buildPanel("Logger — Error", "Failed to remove the logger event.")],
@@ -629,7 +629,7 @@ export default class Logger extends Command {
 
                             // Go back to new logger setup
                             await this.handleNewLogger(ctx, loggerTypes, filter);
-                        } catch (_error) {
+                        } catch (error) {
                             console.error(error);
                             await interaction.update({
                                 components: [buildPanel("Logger — Error", "Failed to reset logger settings.")],

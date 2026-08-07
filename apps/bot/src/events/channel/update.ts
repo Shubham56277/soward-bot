@@ -1,12 +1,8 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, ChannelType, Events, NonThreadGuildBasedChannel } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 export default class ChannelUpdate extends Event {
-    // Ultra-fast cache
-    private configCache = new Map<string, AntiNuke>();
-    private trustedCache = new Map<string, any>();
     private processingChannels = new Set<string>();
 
     constructor(client: BaseClient) {
@@ -27,13 +23,7 @@ export default class ChannelUpdate extends Event {
             try {
                 this.processingChannels.add(channel.id);
 
-                // Ultra-fast config check with cache
-                let config = this.configCache.get(guildId);
-                if (!config) {
-                    config = await this.client.services.antinukes.getConfig(guildId);
-                    this.configCache.set(guildId, config);
-                    setTimeout(() => this.configCache.delete(guildId), 30000);
-                }
+                const config = await this.client.services.antinukes.getConfig(guildId);
 
                 const actionConfig = config?.channel?.find(c => c.type === "update");
                 if (!config?.enabled || !actionConfig?.enabled) return;
@@ -42,7 +32,10 @@ export default class ChannelUpdate extends Event {
                 const logs = await guild.fetchAuditLogs({
                     limit: 2,
                     type: AuditLogEvent.ChannelUpdate
-                }).catch(() => null);
+                }).catch(error => {
+                    this.client.logger?.error?.(error);
+                    return null;
+                });
 
                 if (!logs) return;
                 const log = logs.entries.first();
@@ -57,34 +50,28 @@ export default class ChannelUpdate extends Event {
                     executorId === config.admin ||
                     (now - log.createdTimestamp) > 120000) return;
 
-                // Ultra-fast trusted user check with cache
-                let trustedSet = this.trustedCache.get(guildId);
-                if (!trustedSet) {
-                    trustedSet = new Set(config.trustedUsers?.map(u => u.id) || []);
-                    this.trustedCache.set(guildId, trustedSet);
-                    setTimeout(() => this.trustedCache.delete(guildId), 30000);
-                }
-
-                if (trustedSet.has(executorId)) return;
+                if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
                 // Fast member check using cache first
                 let member = guild.members.cache.get(executorId) as any;
                 if (!member) {
-                    member = await guild.members.fetch(executorId).catch(() => null);
+                    member = await guild.members.fetch(executorId).catch(error => {
+                        this.client.logger?.error?.(error);
+                        return null;
+                    });
                     if (!member) return;
                 }
 
                 if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
 
                 if (actionConfig.limit <= 1) {
-                    // Fire punishment immediately without waiting
-                    await this.client.services.antinukes.punishUser(
+                    const enforced = await this.client.services.antinukes.punishUser(
                         guild,
                         executorId,
                         actionConfig.action,
                         "Anti-Channel Protection | Not Whitelisted"
                     );
-                    await this.updateChannel(oldChannel, channel);
+                    if (enforced) await this.updateChannel(oldChannel, channel);
                     return;
                 }
 
@@ -96,14 +83,13 @@ export default class ChannelUpdate extends Event {
                 );
 
                 if (tracked) {
-                    // Fire punishment immediately without waiting
-                    await this.client.services.antinukes.punishUser(
+                    const enforced = await this.client.services.antinukes.punishUser(
                         guild,
                         executorId,
                         actionConfig.action,
                         "Anti-Channel Protection | Not Whitelisted"
                     );
-                    await this.updateChannel(oldChannel, channel);
+                    if (enforced) await this.updateChannel(oldChannel, channel);
                 }
 
             } catch (error) {
@@ -184,7 +170,7 @@ export default class ChannelUpdate extends Event {
                 });
             }
         } catch (err) {
-            console.error("[Channel Revert Failed]:", err);
+            this.client.logger?.error?.("[Channel Revert Failed]:", err);
         }
     }
 }

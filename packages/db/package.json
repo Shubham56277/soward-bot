@@ -11,24 +11,26 @@
     "default": "./dist/index.js"
   },
   "scripts": {
-		"push": "node ../../scripts/db-migrate.js",
-		"drizzle:migrate": "drizzle-kit migrate",
-		"drop": "drizzle-kit drop",
-		"generate": "drizzle-kit generate",
-		"studio": "drizzle-kit studio",
+    "push": "node ../../scripts/db-migrate.js",
+    "drizzle:migrate": "drizzle-kit migrate",
+    "drop": "drizzle-kit drop",
+    "generate": "drizzle-kit generate",
+    "studio": "drizzle-kit studio",
     "build": "tsup",
-    "lint": "biome lint --write ./src",
+    "check": "biome check ./src",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ./src",
     "format": "biome format --write ./src"
   },
   "dependencies": {
-    "@repo/env": "*",
-    "drizzle-orm": "^0.45.2",
-    "nanoid": "^6.0.0",
-    "pg": "^8.22.0"
+    "@repo/env": "0.0.0",
+    "drizzle-orm": "0.45.2",
+    "nanoid": "6.0.0",
+    "pg": "8.22.0"
   },
   "devDependencies": {
-    "@repo/typescript-config": "*",
-    "@types/pg": "^8.20.0",
-    "drizzle-kit": "^0.31.10"
+    "@repo/typescript-config": "0.0.0",
+    "@types/pg": "8.20.0",
+    "drizzle-kit": "0.31.10"
   }
 }

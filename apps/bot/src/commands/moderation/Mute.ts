@@ -78,8 +78,8 @@ export default class Mute extends Command {
 		const parseDuration = (input: string): number | null => {
 			const match = input.trim().match(/^(\d+)([smhd])$/i);
 			if (!match) return null;
-			const value = parseInt(match[1], 10);
-			const unit = match[2].toLowerCase();
+			const value = parseInt(match[1]!, 10);
+			const unit = match[2]!.toLowerCase();
 			switch (unit) {
 				case "s": return value;
 				case "m": return value * 60;

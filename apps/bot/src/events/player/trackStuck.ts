@@ -13,8 +13,15 @@ export default class TrackStuck extends Event {
     }
 
     public async execute(): Promise<void> {
-        this.client.manager.on("trackStuck", async (player, track, payload) => {
+        this.client.manager.on("trackStuck", (player, track, payload) => {
             if (!track) return;
+            void this.recover(player, track, payload).catch((error) => {
+                this.client.logger.error(`[trackStuck] Recovery failed for guild ${player.guildId}`, error);
+            });
+        });
+    }
+
+    private async recover(player: any, track: Track, payload: any): Promise<void> {
 
             const id = track.info.identifier;
             const title = track.info.title ?? "Unknown";
@@ -39,7 +46,7 @@ export default class TrackStuck extends Event {
             }
 
             recentlyStuck.set(id, Date.now());
-            setTimeout(() => recentlyStuck.delete(id), STUCK_TTL_MS);
+            setTimeout(() => recentlyStuck.delete(id), STUCK_TTL_MS).unref();
 
             // Try SoundCloud fallback (only source available)
             const fallbackSource = "scsearch";
@@ -51,7 +58,9 @@ export default class TrackStuck extends Event {
                     track.requester,
                 );
 
-                const candidate: Track | undefined = res?.tracks?.[0];
+                const candidate = res?.tracks?.find(
+                    (result: Track): result is Track => this.client.manager.utils.isTrack(result),
+                );
                 if (!candidate) throw new Error("No fallback found");
 
                 // Remove stuck track and insert replacement
@@ -72,6 +81,5 @@ export default class TrackStuck extends Event {
                     `-# Stream got stuck on **${title.slice(0, 80)}** and couldn't recover. Skipped.`,
                 ).catch(() => undefined);
             }
-        });
     }
 }

@@ -53,7 +53,10 @@ export default class Record extends Command {
 
 	public async run(ctx: Context): Promise<any> {
 		const requestedAction = ctx.options.getSubCommand(false, 0);
-		if (!requestedAction) return ctx.sendMessage(buildRecordingPanel(ctx.client, ctx.guild.id));
+		if (!requestedAction) {
+			const recordingPanel = buildRecordingPanel(ctx.client, ctx.guild.id);
+			return ctx.sendMessage({ ...recordingPanel, flags: MessageFlags.IsComponentsV2 });
+		}
 		const action = requestedAction.toLowerCase();
 		const status = voiceRecordingService.getStatus(ctx.guild.id);
 

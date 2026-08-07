@@ -39,5 +39,5 @@ export async function shardStart(logger: Logger) {
 			restartMode: "gracefulSwitch",
 		}),
 	);
-	manager.spawn({ timeout: -1 });
+	await manager.spawn({ timeout: -1 });
 }

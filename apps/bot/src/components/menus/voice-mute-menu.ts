@@ -19,7 +19,9 @@ export default class MuteMenu extends Menu {
 		if (!room || !(voice instanceof VoiceChannel)) return reply("This is not a managed voice room.");
 		if (room.ownerId !== interaction.user.id) return reply("You are not the owner of this room.");
 
-		const member = voice.members.get(interaction.values[0]);
+		const selectedUserId = interaction.values[0];
+		if (!selectedUserId) return reply("Select a member to mute.");
+		const member = voice.members.get(selectedUserId);
 		if (!member || member.voice.channelId !== voice.id) return reply("The selected member is not in your voice room.");
 
 		try {

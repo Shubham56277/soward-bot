@@ -1,13 +1,9 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 
 export default class WebhooksUpdate extends Event {
-	// Ultra-fast cache
-	private configCache = new Map<string, AntiNuke>();
-	private trustedCache = new Map<string, any>();
 	private webhookUpdateCache = new Map<string, { executorId: string, timestamp: number }>();
 
 	constructor(client: BaseClient) {
@@ -23,13 +19,7 @@ export default class WebhooksUpdate extends Event {
 			const guildId = guild.id;
 
 			try {
-				// Ultra-fast config check with cache
-				let config = this.configCache.get(guildId);
-				if (!config) {
-					config = await this.client.services.antinukes.getConfig(guildId);
-					this.configCache.set(guildId, config);
-					setTimeout(() => this.configCache.delete(guildId), 30000);
-				}
+				const config = await this.client.services.antinukes.getConfig(guildId);
 
 				const actionConfig = config?.webhook?.find(c => c.type === "update");
 				if (!actionConfig?.enabled || !config.enabled) return;
@@ -38,7 +28,10 @@ export default class WebhooksUpdate extends Event {
 				const logs = await guild.fetchAuditLogs({
 					limit: 1,
 					type: AuditLogEvent.WebhookUpdate
-				}).catch(() => null);
+				}).catch(error => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
 
 				if (!logs) return;
 				const log = logs.entries.first();
@@ -56,7 +49,7 @@ export default class WebhooksUpdate extends Event {
 
 				// Cache this webhook update for future checks
 				this.webhookUpdateCache.set(webhookId, { executorId, timestamp: now });
-				setTimeout(() => this.webhookUpdateCache.delete(webhookId), 120000);
+				setTimeout(() => this.webhookUpdateCache.delete(webhookId), 120000).unref();
 
 				// Fast early returns
 				if (executorId === guild.ownerId ||
@@ -74,21 +67,15 @@ export default class WebhooksUpdate extends Event {
 
 	private async handleWebhookUpdate(guild: any, executorId: string, webhookId: string, actionConfig: any): Promise<void> {
 		try {
-			// Ultra-fast trusted user check with cache
-			let trustedSet = this.trustedCache.get(guild.id);
-			if (!trustedSet) {
-				const config = this.configCache.get(guild.id);
-				trustedSet = new Set(config?.trustedUsers?.map(u => u.id) || []);
-				this.trustedCache.set(guild.id, trustedSet);
-				setTimeout(() => this.trustedCache.delete(guild.id), 30000);
-			}
-
-			if (trustedSet.has(executorId)) return;
+			if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
 			// Fast member check using cache first
 			let member = guild.members.cache.get(executorId) as any;
 			if (!member) {
-				member = await guild.members.fetch(executorId).catch(() => null);
+				member = await guild.members.fetch(executorId).catch((error: unknown) => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
 				if (!member) return;
 			}
 

@@ -1,6 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, EmbedBuilder, Guild, GuildMember, Message, MessageFlags, PermissionResolvable, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
-import { CommandOptions } from "../abstract/Command";
-import { constants } from "../config/constants";
+import { randomBytes } from "node:crypto";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, Guild, GuildMember, Message, MessageFlags, PermissionResolvable, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
+import type { CommandOptions } from "../abstract/Command";
 
 export const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -21,7 +21,7 @@ export const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.sli
  * Generate a unique ID
  */
 export function generateId(): string {
-	return require("node:crypto").randomBytes(16).toString("hex");
+	return randomBytes(16).toString("hex");
 }
 
 /**
@@ -46,8 +46,10 @@ export function parseDuration(input: string): number | null {
 	const match = input.match(/^(\d+)(s|m|h|d)$/i);
 	if (!match) return null;
 
-	const value = parseInt(match[1], 10);
-	const unit = match[2].toLowerCase();
+	const valueText = match[1];
+	const unit = match[2]?.toLowerCase();
+	if (!valueText || !unit) return null;
+	const value = parseInt(valueText, 10);
 
 	switch (unit) {
 		case 's': return value * 1000;
@@ -115,7 +117,11 @@ export function shuffle<T>(array: T[]): T[] {
 	const result = [...array];
 	for (let i = result.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
-		[result[i], result[j]] = [result[j], result[i]];
+		const left = result[i];
+		const right = result[j];
+		if (left === undefined || right === undefined) continue;
+		result[i] = right;
+		result[j] = left;
 	}
 	return result;
 }

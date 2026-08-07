@@ -1,8 +1,6 @@
-	import { ApplicationCommandOptionType, TextChannel, ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
+import { ApplicationCommandOptionType, TextChannel, ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import * as reply from "../../utils/reply";
-import { Guild } from "@repo/db";
 import Help from "../utils/Help";
 
 export default class Slowmode extends Command {
@@ -25,55 +23,32 @@ export default class Slowmode extends Command {
 		);
 		const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		if (msg && deleteAfterMs > 0) {
-			setTimeout(() => msg.delete?.catch(() => undefined), deleteAfterMs).unref();
+			setTimeout(() => msg.delete().catch(() => undefined), deleteAfterMs).unref();
 		}
 		return msg;
 	}
 
-	/** Helper to send a permanent V3 embed with slowmode information. */
-	private async sendInfo(ctx: Context) {
-		// Get current slowmode status
-		const currentRateLimit = ctx.channel.rateLimitPerUser || 0;
-		const status = currentRateLimit > 0 ? `**${currentRateLimit}s**` : "Disabled";
-
-		// Build embed content
-		const embedContent = new ContainerBuilder()
-			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-				`**Current Slowmode:** ${status}\n` +
-				`**Channel:** ${ctx.channel.name}\n` +
-				`\n**Command:** \`?slowmode\`\n` +
-				`**Syntax:** \`?slowmode <duration>\` or \`?slowmode disable\`\n` +
-				`\n**Examples:**\n` +
-				`• \`?slowmode 10\` - Set to 10 seconds\n` +
-				`• \`?slowmode 5m\` - Set to 5 minutes\n` +
-				`• \`?slowmode 1h\` - Set to 1 hour\n` +
-				`• \`?slowmode disable\` - Disable slowmode`
-			));
-
-		return ctx.sendMessage({ components: [embedContent], flags: MessageFlags.IsComponentsV2 });
-	}
-
 	/** Parse duration string to seconds. Returns null if invalid. */
-	private parseDuration(input: string, ctx: Context): number | null {
+	private parseDuration(input: string, channelName: string): number | null {
 		const trimmed = input.trim().toLowerCase();
 		// Handle "disable" or "off"
 		if (trimmed === "disable" || trimmed === "off") {
-			console.log(`[Slowmode] Disabling slowmode in ${ctx.channel.name}`);
+			console.log(`[Slowmode] Disabling slowmode in ${channelName}`);
 			return 0;
 		}
 		// Handle plain numbers
 		if (/^\d+$/.test(trimmed)) {
 			const value = parseInt(trimmed, 10);
 			if (value >= 1 && value <= 21_600) {
-				console.log(`[Slowmode] Setting slowmode to ${value}s in ${ctx.channel.name}`);
+				console.log(`[Slowmode] Setting slowmode to ${value}s in ${channelName}`);
 				return value;
 			}
 		}
 		// Handle suffixes: s, m, h
 		const match = trimmed.match(/^(\d+)([smh])$/);
 		if (!match) return null;
-		const value = parseInt(match[1], 10);
-		const unit = match[2];
+		const value = parseInt(match[1]!, 10);
+		const unit = match[2]!;
 		switch (unit) {
 			case "s": return value;
 			case "m": return value * 60;
@@ -138,14 +113,14 @@ export default class Slowmode extends Command {
 		}
 
 		// Parse duration before permission checks
-		const seconds = this.parseDuration(durationStr, ctx);
+		const seconds = this.parseDuration(durationStr, ctx.channel.name);
 		if (seconds === null) {
 			console.error("[Slowmode] Invalid duration format:", durationStr);
 			return this.sendError(ctx, "Choose a valid duration (e.g., `10`, `5m`, `1h`) or `disable` to turn off slowmode.");
 		}
 
 		// --- Permission Checks ---
-		if (!ctx.channel.permissionsFor(ctx.author)?.has("ManageChannels")) {
+		if (!ctx.author || !ctx.channel.permissionsFor(ctx.author)?.has("ManageChannels")) {
 			return this.sendError(ctx, "You need the `Manage Channels` permission to change slowmode.");
 		}
 

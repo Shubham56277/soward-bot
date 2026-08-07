@@ -40,7 +40,7 @@ export default class Nodes extends Command {
 
 		const render = (disabled = false) => ({
 			components: [pages[index]!(), navRow(disabled), linkRow],
-			flags: MessageFlags.IsComponentsV2,
+			flags: MessageFlags.IsComponentsV2 as const,
 		});
 
 		const msg = await ctx.sendMessage(render());

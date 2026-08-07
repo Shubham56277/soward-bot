@@ -36,10 +36,10 @@ fi
 log "Step 2: Node.js"
 if command -v node &>/dev/null; then
   NODE_VER=$(node --version | sed 's/v//' | cut -d. -f1)
-  if [[ "$NODE_VER" -ge 18 ]]; then
+  if [[ "$NODE_VER" -eq 22 ]]; then
     log "Node.js $(node --version) already installed."
   else
-    warn "Node.js v$NODE_VER is too old. Installing v22..."
+    warn "Node.js v$NODE_VER found; Node.js 22 is required. Installing v22..."
     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
     sudo apt-get install -y -qq nodejs
   fi

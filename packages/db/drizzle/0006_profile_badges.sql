@@ -38,11 +38,45 @@ CREATE TABLE IF NOT EXISTS "user_badges" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "user_badges_user_id_badge_key_pk" PRIMARY KEY("user_id", "badge_key"),
 	CONSTRAINT "user_badges_version_check" CHECK ("version" > 0),
-	CONSTRAINT "user_badges_user_id_users_user_id_fk"
-		FOREIGN KEY ("user_id") REFERENCES "users"("user_id") ON DELETE CASCADE ON UPDATE CASCADE,
 	CONSTRAINT "user_badges_badge_key_badge_definitions_key_fk"
 		FOREIGN KEY ("badge_key") REFERENCES "badge_definitions"("key") ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+-- Add the users relationship only when the legacy prerequisite is present. NOT VALID
+-- preserves any pre-existing assignments; it is validated immediately when no orphans exist.
+DO $$
+BEGIN
+	IF to_regclass('public.users') IS NOT NULL
+		AND EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'user_id'
+		)
+	THEN
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_constraint
+			WHERE conrelid = 'public.user_badges'::regclass
+				AND conname = 'user_badges_user_id_users_user_id_fk'
+		) THEN
+			ALTER TABLE "user_badges"
+				ADD CONSTRAINT "user_badges_user_id_users_user_id_fk"
+				FOREIGN KEY ("user_id") REFERENCES "users"("user_id")
+				ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
+		END IF;
+
+		IF EXISTS (
+			SELECT 1 FROM pg_constraint
+			WHERE conrelid = 'public.user_badges'::regclass
+				AND conname = 'user_badges_user_id_users_user_id_fk'
+				AND NOT convalidated
+		) AND NOT EXISTS (
+			SELECT 1 FROM "user_badges" AS assignment
+			LEFT JOIN "users" AS app_user ON app_user."user_id" = assignment."user_id"
+			WHERE app_user."user_id" IS NULL
+		) THEN
+			ALTER TABLE "user_badges" VALIDATE CONSTRAINT "user_badges_user_id_users_user_id_fk";
+		END IF;
+	END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "badge_definitions_active_priority_idx"
 	ON "badge_definitions" ("enabled", "sort_priority");
@@ -51,11 +85,35 @@ CREATE INDEX IF NOT EXISTS "user_badges_user_expiry_idx"
 CREATE INDEX IF NOT EXISTS "user_badges_badge_key_idx"
 	ON "user_badges" ("badge_key");
 
--- Preserve user_profiles.badges and map only exact legacy keys with an existing definition.
--- ON CONFLICT makes this safe if assignments have already been created independently.
-INSERT INTO "user_badges" ("user_id", "badge_key", "grant_metadata")
-SELECT profile."user_id", legacy."badge_key", '{"source":"legacy_user_profiles"}'::jsonb
-FROM "user_profiles" AS profile
-CROSS JOIN LATERAL unnest(profile."badges") AS legacy("badge_key")
-INNER JOIN "badge_definitions" AS definition ON definition."key" = legacy."badge_key"
-ON CONFLICT ("user_id", "badge_key") DO NOTHING;
+-- Keep user_profiles.badges untouched. Backfill exact keys only when both legacy
+-- columns exist, supporting historical text[], JSON arrays, and scalar text.
+DO $$
+BEGIN
+	IF to_regclass('public.user_profiles') IS NULL
+		OR NOT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'user_id'
+		)
+		OR NOT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'badges'
+		)
+	THEN
+		RETURN;
+	END IF;
+
+	EXECUTE $migration$
+		INSERT INTO "user_badges" ("user_id", "badge_key", "grant_metadata")
+		SELECT profile."user_id", legacy."badge_key", '{"source":"legacy_user_profiles"}'::jsonb
+		FROM "user_profiles" AS profile
+		CROSS JOIN LATERAL jsonb_array_elements_text(
+			CASE jsonb_typeof(to_jsonb(profile."badges"))
+				WHEN 'array' THEN to_jsonb(profile."badges")
+				WHEN 'string' THEN jsonb_build_array(to_jsonb(profile."badges"))
+				ELSE '[]'::jsonb
+			END
+		) AS legacy("badge_key")
+		INNER JOIN "badge_definitions" AS definition ON definition."key" = legacy."badge_key"
+		ON CONFLICT ("user_id", "badge_key") DO NOTHING
+	$migration$;
+END $$;

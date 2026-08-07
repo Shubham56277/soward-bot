@@ -1,7 +1,7 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { TextChannel } from "discord.js";
-import type { Track } from "lavalink-client";
+import type { Track, UnresolvedTrack } from "lavalink-client";
 
 // Identifiers that already failed — avoid infinite retry loops
 const recentlyFailed = new Map<string, number>();
@@ -9,7 +9,7 @@ const FAILURE_TTL_MS = 5 * 60_000;
 
 function markFailed(id: string) {
     recentlyFailed.set(id, Date.now());
-    setTimeout(() => recentlyFailed.delete(id), FAILURE_TTL_MS);
+    setTimeout(() => recentlyFailed.delete(id), FAILURE_TTL_MS).unref();
 }
 
 function hasFailed(id: string): boolean {
@@ -19,7 +19,7 @@ function hasFailed(id: string): boolean {
 async function retryWithFallback(
     client: BaseClient,
     player: any,
-    track: Track,
+    track: Track | UnresolvedTrack,
     reason: string,
 ): Promise<void> {
     const guildId: string = player.guildId;
@@ -28,11 +28,12 @@ async function retryWithFallback(
         : undefined;
 
     const id = track.info.identifier;
+    const failureKey = id ?? `${track.info.title}:${track.info.author ?? ""}`;
     const title = track.info.title ?? "Unknown";
     const author = track.info.author ?? "";
 
-    client.logger.warn(`[trackError] "${title}" (${id}) failed — ${reason}`);
-    markFailed(id);
+    client.logger.warn(`[trackError] "${title}" (${failureKey}) failed — ${reason}`);
+    markFailed(failureKey);
 
     // Decide fallback source: always use SoundCloud (only source)
     const fallbackSource = "scsearch";
@@ -46,7 +47,9 @@ async function retryWithFallback(
             track.requester,
         );
 
-        const candidate = res?.tracks?.find((t: Track) => !hasFailed(t.info.identifier));
+        const candidate = res?.tracks?.find(
+            (result: Track | UnresolvedTrack): result is Track => client.manager.utils.isTrack(result) && !hasFailed(result.info.identifier),
+        );
         if (!candidate) throw new Error("No valid fallback track found");
 
         // Insert fallback at front of queue
@@ -72,10 +75,12 @@ export default class TrackError extends Event {
     }
 
     public async execute(): Promise<void> {
-        this.client.manager.on("trackError", async (player, track, payload) => {
+        this.client.manager.on("trackError", (player, track, payload) => {
             if (!track) return;
             const reason = payload?.exception?.message ?? "playback error";
-            await retryWithFallback(this.client, player, track, reason);
+            void retryWithFallback(this.client, player, track, reason).catch((error) => {
+                this.client.logger.error(`[trackError] Recovery failed for guild ${player.guildId}`, error);
+            });
         });
     }
 }

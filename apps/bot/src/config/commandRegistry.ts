@@ -32,6 +32,28 @@ export interface CommandRegistryEntry {
 
 type RegistrySeed = Pick<CommandRegistryEntry, "name" | "category" | "description"> & Partial<Omit<CommandRegistryEntry, "name" | "category" | "description">>;
 
+export function normalizeRegistryKey(value: string): string {
+	return value.trim().toLowerCase();
+}
+
+export function buildUniqueRegistryMap<T>(
+	values: readonly T[],
+	keyOf: (value: T) => string,
+	kind: string,
+): Map<string, T> {
+	const result = new Map<string, T>();
+	for (const value of values) {
+		const rawKey = keyOf(value);
+		const key = normalizeRegistryKey(rawKey);
+		const existing = result.get(key);
+		if (existing) {
+			throw new Error(`Duplicate ${kind} after normalization: "${rawKey}" conflicts with "${keyOf(existing)}"`);
+		}
+		result.set(key, value);
+	}
+	return result;
+}
+
 const entry = (seed: RegistrySeed): CommandRegistryEntry => ({
 	label: seed.name.replace(/-/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
 	implemented: false,
@@ -199,57 +221,69 @@ export const COMMAND_REGISTRY: readonly CommandRegistryEntry[] = seeds.map((seed
 	implemented: implemented.has(seed.name),
 }));
 
-export const COMMAND_REGISTRY_BY_NAME = new Map(COMMAND_REGISTRY.map((command) => [command.name, command]));
+export const COMMAND_REGISTRY_BY_NAME = buildUniqueRegistryMap(COMMAND_REGISTRY, (command) => command.name, "canonical command");
 
 /**
  * Validate the entire command registry for duplicates, invalid names, and limit violations.
  * Returns an array of error strings. Empty array = no errors.
  */
-export function validateCommandRegistry(): string[] {
+export function validateCommandRegistry(registry: readonly CommandRegistryEntry[] = COMMAND_REGISTRY): string[] {
 	const errors: string[] = [];
-	const names = new Set<string>();
-	const nameSet = new Set<string>();
+	const claimedNames = new Map<string, string>();
+	const slashNames = new Set<string>();
 
-	for (const command of COMMAND_REGISTRY) {
-		// Validate name format
+	for (const command of registry) {
+		const normalizedName = normalizeRegistryKey(command.name);
+
 		if (!/^[a-z0-9_-]{1,32}$/.test(command.name)) {
 			errors.push(`Invalid canonical command name: "${command.name}"`);
 		}
 
-		// Check for duplicate names
-		if (names.has(command.name)) {
-			errors.push(`Duplicate canonical command: "${command.name}"`);
+		const existingOwner = claimedNames.get(normalizedName);
+		if (existingOwner) {
+			errors.push(`Command name collision after normalization: "${command.name}" conflicts with "${existingOwner}"`);
+		} else {
+			claimedNames.set(normalizedName, command.name);
 		}
-		names.add(command.name);
 
-		// Validate description - 100 char limit for Discord
 		if (!command.description || command.description.length > 100) {
 			errors.push(`Invalid description for "${command.name}": must be 1-100 characters`);
 		}
 
-		// Check for duplicate names in nameSet (catch re-registrations)
 		if (command.slash) {
-			const lowerName = command.name.toLowerCase();
-			if (nameSet.has(lowerName)) {
+			if (slashNames.has(normalizedName)) {
 				errors.push(`Duplicate root command name after normalization: "${command.name}"`);
 			}
-			nameSet.add(lowerName);
+			slashNames.add(normalizedName);
 		}
-	}
 
-	// Validate subcommand names against known subcommand lists
-	// (basic check that subcommand names are lowercase alphanumeric)
-	for (const command of COMMAND_REGISTRY) {
-		if (command.subcommands) {
-			for (const sub of command.subcommands) {
-				if (!/^[a-z0-9_-]{1,32}$/.test(sub)) {
-					errors.push(`Invalid subcommand name "${sub}" in "${command.name}"`);
-				}
+		for (const alias of command.legacyNames) {
+			const normalizedAlias = normalizeRegistryKey(alias);
+			if (!/^[a-z0-9_-]{1,32}$/.test(alias)) {
+				errors.push(`Invalid legacy alias "${alias}" in "${command.name}"`);
+			}
+			const aliasOwner = claimedNames.get(normalizedAlias);
+			if (aliasOwner) {
+				errors.push(`Command alias collision after normalization: "${alias}" for "${command.name}" conflicts with "${aliasOwner}"`);
+			} else {
+				claimedNames.set(normalizedAlias, command.name);
 			}
 		}
+
+		const subcommands = new Set<string>();
+		for (const subcommand of command.subcommands ?? []) {
+			const normalizedSubcommand = normalizeRegistryKey(subcommand);
+			if (!/^[a-z0-9_-]{1,32}$/.test(subcommand)) {
+				errors.push(`Invalid subcommand name "${subcommand}" in "${command.name}"`);
+			}
+			if (subcommands.has(normalizedSubcommand)) {
+				errors.push(`Duplicate subcommand after normalization: "${subcommand}" in "${command.name}"`);
+			}
+			subcommands.add(normalizedSubcommand);
+		}
 	}
 
-	return errors;
+	return errors.sort();
 }
 
 /**

@@ -75,8 +75,9 @@ else
   fail "Log directory: not writable"
 fi
 
-# PM2 startup configured
-if pm2 startup 2>&1 | grep -qi "already"; then
+# PM2 startup configured (inspect only; health checks must not mutate systemd)
+PM2_UNIT="pm2-$(id -un)"
+if command -v systemctl &>/dev/null && systemctl is-enabled --quiet "$PM2_UNIT" 2>/dev/null; then
   pass "PM2 startup: configured"
 else
   warn "PM2 startup: may not be configured (run: pm2 startup)"

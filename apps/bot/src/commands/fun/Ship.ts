@@ -126,34 +126,29 @@ export default class Ship extends Command {
         try {
             // Get users (handle random selection if only one/none provided)
             const user1 = ctx.author;
+            if (!user1) {
+                return ctx.editMessage("Failed to identify the user running this command.");
+            }
+
             let user2 = ctx.options.getUser("user2", false, 1);
 
             // If only one user provided, pick a random server member
             if (!user2 && ctx.guild) {
                 const members = await ctx.guild.members.fetch();
                 const nonBotMembers = members.filter((m) =>
-                    !m.user.bot && m.user.id !== user1?.id
+                    !m.user.bot && m.user.id !== user1.id
                 );
-                if (nonBotMembers.size > 0) {
-                    user2 = nonBotMembers.random()!.user;
-                } else {
-                    user2 = ctx.author; // Fallback if no other members
-                }
+                user2 = nonBotMembers.random()?.user ?? user1;
             } else if (!user2) {
-                user2 = ctx.author; // Fallback for DMs
+                user2 = user1; // Fallback for DMs
             }
 
             // Calculate compatibility percentage
-            const compatibility = Math.floor(
-                this.calculateCompatibility(user1 ?? ctx.author, user2 ?? ctx.author),
-            );
-            const shipName = this.generateShipName(
-                user1?.username ?? ctx.author.username,
-                user2?.username ?? ctx.author.username,
-            );
+            const compatibility = Math.floor(this.calculateCompatibility(user1, user2));
+            const shipName = this.generateShipName(user1.username, user2.username);
 
             // Generate love canvas
-            const shipImage = await this.generateShipImage(user1 ?? ctx.author, user2 ?? ctx.author);
+            const shipImage = await this.generateShipImage(user1, user2);
 
             // Compatibility message based on percentage
             let message: string;

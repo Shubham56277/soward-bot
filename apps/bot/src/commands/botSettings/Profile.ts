@@ -111,6 +111,7 @@ export default class Profile extends Command {
 			}
 
 			const closeId = `profile_close:${ctx.id}`;
+			const ownerId = ctx.author!.id;
 			const renderControls = (disabled = false) => [profileButtons(avatarUrl, bannerUrl, closeId, disabled)];
 			const response = await ctx.sendMessage({
 				files: [new AttachmentBuilder(image.buffer, { name: profileAttachmentName(user.id, image.format) })],
@@ -118,11 +119,14 @@ export default class Profile extends Command {
 				allowedMentions: NO_MENTIONS,
 			});
 			const message = ctx.isInteraction ? await ctx.interaction!.fetchReply() : response;
-			const collector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: PROFILE_TIMEOUT_MS });
+			const collector = message.createMessageComponentCollector({
+				componentType: ComponentType.Button,
+				time: PROFILE_TIMEOUT_MS,
+				filter: (interaction) => interaction.customId === closeId,
+			});
 
 			collector.on("collect", async (interaction) => {
-				if (interaction.customId !== closeId) return;
-				if (interaction.user.id !== ctx.author?.id) {
+				if (interaction.user.id !== ownerId) {
 					await interaction.reply({
 						content: "Only the person who opened this profile can close it.",
 						flags: MessageFlags.Ephemeral,

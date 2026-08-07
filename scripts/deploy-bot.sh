@@ -17,7 +17,7 @@ git fetch origin main
 git reset --hard origin/main
 
 echo "Installing dependencies..."
-yarn install --frozen-lockfile
+yarn install --frozen-lockfile --non-interactive
 
 echo "Building bot..."
 yarn workspace bot build

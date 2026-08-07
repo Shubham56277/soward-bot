@@ -5,12 +5,12 @@ set -euo pipefail
 
 SERVICE_NAME="soward-bot"
 HEALTH_URL="http://127.0.0.1:${HEALTH_PORT:-9090}/health"
-LOCK_FILE="/tmp/soward-deploy.lock"
+LOCK_DIR="/tmp/soward-deploy.lock"
 MAX_FAILURES=3
 STATE_FILE="/tmp/soward-health-failures"
 
 # Don't interfere with active deployments
-if [[ -d "$LOCK_FILE" ]]; then
+if [[ -d "$LOCK_DIR" ]]; then
     echo "[health] Deployment in progress, skipping health check."
     exit 0
 fi

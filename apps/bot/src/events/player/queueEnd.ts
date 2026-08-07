@@ -10,27 +10,24 @@ export default class queueEnd extends Event {
     }
 
     public async execute(): Promise<void> {
-        this.client.manager.on("queueEnd", async (player, track) => {
-            const guild = this.client.guilds.cache.get(player.guildId);
-            if (!guild) return;
-            if (!player.textChannelId) return;
-         
-            const messageId = player.get<string | undefined>('messageId');
-            if (!messageId) return;
-
-            const channel = guild.channels.cache.get(player.textChannelId!) as TextChannel;
-            if (!channel) return;
-
-            const message = await channel.messages.fetch(messageId).catch(() => {
-                null;
+        this.client.manager.on("queueEnd", (player) => {
+            void this.handleQueueEnd(player).catch((error) => {
+                this.client.logger.error(`[queueEnd] Failed to clear player message for guild ${player.guildId}`, error);
             });
-            if (!message) return;
-
-            if (message.editable) {
-                await message.edit({ components: [] }).catch(() => {
-                    null;
-                });
-            }
         });
+    }
+
+    private async handleQueueEnd(player: any): Promise<void> {
+        const guild = this.client.guilds.cache.get(player.guildId);
+        if (!guild || !player.textChannelId) return;
+
+        const messageId = player.get("messageId") as string | undefined;
+        if (!messageId) return;
+
+        const channel = guild.channels.cache.get(player.textChannelId) as TextChannel | undefined;
+        if (!channel?.isTextBased()) return;
+
+        const message = await channel.messages.fetch(messageId);
+        if (message.editable) await message.edit({ components: [] });
     }
 }

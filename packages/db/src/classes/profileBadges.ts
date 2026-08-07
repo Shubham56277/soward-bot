@@ -51,7 +51,9 @@ const toAssetColumns = (asset: BadgeAsset): { imageUrl: string | null; assetPath
 		} catch {
 			throw new Error("Badge image URL must be a valid HTTPS URL");
 		}
-		if (url.protocol !== "https:") throw new Error("Badge image URL must use HTTPS");
+		if (url.protocol !== "https:" || url.username || url.password || url.port) {
+			throw new Error("Badge image URL must use HTTPS without credentials or a custom port");
+		}
 		return { imageUrl: url.toString(), assetPath: null };
 	}
 
@@ -91,12 +93,20 @@ export class ProfileBadges {
 			const row = created[0];
 			if (!row) throw new Error("Badge definition insert did not return a row");
 
-			// Preserve the legacy array and only map exact keys that now have a definition.
+			// Convert text[], JSON/JSONB arrays, and scalar text/JSON strings through
+			// one representation so legacy production column shapes remain readable.
 			await tx.execute(sql`
 				INSERT INTO ${schema.userBadges} (user_id, badge_key, grant_metadata)
-				SELECT ${schema.userProfiles.userId}, ${input.key}, '{"source":"legacy_user_profiles"}'::jsonb
+				SELECT ${schema.userProfiles.userId}, legacy.badge_key, '{"source":"legacy_user_profiles"}'::jsonb
 				FROM ${schema.userProfiles}
-				WHERE ${input.key} = ANY(${schema.userProfiles.badges})
+				CROSS JOIN LATERAL jsonb_array_elements_text(
+					CASE jsonb_typeof(to_jsonb(${schema.userProfiles.badges}))
+						WHEN 'array' THEN to_jsonb(${schema.userProfiles.badges})
+						WHEN 'string' THEN jsonb_build_array(to_jsonb(${schema.userProfiles.badges}))
+						ELSE '[]'::jsonb
+					END
+				) AS legacy(badge_key)
+				WHERE legacy.badge_key = ${input.key}
 				ON CONFLICT (user_id, badge_key) DO NOTHING
 			`);
 			return row;

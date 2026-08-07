@@ -8,12 +8,12 @@ export class PermissionsPolicy {
 	 * Check if member has moderation permissions
 	 */
 	static isModerator(member: GuildMember): boolean {
-		return member.permissions.has([
+		return member.id === member.guild.ownerId || [
 			'ModerateMembers',
 			'KickMembers',
 			'BanMembers',
 			'ManageGuild',
-		]);
+		].some((permission) => member.permissions.has(permission as any));
 	}
 
 	/**
@@ -35,7 +35,7 @@ export class PermissionsPolicy {
 	 */
 	static async isPremium(member: GuildMember): Promise<boolean> {
 		// Import premium service dynamically
-		const { PremiumService } = await import('../services/premium/premiumService');
+		const { PremiumService } = await import('../services/premium/premiumService.js');
 		return PremiumService.isUserPremium(member.id);
 	}
 

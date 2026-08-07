@@ -134,7 +134,7 @@ export default class Warn extends Command {
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**User Warned**`))
 				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-					`**User:** ${target.user?.username ?? target.username ?? "Unknown"}\n` +
+					`**User:** ${target.user.username}\n` +
 					`**Moderator:** ${ctx.author.username}\n` +
 					`**Reason:** ${reason}\n` +
 					`**Total Warnings:** ${warningsCount}`

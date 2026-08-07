@@ -1,5 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
@@ -90,20 +90,21 @@ export interface AnimatedProfileSources {
 	bannerAnimated: boolean;
 }
 
-export type ProfileFramePainter = (
-	avatarFrame: Buffer | null,
-	bannerFrame: Buffer | null,
-	width: number,
-	height: number,
-) => Promise<Buffer>;
+export type ProfileFramePainter = (avatarFrame: Buffer | null, bannerFrame: Buffer | null, width: number, height: number) => Promise<Buffer>;
 
 export type ProfileAnimationFallbackReason =
-	| "not_animated" | "saturated" | "queue_timeout" | "lease_unavailable" | "timeout"
-	| "codec_unavailable" | "decode_failed" | "encode_failed" | "invalid_rgba" | "oversize";
+	| "not_animated"
+	| "saturated"
+	| "queue_timeout"
+	| "lease_unavailable"
+	| "timeout"
+	| "codec_unavailable"
+	| "decode_failed"
+	| "encode_failed"
+	| "invalid_rgba"
+	| "oversize";
 
-export type ProfileAnimationResult =
-	| { ok: true; buffer: Buffer; profile: AnimationProfile }
-	| { ok: false; reason: ProfileAnimationFallbackReason; transient: boolean };
+export type ProfileAnimationResult = { ok: true; buffer: Buffer; profile: AnimationProfile } | { ok: false; reason: ProfileAnimationFallbackReason; transient: boolean };
 
 export type AcquireAnimationLease = () => Promise<(() => Promise<void>) | null>;
 
@@ -127,30 +128,58 @@ function remaining(deadline: number, maximum = STAGE_TIMEOUT_MS): number {
 	return Math.max(1, Math.min(maximum, deadline - Date.now()));
 }
 
-async function waitForClose(child: ChildProcessWithoutNullStreams): Promise<number | null> {
+async function waitForClose(child: ChildProcessWithoutNullStreams, timeoutMs?: number): Promise<number | null> {
 	if (child.exitCode !== null || child.signalCode !== null) return child.exitCode;
-	return new Promise((resolve) => child.once("close", (code) => resolve(code)));
+	return new Promise((resolve) => {
+		let timer: NodeJS.Timeout | undefined;
+		const finish = (code: number | null): void => {
+			child.off("close", onClose);
+			child.off("error", onError);
+			if (timer) clearTimeout(timer);
+			resolve(code);
+		};
+		const onClose = (code: number | null): void => finish(code);
+		const onError = (): void => finish(null);
+		child.once("close", onClose);
+		child.once("error", onError);
+		if (timeoutMs !== undefined) {
+			timer = setTimeout(() => finish(null), timeoutMs);
+			timer.unref();
+		}
+	});
 }
 
 async function stopChild(child: ChildProcessWithoutNullStreams): Promise<void> {
 	if (child.exitCode !== null || child.signalCode !== null) return;
-	child.kill("SIGTERM");
-	await Promise.race([
-		waitForClose(child).then(() => undefined),
-		new Promise<void>((resolve) => {
-			const timer = setTimeout(resolve, KILL_GRACE_MS);
-			timer.unref();
-		}),
-	]);
-	if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-	await waitForClose(child);
+	try {
+		child.kill("SIGTERM");
+	} catch {
+		return;
+	}
+	await waitForClose(child, KILL_GRACE_MS);
+	if (child.exitCode === null && child.signalCode === null) {
+		try {
+			child.kill("SIGKILL");
+		} catch {
+			return;
+		}
+		await waitForClose(child, KILL_GRACE_MS);
+	}
 }
 
 function spawnFfmpeg(args: string[], children: Set<ChildProcessWithoutNullStreams>): ChildProcessWithoutNullStreams | null {
 	if (!ffmpegPath) return null;
 	const child = spawn(ffmpegPath, args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
 	children.add(child);
-	child.once("close", () => children.delete(child));
+	const remove = (): void => {
+		children.delete(child);
+	};
+	// A spawn failure must always have an error listener or it can terminate the process.
+	child.once("error", remove);
+	child.once("close", () => {
+		child.off("error", remove);
+		remove();
+	});
 	return child;
 }
 
@@ -168,22 +197,48 @@ async function decodeFrames(
 	const source = path.join(directory, `${name}.gif`);
 	const pattern = path.join(directory, `${name}-%03d.png`);
 	await writeFile(source, buffer, { mode: 0o600 });
-	const child = spawnFfmpeg([
-		"-nostdin", "-hide_banner", "-loglevel", "error",
-		"-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1",
-		"-stream_loop", "-1", "-i", source,
-		"-t", String(profile.duration),
-		"-vf", `scale=1024:1024:force_original_aspect_ratio=decrease,fps=${profile.fps}`,
-		"-frames:v", String(profile.frames), "-vsync", "0", "-y", pattern,
-	], children);
+	const child = spawnFfmpeg(
+		[
+			"-nostdin",
+			"-hide_banner",
+			"-loglevel",
+			"error",
+			"-threads",
+			"1",
+			"-filter_threads",
+			"1",
+			"-filter_complex_threads",
+			"1",
+			"-stream_loop",
+			"-1",
+			"-i",
+			source,
+			"-t",
+			String(profile.duration),
+			"-vf",
+			`scale=1024:1024:force_original_aspect_ratio=decrease,fps=${profile.fps}`,
+			"-frames:v",
+			String(profile.frames),
+			"-vsync",
+			"0",
+			"-y",
+			pattern,
+		],
+		children,
+	);
 	if (!child) return { ok: false, reason: "failed" };
 	child.stdin.end();
 	let stderr = "";
-	child.stderr.on("data", (chunk: Buffer) => { stderr = `${stderr}${chunk.toString()}`.slice(-STDERR_LIMIT); });
+	child.stderr.on("data", (chunk: Buffer) => {
+		stderr = `${stderr}${chunk.toString()}`.slice(-STDERR_LIMIT);
+	});
 	child.stdout.resume();
 	const timeout = remaining(deadline);
 	let timedOut = false;
-	const timer = setTimeout(() => { timedOut = true; void stopChild(child); }, timeout);
+	const timer = setTimeout(() => {
+		timedOut = true;
+		void stopChild(child);
+	}, timeout);
 	timer.unref();
 	const code = await waitForClose(child).catch(() => null);
 	clearTimeout(timer);
@@ -230,15 +285,38 @@ async function encodeRawGif(
 	children: Set<ChildProcessWithoutNullStreams>,
 ): Promise<StageResult<Buffer>> {
 	if (deadline <= Date.now()) return { ok: false, reason: "timeout" };
-	const child = spawnFfmpeg([
-		"-nostdin", "-hide_banner", "-loglevel", "error",
-		"-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1",
-		"-f", "rawvideo", "-pixel_format", "rgba",
-		"-video_size", `${profile.width}x${profile.height}`,
-		"-framerate", String(profile.fps), "-i", "pipe:0",
-		"-filter_complex", `[0:v]split[a][b];[a]palettegen=max_colors=${profile.colors}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle`,
-		"-loop", "0", "-f", "gif", "pipe:1",
-	], children);
+	const child = spawnFfmpeg(
+		[
+			"-nostdin",
+			"-hide_banner",
+			"-loglevel",
+			"error",
+			"-threads",
+			"1",
+			"-filter_threads",
+			"1",
+			"-filter_complex_threads",
+			"1",
+			"-f",
+			"rawvideo",
+			"-pixel_format",
+			"rgba",
+			"-video_size",
+			`${profile.width}x${profile.height}`,
+			"-framerate",
+			String(profile.fps),
+			"-i",
+			"pipe:0",
+			"-filter_complex",
+			`[0:v]split[a][b];[a]palettegen=max_colors=${profile.colors}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle`,
+			"-loop",
+			"0",
+			"-f",
+			"gif",
+			"pipe:1",
+		],
+		children,
+	);
 	if (!child) return { ok: false, reason: "failed" };
 	let stderr = "";
 	const output: Buffer[] = [];
@@ -246,7 +324,9 @@ async function encodeRawGif(
 	let oversized = false;
 	let timedOut = false;
 	let streamFailed = false;
-	child.stderr.on("data", (chunk: Buffer) => { stderr = `${stderr}${chunk.toString()}`.slice(-STDERR_LIMIT); });
+	child.stderr.on("data", (chunk: Buffer) => {
+		stderr = `${stderr}${chunk.toString()}`.slice(-STDERR_LIMIT);
+	});
 	child.stdout.on("data", (chunk: Buffer) => {
 		if (oversized) return;
 		const remainingBytes = outputLimit + 1 - outputBytes;
@@ -260,19 +340,25 @@ async function encodeRawGif(
 			void stopChild(child);
 		}
 	});
-	child.stdin.on("error", () => { streamFailed = true; });
-	const timer = setTimeout(() => { timedOut = true; void stopChild(child); }, remaining(deadline));
+	child.stdin.on("error", () => {
+		streamFailed = true;
+	});
+	const timer = setTimeout(() => {
+		timedOut = true;
+		void stopChild(child);
+	}, remaining(deadline));
 	timer.unref();
 	try {
-		let count = 0;
 		for await (const frame of frames) {
 			if (timedOut || oversized || child.exitCode !== null || deadline <= Date.now()) break;
 			if (frame.length !== expectedRgbaBytes(profile.width, profile.height)) {
 				await stopChild(child);
 				return { ok: false, reason: "invalid_rgba" };
 			}
-			if (!(await writeWithBackpressure(child, frame))) { streamFailed = true; break; }
-			count += 1;
+			if (!(await writeWithBackpressure(child, frame))) {
+				streamFailed = true;
+				break;
+			}
 		}
 		if (!child.stdin.destroyed) child.stdin.end();
 		const code = await waitForClose(child).catch(() => null);
@@ -280,9 +366,7 @@ async function encodeRawGif(
 		if (oversized) return { ok: false, reason: "oversize" };
 		if (streamFailed || code !== 0) return { ok: false, reason: "failed" };
 		const value = Buffer.concat(output, outputBytes);
-		return value.length > 0 && value.length <= outputLimit
-			? { ok: true, value }
-			: { ok: false, reason: value.length > outputLimit ? "oversize" : "failed" };
+		return value.length > 0 && value.length <= outputLimit ? { ok: true, value } : { ok: false, reason: value.length > outputLimit ? "oversize" : "failed" };
 	} finally {
 		clearTimeout(timer);
 		if (child.exitCode === null && child.signalCode === null) await stopChild(child);
@@ -297,19 +381,11 @@ function fallback(reason: ProfileAnimationFallbackReason): ProfileAnimationResul
 	};
 }
 
-function frameGenerator(
-	profile: AnimationProfile,
-	primary: AnimationProfile,
-	avatarFrames: readonly string[],
-	bannerFrames: readonly string[],
-	paint: ProfileFramePainter,
-): AsyncIterable<Buffer> {
+function frameGenerator(profile: AnimationProfile, primary: AnimationProfile, avatarFrames: readonly string[], bannerFrames: readonly string[], paint: ProfileFramePainter): AsyncIterable<Buffer> {
 	return {
 		async *[Symbol.asyncIterator]() {
 			for (let index = 0; index < profile.frames; index += 1) {
-				const primaryIndex = profile === primary
-					? index
-					: selectTimelineFrameIndex(index, profile.fps, primary.fps, primary.frames);
+				const primaryIndex = profile === primary ? index : selectTimelineFrameIndex(index, profile.fps, primary.fps, primary.frames);
 				const [avatar, banner] = await Promise.all([
 					avatarFrames.length ? readFile(avatarFrames[Math.min(primaryIndex, avatarFrames.length - 1)]!) : Promise.resolve(null),
 					bannerFrames.length ? readFile(bannerFrames[Math.min(primaryIndex, bannerFrames.length - 1)]!) : Promise.resolve(null),
@@ -339,7 +415,11 @@ export async function composeAnimatedProfile(
 	const deadline = Date.now() + JOB_DEADLINE_MS;
 	try {
 		if (acquireLease) {
-			try { releaseLease = await acquireLease(); } catch { return fallback("lease_unavailable"); }
+			try {
+				releaseLease = await acquireLease();
+			} catch {
+				return fallback("lease_unavailable");
+			}
 			if (!releaseLease) return fallback("lease_unavailable");
 		}
 		root = await mkdtemp(path.join(tmpdir(), "elfaria-profile-"));
@@ -350,19 +430,14 @@ export async function composeAnimatedProfile(
 			decodeFrames(root, "banner", sources.banner, bannerMoves, primary, deadline, children),
 		]);
 		if (!avatarResult.ok || !bannerResult.ok) {
-			return fallback(avatarResult.reason === "timeout" || bannerResult.reason === "timeout" ? "timeout" : "decode_failed");
+			const decodeTimedOut = (!avatarResult.ok && avatarResult.reason === "timeout") || (!bannerResult.ok && bannerResult.reason === "timeout");
+			return fallback(decodeTimedOut ? "timeout" : "decode_failed");
 		}
 		if ((avatarMoves && !avatarResult.value.length) || (bannerMoves && !bannerResult.value.length)) return fallback("decode_failed");
 		let lastFailure: StageFailure = "failed";
 		for (const profile of [primary, retry]) {
 			if (deadline <= Date.now()) return fallback("timeout");
-			const result = await encodeRawGif(
-				profile,
-				frameGenerator(profile, primary, avatarResult.value, bannerResult.value, paint),
-				outputLimit,
-				deadline,
-				children,
-			);
+			const result = await encodeRawGif(profile, frameGenerator(profile, primary, avatarResult.value, bannerResult.value, paint), outputLimit, deadline, children);
 			if (result.ok) return { ok: true, buffer: result.value, profile };
 			lastFailure = result.reason;
 			if (result.reason === "timeout" || result.reason === "invalid_rgba") break;
@@ -376,7 +451,13 @@ export async function composeAnimatedProfile(
 	} finally {
 		await Promise.all([...children].map((child) => stopChild(child).catch(() => undefined)));
 		if (root) await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
-		if (releaseLease) await releaseLease().catch(() => undefined);
-		releaseLocal();
+		try {
+			if (releaseLease)
+				await Promise.resolve()
+					.then(releaseLease)
+					.catch(() => undefined);
+		} finally {
+			releaseLocal();
+		}
 	}
 }

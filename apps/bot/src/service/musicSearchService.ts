@@ -14,11 +14,10 @@
 
 import { createHash } from "node:crypto";
 import type { Redis } from "ioredis";
-import type { Player, Track, SearchResult } from "lavalink-client";
+import type { Player, Track } from "lavalink-client";
 
 // ─── Cache TTL ───────────────────────────────────────────────────────────────
 const CACHE_TTL_SECONDS = 20 * 60; // 20 minutes for successful resolutions
-const CACHE_MAX_ENTRIES = 500;     // bounded — entries are evicted after TTL by Redis
 
 // ─── Noise words stripped from titles during comparison only ─────────────────
 // Artist names, movie names, and version names are NEVER stripped.
@@ -542,14 +541,18 @@ export class MusicSearchService {
     ): Promise<Track[]> {
         const results: Track[] = [];
 
-        const searchAndCollect = async (query: string, source?: string): Promise<void> => {
+        const searchAndCollect = async (
+            query: string,
+            source?: "ytsearch" | "ytmsearch" | "scsearch",
+        ): Promise<void> => {
             try {
-                const res: SearchResult = source
+                const res = source
                     ? await this.player.search({ query, source }, requester)
                     : await this.player.search({ query }, requester);
 
-                if (res?.tracks?.length) {
-                    const top = res.tracks.slice(0, 5);
+                const resolvedTracks = res?.tracks?.filter((track) => this.player.LavalinkManager.utils.isTrack(track)) ?? [];
+                if (resolvedTracks.length) {
+                    const top = resolvedTracks.slice(0, 5);
                     results.push(...top);
                     this.logger.debug(`[music-search] provider="${source ?? "auto"}" query="${query}" returned ${top.length} tracks`);
                 }

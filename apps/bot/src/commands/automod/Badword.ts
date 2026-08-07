@@ -1,11 +1,9 @@
 import Command from "../../abstract/Command";
-import BaseClient from "../../base/Client";
 import Context from "../../lib/Context";
 import { ButtonBuilder, ActionRowBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
 import Help from "../utils/Help";
 
 export default class BadWord extends Command {
-    client!: BaseClient
     constructor() {
         super({
             name: 'badword',
@@ -69,7 +67,7 @@ export default class BadWord extends Command {
         });
     }
 
-    private createEmbed(title: string, description: string, _color?: number, extraFields: { name: string; value: string }[] = []): { components: ContainerBuilder[]; flags: MessageFlags } {
+    private createEmbed(title: string, description: string, _color?: number, extraFields: { name: string; value: string }[] = []): { components: ContainerBuilder[]; flags: MessageFlags.IsComponentsV2 } {
         const container = new ContainerBuilder()
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
@@ -101,7 +99,6 @@ export default class BadWord extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        this.client = ctx.client;
         const subCommand = ctx.isInteraction ? ctx.options.getSubCommand() : ctx.args[0]?.toLowerCase();
 
         if (!subCommand) {
