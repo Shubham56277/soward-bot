@@ -73,7 +73,7 @@ export class HierarchyPolicy {
 	 */
 	static async isProtected(target: GuildMember): Promise<boolean> {
 		// Import AntiNuke service dynamically to avoid circular dependencies
-		const { AntiNukeService } = await import('../services/security/antiNukeService');
+		const { AntiNukeService } = await import('../services/security/antiNukeService.js');
 		return AntiNukeService.isTrusted(target.guild.id, target.id);
 	}
 

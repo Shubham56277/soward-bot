@@ -3,7 +3,7 @@ name: Deploy Bot to Production
 on:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -11,7 +11,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+
+      - name: Enable the declared Yarn version
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          test "$(yarn --version)" = "1.22.22"
+
+      - name: Install dependencies reproducibly
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Validate workspaces
+        run: yarn validate
+
   deploy:
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -23,14 +52,31 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          port: 22
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
           command_timeout: 5m
           script: |
-            cd ~/soward-bot
-            git fetch origin master
-            git reset --hard origin/master
-            yarn install --frozen-lockfile
-            yarn workspace bot build
+            set -Eeuo pipefail
+            cd "$HOME/soward-bot"
+            test "$(node -p "process.versions.node.split('.')[0]")" = "22"
+            test "$(yarn --version)" = "1.22.22"
+            git fetch origin main
+            git reset --hard origin/main
+            yarn install --frozen-lockfile --non-interactive
+            yarn build
+            test -f apps/bot/dist/index.js
             sudo systemctl restart soward-bot
-            sleep 8
-            curl -sf http://127.0.0.1:9090/health | jq -r '.status' || echo "starting"
+
+            ready=false
+            for attempt in {1..20}; do
+              if curl -fsS --max-time 5 http://127.0.0.1:9090/ready > /dev/null; then
+                ready=true
+                break
+              fi
+              sleep 3
+            done
+
+            if [[ "$ready" != "true" ]]; then
+              curl -sS --max-time 5 http://127.0.0.1:9090/health || true
+              echo "Bot did not become ready after restart" >&2
+              exit 1
+            fi

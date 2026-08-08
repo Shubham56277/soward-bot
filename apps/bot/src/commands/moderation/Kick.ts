@@ -1,4 +1,4 @@
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -95,35 +95,28 @@ export default class Kick extends Command {
 
         try {
             if (!silent && target) {
-                try {
-                    const dmEmbed = new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle(`You've been removed from ${ctx.guild.name}`)
-                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.toString() ?? "Unknown"}`)
-                        .setTimestamp();
-                    await target.send({ embeds: [dmEmbed] });
-                } catch {
-                    // User has DMs closed
-                }
+                await target.send(`**You've been removed from ${ctx.guild.name}**\nReason: ${reason}\nModerator: ${ctx.author?.username ?? "Unknown"}`).catch(() => {});
             }
 
             await ctx.guild.members.kick(targetUser, reason);
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**👢 Member Removed**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Removed**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**User:** ${targetUser.toString()}\n` +
-                    `**Moderator:** ${ctx.author?.toString() ?? "Unknown"}\n` +
+                    `**User:** ${targetUser.username}\n` +
+                    `**Moderator:** ${ctx.author?.username ?? "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${targetUser.id}`));
 
-            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+            return msg;
         } catch (error) {
             console.error("Kick Error:", error);
-            return await ctx.sendMessage(this.msg("<:Cross:1375519752746958858> An error occurred while trying to remove this user."));
+            return await ctx.sendMessage(this.msg("An error occurred while trying to remove this user."));
         }
     }
 }

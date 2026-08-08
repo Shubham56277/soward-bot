@@ -1,7 +1,8 @@
 import { MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { Giveaway, Guild } from "@repo/db";
+import { Giveaway } from "@repo/db";
+import { hasGiveawayPerms } from "../../utils/giveawayPerms";
 
 export default class GResumeCommand extends Command {
     constructor() {
@@ -34,12 +35,8 @@ export default class GResumeCommand extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const guild = await Guild.get(ctx.guild!.id!);
-        const gManagerRole = ctx.guild?.roles.cache.get(guild.giveawaysManagerRole!);
-        if (gManagerRole && !ctx.member?.roles.cache.has(gManagerRole.id) || !ctx.member?.permissions.has("ManageGuild")) {
-            return ctx.sendMessage({
-                content: "You need to be a giveaways manager to use this command",
-            });
+        if (!(await hasGiveawayPerms(ctx.member as any, ctx.guild!.id))) {
+            return ctx.sendMessage("You need to be a giveaway manager or have Manage Server permission to use this command.");
         }
         const messageId = ctx.options.getString("message", true);
         const giveaway = await Giveaway.get(ctx.guild!.id, messageId);

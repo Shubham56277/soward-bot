@@ -1,7 +1,23 @@
-import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, MessageFlags } from "discord.js";
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import { IsUrl } from "../../utils/helper";
+
+/** Build a Components V2 container with a title and a media gallery preview image. */
+function buildImagePreview(title: string, imageUrl: string, footer?: string): ContainerBuilder {
+	const container = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${title}**`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl)));
+
+	if (footer) {
+		container
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${footer}`));
+	}
+
+	return container;
+}
 
 export default class Addemoji extends Command {
 	constructor() {
@@ -81,11 +97,8 @@ export default class Addemoji extends Command {
 			// from url
 			if (sticker) {
 
-				const getEmbed = (added = false) =>
-					new EmbedBuilder()
-						.setTitle(added ? "<:Tick:1375519268292264012> Emoji Added!" : "Add This Emoji?")
-						.setColor(ctx.client.config.colors.main)
-						.setImage(input)
+				const getContainer = (added = false) =>
+					buildImagePreview(added ? "Emoji Added!" : "Add This Emoji?", input);
 
 				const getButtons = (disabled = false) =>
 					new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -94,8 +107,8 @@ export default class Addemoji extends Command {
 					);
 
 				const message = await ctx.editOrReply({
-					embeds: [getEmbed()],
-					components: [getButtons()],
+					components: [getContainer(), getButtons()],
+					flags: MessageFlags.IsComponentsV2,
 				});
 
 				const collector = message.createMessageComponentCollector({
@@ -108,15 +121,14 @@ export default class Addemoji extends Command {
 					if (i.customId === "add") {
 						const emoji = await ctx.guild.emojis.create({ name: "emoji", attachment: input });
 						return i.update({
-							embeds: [
-								new EmbedBuilder()
-									.setTitle("<:Tick:1375519268292264012> Emoji Added!")
-									.setColor(ctx.client.config.colors.main)
-									.setImage(emoji.imageURL())
-									.setFooter({ text: `Requested by ${ctx.author?.tag}`, iconURL: ctx.author?.displayAvatarURL() })
-									.setTimestamp(),
+							components: [
+								buildImagePreview(
+									"Emoji Added!",
+									emoji.imageURL() ?? input,
+									`Requested by ${ctx.author?.tag}`,
+								),
 							],
-							components: [],
+							flags: MessageFlags.IsComponentsV2,
 						});
 					} if (i.customId === "add_sticker") {
 						let buffer: ArrayBuffer | null = null;
@@ -145,33 +157,28 @@ export default class Addemoji extends Command {
 							tags: sticker.tags ?? ":liked:",
 						});
 						return i.update({
-							embeds: [
-								new EmbedBuilder()
-									.setTitle("<:Tick:1375519268292264012> Sticker Added!")
-									.setColor(ctx.client.config.colors.main)
-									.setImage(sticke.url)
-									.setFooter({ text: `Requested by ${ctx.author?.tag}`, iconURL: ctx.author?.displayAvatarURL() })
-									.setTimestamp(),
+							components: [
+								buildImagePreview(
+									"Sticker Added!",
+									sticke.url,
+									`Requested by ${ctx.author?.tag}`,
+								),
 							],
-							components: [],
+							flags: MessageFlags.IsComponentsV2,
 						});
 					}
 				});
 
 				collector.on("end", () => {
-					message.edit({ components: [getButtons(true)] }).catch(() => null);
+					message.edit({ components: [getContainer(), getButtons(true)] }).catch(() => null);
 				});
 			}
 			const emoji = await ctx.guild.emojis.create({ name: "emoji", attachment: input });
 			return ctx.editOrReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle("Emoji Added!")
-						.setColor(ctx.client.config.colors.main)
-						.setImage(emoji.imageURL())
-						.setFooter({ text: `Requested by ${ctx.author?.tag}`, iconURL: ctx.author?.displayAvatarURL() })
-						.setTimestamp(),
+				components: [
+					buildImagePreview("Emoji Added!", emoji.imageURL() ?? input, `Requested by ${ctx.author?.tag}`),
 				],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 
@@ -191,12 +198,12 @@ export default class Addemoji extends Command {
 			})
 			.filter(Boolean) as { id: string; name: string; animated: string; url: string }[];
 
-		const getEmbed = (added = false) =>
-			new EmbedBuilder()
-				.setTitle(added ? "<:Tick:1375519268292264012> Emoji Added!" : "Add This Emoji?")
-				.setColor(ctx.client.config.colors.main)
-				.setImage(emojis[index]?.url ?? "")
-				.setFooter({ text: `Emoji ${index + 1} of ${emojis.length}` });
+		const getContainer = (added = false) =>
+			buildImagePreview(
+				added ? "Emoji Added!" : "Add This Emoji?",
+				emojis[index]?.url ?? "",
+				`Emoji ${index + 1} of ${emojis.length}`,
+			);
 
 		const getButtons = (disabled = false) =>
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -215,8 +222,8 @@ export default class Addemoji extends Command {
 			);
 
 		const message = await ctx.editOrReply({
-			embeds: [getEmbed()],
-			components: [getButtons()],
+			components: [getContainer(), getButtons()],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		const collector = message.createMessageComponentCollector({
@@ -238,15 +245,19 @@ export default class Addemoji extends Command {
 				try {
 					await ctx.guild.emojis.create({ name: emojiName, attachment: current?.url || "" });
 					await message.edit({
-						content: `Emoji \`${emojiName}\` added successfully!`,
-						embeds: [getEmbed(true)],
-						components: [getButtons()],
+						components: [
+							buildImagePreview(`Emoji \`${emojiName}\` added successfully!`, current?.url ?? ""),
+							getButtons(),
+						],
 					});
 				} catch (_err) {
 					await message.edit({
-						content: null,
-						embeds: [new EmbedBuilder().setColor("Red").setDescription(`<:Cross:1375519752746958858> Failed to add emoji \`${emojiName}\``)],
-						components: [getButtons()],
+						components: [
+							new ContainerBuilder().addTextDisplayComponents(
+								new TextDisplayBuilder().setContent(`Failed to add emoji \`${emojiName}\``),
+							),
+							getButtons(),
+						],
 					});
 				}
 				return;
@@ -258,28 +269,31 @@ export default class Addemoji extends Command {
 				try {
 					await ctx.guild.stickers.create({ name: emojiName, tags: emojiName, file: file });
 					await message.edit({
-						content: `Sticker \`${emojiName}\` added successfully!`,
-						embeds: [getEmbed(true)],
-						components: [getButtons()],
+						components: [
+							buildImagePreview(`Sticker \`${emojiName}\` added successfully!`, current?.url ?? ""),
+							getButtons(),
+						],
 					});
 				} catch (_err) {
 					await message.edit({
-						content: null,
-						embeds: [new EmbedBuilder().setColor("Red").setDescription(`<:Cross:1375519752746958858> Failed to add sticker \`${emojiName}\``)],
-						components: [getButtons()],
+						components: [
+							new ContainerBuilder().addTextDisplayComponents(
+								new TextDisplayBuilder().setContent(`Failed to add sticker \`${emojiName}\``),
+							),
+							getButtons(),
+						],
 					});
 				}
 				return;
 			}
 
 			await message.edit({
-				embeds: [getEmbed()],
-				components: [getButtons()],
+				components: [getContainer(), getButtons()],
 			});
 		});
 
 		collector.on("end", () => {
-			message.edit({ components: [getButtons(true)] }).catch(() => null);
+			message.edit({ components: [getContainer(), getButtons(true)] }).catch(() => null);
 		});
 	}
 }

@@ -7,21 +7,25 @@ import path from "node:path";
 import fs from "node:fs";
 import { createRedis, FrameWorkClient } from "@repo/framework";
 import { constants } from "../config/constants";
-import { rest } from "../bot";
 import { env } from "@repo/env";
 import { Redis } from "ioredis";
 import { Services } from "../service";
 import { ButtonOptions } from "../abstract/Button";
 import { MenuOptions } from "../abstract/Menu";
-import { installUiPolicy } from "../utils/uiPolicy";
 import { createHash } from "node:crypto";
 import { AiService } from "../service/aiService";
+import { KnowledgeBase } from "../service/knowledgeBase";
+import { RagService } from "../service/ragService";
+import { AnalyticsRecorder } from "../service/analyticsRecorder";
+import { ResponseFormatter } from "../service/responseFormatter";
+import { HELP_CATEGORIES } from "../config/helpArchitecture";
 import { CommandCooldownService } from "../service/commandCooldownService";
 import { CommandDeprecationService } from "../service/commandDeprecationService";
-import { validateCommandRegistry, getRootCommandCount, printRegistrySummary } from "../config/commandRegistry";
+import { validateCommandRegistry, getRootCommandCount, normalizeRegistryKey, printRegistrySummary } from "../config/commandRegistry";
 import { validateLegacyCommandMap } from "../config/legacyCommandMap";
-
-const backoffDelays = new Map();
+import { uninstallHotReloadHandlers } from "../modules/hotReload";
+import { stopMusicProgressUpdater } from "../utils/musicProgressUpdater";
+import { initQueues, shutdownQueues } from "../queues";
 
 function calculateBackoff(retryCount: number, baseDelay = 1000, maxDelay = 30000) {
 	const exponentialDelay = Math.min(maxDelay, baseDelay * 2 ** retryCount);
@@ -42,12 +46,15 @@ export default class BaseClient extends FrameWorkClient {
 	public redis!: Redis;
 	public services!: Services;
 	public ai!: AiService;
+	public rag!: RagService;
 	public commandCooldowns!: CommandCooldownService;
 	public commandDeprecations!: CommandDeprecationService;
 	private body: ApplicationCommandDataResolvable[] = [];
+	private readonly backoffDelays = new Map<string, number>();
+	private readonly rateLimitResetTimers = new Map<string, NodeJS.Timeout>();
+	private rateLimitListener: ((info: any) => void) | undefined;
 	constructor() {
 		console.log("[startup][BaseClient] constructor begin");
-		installUiPolicy();
 		super({
 			intents: 53608447,
 			shards: getInfo().SHARD_LIST,
@@ -60,7 +67,7 @@ export default class BaseClient extends FrameWorkClient {
 					{
 						type: ActivityType.Custom,
 						name: "Custom Status",
-						state: "🚀 Initializing systems...",
+						state: "Initializing systems...",
 					},
 				],
 			},
@@ -96,73 +103,135 @@ export default class BaseClient extends FrameWorkClient {
 		this.logger.start("[startup] loadComponents begin");
 		this.loadComponents();
 		this.logger.success("[startup] loadComponents complete");
-		this.logger.start("[startup] client.login begin");
-		await this.login(token);
-		this.logger.success("[startup] client.login complete");
-		this.on('ready', () => {
-			this.logger.success('[startup] client ready');
+		let knowledgeBaseRebuilt = false;
+		const rebuildKnowledgeBase = (): void => {
+			if (knowledgeBaseRebuilt || !this.rag) return;
+			const kb = (this.rag as any).kb;
+			if (!kb) return;
+			knowledgeBaseRebuilt = true;
+			kb.rebuild(this.commands, HELP_CATEGORIES);
+			this.logger.success(`[startup] Knowledge Base rebuilt: ${kb.size} documents indexed`);
+		};
+		this.once("clientReady", () => {
+			this.logger.success("[startup] client ready");
+			rebuildKnowledgeBase();
 		});
+
 		this.logger.start("[startup] Services init begin");
 		this.services = new Services(this);
 		this.logger.success("[startup] Services init complete");
+
+		this.logger.start("[startup] KnowledgeBase + RagService init begin");
+		const analyticsRecorder = new AnalyticsRecorder(this.redis);
+		const kb = new KnowledgeBase(this.redis);
+		const formatter = new ResponseFormatter();
+		this.rag = new RagService(this.ai, kb, this.redis, analyticsRecorder, formatter);
+		this.logger.success("[startup] KnowledgeBase + RagService init complete");
+
+		this.logger.start("[startup] AiClusterManager init begin");
+		const { AiClusterManager } = require("../service/aiClusterManager");
+		(this as any).aiCluster = new AiClusterManager(this.redis);
+		this.ai.setCluster((this as any).aiCluster);
+		this.logger.success(`[startup] AiClusterManager init complete: ${(this as any).aiCluster.totalNodes} nodes`);
 		
 		this.logger.start("[startup] rateLimit listener registration begin");
-		this.rest.on('rateLimited', async (info) => {
+		this.rateLimitListener = (info): void => {
 			const { method, route, global, retryAfter: timeout } = info;
-
-			const key = global ? 'global' : route;
-
-			const retryCount = backoffDelays.get(key) || 0;
+			const key = global ? "global" : route;
+			const retryCount = this.backoffDelays.get(key) ?? 0;
 			const delay = calculateBackoff(retryCount);
 
-			this.logger.debug(`[RateLimit] ${global ? 'Global' : route} hit! Method: ${method}`);
+			this.logger.debug(`[RateLimit] ${global ? "Global" : route} hit! Method: ${method}`);
 			this.logger.debug(`→ Original Timeout: ${timeout}ms | Applying Backoff: ${delay.toFixed(0)}ms`);
+			this.backoffDelays.set(key, retryCount + 1);
 
-			backoffDelays.set(key, retryCount + 1);
-
-			await new Promise(resolve => setTimeout(resolve, delay));
-
-			setTimeout(() => backoffDelays.delete(key), 60_000);
-		});
+			const previousTimer = this.rateLimitResetTimers.get(key);
+			if (previousTimer) clearTimeout(previousTimer);
+			const resetTimer = setTimeout(() => {
+				this.backoffDelays.delete(key);
+				this.rateLimitResetTimers.delete(key);
+			}, Math.max(60_000, delay));
+			resetTimer.unref();
+			this.rateLimitResetTimers.set(key, resetTimer);
+		};
+		this.rest.on("rateLimited", this.rateLimitListener);
 		this.logger.success("[startup] rateLimit listener registration complete");
+
+		this.logger.start("[startup] client.login begin");
+		await this.login(token);
+		this.logger.success("[startup] client.login complete");
+		rebuildKnowledgeBase();
+
+		this.logger.start("[startup] Queue system init begin");
+		await initQueues(this);
+		this.logger.success("[startup] Queue system init complete");
 	}
 
 	private async loadCommands(): Promise<void> {
 		this.logger.start("[startup] loadCommands: registry validation begin");
-		// Print registry summary for diagnostics
 		printRegistrySummary();
 
-		const registryErrors = [...validateCommandRegistry(), ...validateLegacyCommandMap()];
+		const registryErrors = [...validateCommandRegistry(), ...validateLegacyCommandMap()].sort();
 		if (registryErrors.length > 0) {
 			throw new Error(`Command registry validation failed:\n${registryErrors.join("\n")}`);
 		}
 
-		// Reject if too many root commands (safety check before Discord sync)
 		const rootCount = getRootCommandCount();
 		if (rootCount > 90 && env.NODE_ENV !== "development") {
 			throw new Error(`Root application-command count (${rootCount}) exceeds 90. Refusing to start.`);
 		}
 		this.logger.info(`Registry: ${rootCount} root commands will be registered.`);
-		this.logger.debug("[startup] loadCommands: reading dist/commands");
-		const commandsPath = fs.readdirSync(path.join(process.cwd(), "dist", "commands"));
-		this.logger.debug(`[startup] loadCommands: found ${commandsPath.length} command groups`);
 
-		for (const dir of commandsPath) {
+		const commands = new Collection<string, CommandOptions>();
+		const aliases = new Collection<string, string>();
+		const claimedNames = new Map<string, string>();
+		const applicationCommandKeys = new Map<string, string>();
+		const body: ApplicationCommandDataResolvable[] = [];
+		const commandsRoot = path.join(process.cwd(), "dist", "commands");
+		const commandGroups = fs.readdirSync(commandsRoot).sort();
+		this.logger.debug(`[startup] loadCommands: found ${commandGroups.length} command groups`);
+
+		const claimApplicationCommand = (name: string, type: ApplicationCommandType, source: string): void => {
+			const key = `${type}:${normalizeRegistryKey(name)}`;
+			const existing = applicationCommandKeys.get(key);
+			if (existing) throw new Error(`Duplicate application command "${name}" (type ${type}) from ${source}; already registered by ${existing}`);
+			applicationCommandKeys.set(key, source);
+		};
+
+		for (const dir of commandGroups) {
+			const groupPath = path.join(commandsRoot, dir);
+			if (!fs.statSync(groupPath).isDirectory()) continue;
 			this.logger.debug(`[startup] loadCommands: scanning group ${dir}`);
-			const commandFiles = fs.readdirSync(path.join(process.cwd(), "dist", "commands", dir)).filter((file) => file.endsWith(".js"));
+			const commandFiles = fs.readdirSync(groupPath)
+				.filter((file) => file.endsWith(".js") && !file.endsWith(".test.js") && !file.endsWith(".spec.js"))
+				.sort();
 
 			for (const file of commandFiles) {
-				this.logger.debug(`[startup] loadCommands: loading ${dir}/${file}`);
-				const cmdModule = require(path.join(process.cwd(), "dist", "commands", dir, file));
+				const source = `${dir}/${file}`;
+				this.logger.debug(`[startup] loadCommands: loading ${source}`);
+				const cmdModule = require(path.join(groupPath, file));
 				const command: CommandOptions = new cmdModule.default(this, file);
 				command.category = dir;
+				const commandName = normalizeRegistryKey(command.name);
+				if (!commandName) throw new Error(`Command from ${source} has an empty name`);
 
-				if (this.commands.has(command.name)) {
-					throw new Error(`Duplicate command name detected: ${command.name}`);
+				const existingName = claimedNames.get(commandName);
+				if (existingName) throw new Error(`Command name collision: "${command.name}" from ${source} conflicts with ${existingName}`);
+				claimedNames.set(commandName, `command "${command.name}" from ${source}`);
+				commands.set(commandName, command);
+
+				for (const rawAlias of command.aliases ?? []) {
+					const alias = normalizeRegistryKey(rawAlias);
+					if (!alias) throw new Error(`Command "${command.name}" has an empty alias in ${source}`);
+					const existingAlias = claimedNames.get(alias);
+					if (existingAlias) throw new Error(`Command alias collision: "${rawAlias}" for "${command.name}" from ${source} conflicts with ${existingAlias}`);
+					claimedNames.set(alias, `alias "${rawAlias}" for "${command.name}" from ${source}`);
+					aliases.set(alias, commandName);
 				}
-				this.commands.set(command.name, command);
+
 				if (command.slashCommand) {
-					const data: ApplicationCommandDataResolvable = {
+					claimApplicationCommand(command.name, ApplicationCommandType.ChatInput, source);
+					body.push({
 						name: command.name,
 						description: command.description?.content ?? "",
 						contexts: command.contexts!,
@@ -170,39 +239,47 @@ export default class BaseClient extends FrameWorkClient {
 						type: ApplicationCommandType.ChatInput,
 						options: command.options || [],
 						default_member_permissions:
-							Array.isArray(command.permissions?.user) && command.permissions?.user.length > 0 ? PermissionsBitField.resolve(command.permissions?.user as any).toString() : null,
-					};
-					this.body.push(data);
+							Array.isArray(command.permissions?.user) && command.permissions.user.length > 0
+								? PermissionsBitField.resolve(command.permissions.user as any).toString()
+								: null,
+					});
 				}
-				if (command.context?.enabled) {
-					const types = Array.isArray(command.context.type) ? command.context.type : [command.context.type]; // Ensure it's always an array
 
+				if (command.context?.enabled) {
+					const types = Array.isArray(command.context.type) ? command.context.type : [command.context.type];
 					for (const type of types) {
-						const data: ApplicationCommandDataResolvable = {
+						claimApplicationCommand(command.context.name, type, source);
+						body.push({
 							name: command.context.name,
 							type,
-							default_member_permissions: Array.isArray(command.permissions?.user) && command.permissions.user.length > 0 ? PermissionsBitField.resolve(command.permissions.user).toString() : null,
-						};
-						this.body.push(data);
+							default_member_permissions:
+								Array.isArray(command.permissions?.user) && command.permissions.user.length > 0
+									? PermissionsBitField.resolve(command.permissions.user).toString()
+									: null,
+						});
 					}
 				}
 			}
 		}
 
-		this.logger.log(`Slash commands to deploy: ${this.body.length}`);
-		if (this.body.length > 100) {
-			throw new Error(`Discord application-command limit exceeded: ${this.body.length}/100`);
-		}
-		this.logger.success("[startup] loadCommands: complete");
+		this.logger.log(`Slash commands to deploy: ${body.length}`);
+		if (body.length > 100) throw new Error(`Discord application-command limit exceeded: ${body.length}/100`);
+
+		this.commands.clear();
+		this.aliases.clear();
+		for (const [name, command] of commands) this.commands.set(name, command);
+		for (const [alias, commandName] of aliases) this.aliases.set(alias, commandName);
+		this.body = body;
+		this.logger.success(`[startup] loadCommands complete: ${commands.size} commands, ${aliases.size} aliases`);
 	}
 	private loadComponents() {
 		this.logger.start("[startup] loadComponents: reading dist/components");
-		const componentFolders = fs.readdirSync(path.join(process.cwd(), "dist", "components"));
+		const componentFolders = fs.readdirSync(path.join(process.cwd(), "dist", "components")).sort();
 		for (const component of componentFolders) {
 			const componentPath = path.join(process.cwd(), "dist", "components", component);
 			if (!fs.statSync(componentPath).isDirectory()) continue;
 			this.logger.debug(`[startup] loadComponents: scanning ${component}`);
-			const componentFiles = fs.readdirSync(componentPath).filter((file) => file.endsWith(".js"));
+			const componentFiles = fs.readdirSync(componentPath).filter((file) => file.endsWith(".js")).sort();
 			switch (component) {
 				case "buttons":
 					this.loadButtons(componentFiles);
@@ -222,6 +299,7 @@ export default class BaseClient extends FrameWorkClient {
 			this.logger.debug(`[startup] loadButtons: loading ${file}`);
 			const componentModule = require(path.join(process.cwd(), "dist", "components", "buttons", file));
 			const component: ButtonOptions = new componentModule.default(this);
+			if (this.buttons.has(component.id)) throw new Error(`Duplicate button component ID "${component.id}" in ${file}`);
 			this.buttons.set(component.id, component);
 		}
 		this.logger.success("[startup] loadButtons complete");
@@ -232,28 +310,44 @@ export default class BaseClient extends FrameWorkClient {
             this.logger.debug(`[startup] loadMenus: loading ${file}`);
             const componentModule = require(path.join(process.cwd(), "dist", "components", "menus", file));
             const component: MenuOptions = new componentModule.default(this);
+            if (this.menus.has(component.id)) throw new Error(`Duplicate menu component ID "${component.id}" in ${file}`);
             this.menus.set(component.id, component);
         }
         this.logger.success("[startup] loadMenus complete");
     }
 	private async loadEvents(): Promise<void> {
 		this.logger.start("[startup] loadEvents: reading dist/events");
-		const eventsPath = fs.readdirSync(path.join(process.cwd(), "dist", "events"));
+		const eventsPath = fs.readdirSync(path.join(process.cwd(), "dist", "events")).sort();
 		this.logger.debug(`[startup] loadEvents: found ${eventsPath.length} event groups`);
 
 		for (const dir of eventsPath) {
 			this.logger.debug(`[startup] loadEvents: scanning group ${dir}`);
-			const eventFiles = fs.readdirSync(path.join(process.cwd(), "dist", "events", dir)).filter((file) => file.endsWith(".js"));
+			const eventFiles = fs.readdirSync(path.join(process.cwd(), "dist", "events", dir)).filter((file) => file.endsWith(".js")).sort();
 
 			for (const file of eventFiles) {
 				this.logger.debug(`[startup] loadEvents: loading ${dir}/${file}`);
 				const eventModule = require(path.join(process.cwd(), "dist", "events", dir, file));
 				const event = new eventModule.default(this);
 
-				void event.execute();
+				await event.execute();
 			}
 		}
 		this.logger.success("[startup] loadEvents: complete");
+	}
+
+	public override async destroy(): Promise<void> {
+		uninstallHotReloadHandlers(this);
+		stopMusicProgressUpdater(this);
+		await shutdownQueues();
+		if (this.rateLimitListener) {
+			this.rest.off("rateLimited", this.rateLimitListener);
+			this.rateLimitListener = undefined;
+		}
+		for (const timer of this.rateLimitResetTimers.values()) clearTimeout(timer);
+		this.rateLimitResetTimers.clear();
+		this.backoffDelays.clear();
+		await super.destroy();
+		if (this.redis && this.redis.status !== "end") await this.redis.quit();
 	}
 
 	public async deployCommands(guildId?: string): Promise<void> {
@@ -269,7 +363,7 @@ export default class BaseClient extends FrameWorkClient {
 				return;
 			}
 			this.logger.start(`[startup] deployCommands begin target=${guildId ? `guild ${guildId}` : "global"}`);
-			await rest.put(route, { body: this.body });
+			await this.rest.put(route, { body: this.body });
 			await this.redis.set(cacheKey, bodyHash, "EX", 7 * 24 * 60 * 60).catch(() => undefined);
 			this.logger.success("[startup] deployCommands complete");
 		} catch (error) {

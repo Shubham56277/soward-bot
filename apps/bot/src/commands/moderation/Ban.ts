@@ -1,4 +1,4 @@
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType, EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, GuildMember, ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -100,35 +100,28 @@ export default class Ban extends Command {
         try {
             // Notify user if not silent
             if (!silent) {
-                try {
-                    const dmEmbed = new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle(`You've been banned from ${ctx.guild.name}`)
-                        .setDescription(`**Reason:** ${reason}\n**Moderator:** ${ctx.author?.toString() || "Unknown"}`)
-                        .setTimestamp();
-                    await targetUser.send({ embeds: [dmEmbed] });
-                } catch {
-                    // DMs are closed, continue anyway
-                }
+                await targetUser.send(`**You've been banned from ${ctx.guild.name}**\nReason: ${reason}\nModerator: ${ctx.author?.username ?? "Unknown"}`).catch(() => {});
             }
 
             await ctx.guild.members.ban(targetUser, { reason });
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**🔨 Member Banned**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Banned**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `**User:** ${targetUser.toString()}\n` +
-                    `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+                    `**User:** ${targetUser.username}\n` +
+                    `**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${targetUser.id}`));
 
-            return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+            setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+            return msg;
         } catch (error) {
             console.error("Ban Error:", error);
-            return await ctx.sendMessage(this.msg("<:Cross:1375519752746958858> An error occurred while trying to ban this user."));
+            return await ctx.sendMessage(this.msg("An error occurred while trying to ban this user."));
         }
     }
 }

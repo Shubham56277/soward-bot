@@ -1,55 +1,65 @@
-import { Premium } from "@repo/db";
 import { env } from "@repo/env";
 import {
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonInteraction,
 	ButtonStyle,
-	EmbedBuilder,
+	ContainerBuilder,
 	GuildMember,
 	MessageFlags,
 	PermissionFlagsBits,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder,
 } from "discord.js";
 import BaseClient from "../base/Client";
 import { voiceRecordingService } from "../service/voiceRecordingService";
+import { checkPremium } from "./premiumCheck";
 
 export function buildRecordingPanel(client: BaseClient, guildId: string) {
 	const status = voiceRecordingService.getStatus(guildId);
 	const prefix = client.config.prefix;
-	const embed = new EmbedBuilder()
-		.setColor(status ? 0xff3b30 : client.config.colors.main)
-		.setAuthor({ name: "Soward Premium" })
-		.setTitle(status ? "Voice Recording Control - Active" : "Voice Recording Control")
-		.setDescription(
-			status
-				? `A recording is active in <#${status.channelId}>. It started <t:${Math.floor(status.startedAt / 1_000)}:R> and has captured **${status.speakers}** speaker track(s).`
-				: "Record everyone speaking in your current voice channel and receive one mixed MP3 privately by DM.",
-		)
-		.addFields(
-			{
-				name: "Commands",
-				value: `\`${prefix}record start\` - start\n\`${prefix}record status\` - view status\n\`${prefix}record stop\` - finish and receive MP3\n\`${prefix}record disconnect\` - disconnect and discard`,
-			},
-			{
-				name: "Privacy & limits",
-				value: "Premium + Administrator only • A public notice is posted • Maximum 5 minutes • Music must be disconnected • Temporary files are deleted after DM delivery",
-			},
-		)
-		.setFooter({ text: "Use the buttons below or the listed commands" })
-		.setTimestamp();
 
-	const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-		new ButtonBuilder().setCustomId("recording-start").setLabel("Start").setStyle(ButtonStyle.Success),
-		new ButtonBuilder().setCustomId("recording-status").setLabel("Status").setStyle(ButtonStyle.Secondary),
-		new ButtonBuilder().setCustomId("recording-stop").setLabel("Stop").setStyle(ButtonStyle.Danger),
-		new ButtonBuilder().setCustomId("recording-disconnect").setLabel("Disconnect").setStyle(ButtonStyle.Secondary),
-	);
+	const title = status ? "## 🎙 Voice Recording Control — Active" : "## 🎙 Voice Recording Control";
 
-	return { embeds: [embed], components: [row] };
+	const description = status
+		? `A recording is active in <#${status.channelId}>. It started <t:${Math.floor(status.startedAt / 1_000)}:R> and has captured **${status.speakers}** speaker track(s).`
+		: "Record everyone speaking in your current voice channel and receive one mixed MP3 privately by DM.";
+
+	const commands = [
+		`\`${prefix}record start\` — start`,
+		`\`${prefix}record status\` — view status`,
+		`\`${prefix}record stop\` — finish and receive MP3`,
+		`\`${prefix}record disconnect\` — disconnect and discard`,
+	].join("\n");
+
+	const limits = "Premium + Administrator only • Maximum 5 minutes • Music must be disconnected • Temporary files are deleted after DM delivery";
+
+	const container = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(title))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(description))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Commands**\n${commands}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Privacy & Limits**\n${limits}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent("-# Use the buttons below or the listed commands"))
+		.addActionRowComponents(
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				new ButtonBuilder().setCustomId("recording-start").setLabel("Start").setStyle(ButtonStyle.Success),
+				new ButtonBuilder().setCustomId("recording-status").setLabel("Status").setStyle(ButtonStyle.Secondary),
+				new ButtonBuilder().setCustomId("recording-stop").setLabel("Stop").setStyle(ButtonStyle.Danger),
+				new ButtonBuilder().setCustomId("recording-disconnect").setLabel("Disconnect").setStyle(ButtonStyle.Secondary),
+			),
+		);
+
+	return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 export async function requireRecordingPremium(interaction: ButtonInteraction): Promise<boolean> {
-	if (env.DEVELOPER_IDS.includes(interaction.user.id) || (await Premium.hasPremium(interaction.user.id))) return true;
+	const redis = (interaction.client as any).redis;
+	if (env.DEVELOPER_IDS.includes(interaction.user.id) || (await checkPremium(redis, interaction.user.id, interaction.guild!))) return true;
 	await interaction.reply({
 		content: "This is a premium feature. Redeem an activation code with `/premium redeem` first.",
 		flags: MessageFlags.Ephemeral,
@@ -80,20 +90,15 @@ export async function startRecordingFromButton(interaction: ButtonInteraction) {
 	try {
 		await interaction.user.createDM();
 		const started = await voiceRecordingService.start(interaction.guild, channel, interaction.user);
-		return interaction.editReply({
-			embeds: [
-				new EmbedBuilder()
-					.setColor(0x000000)
-					.setTitle("Voice Recording Started")
-					.setDescription(
-						`Recording is active in <#${started.channelId}>. It stops after five minutes or with \`/record stop\`. The MP3 will be sent only to <@${started.starterId}>, then all temporary files are deleted.`,
-					)
-					.setTimestamp(),
-			],
-			components: [],
-		});
+		const container = new ContainerBuilder()
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent("## 🎙 Voice Recording Started"))
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+				`Recording is active in <#${started.channelId}>. It stops after five minutes or with \`/record stop\`. The MP3 will be sent only to <@${started.starterId}>, then all temporary files are deleted.`,
+			));
+		return interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
 	} catch (error) {
-		return interaction.editReply({ content: `Could not start recording: ${error instanceof Error ? error.message : "unknown error"}.`, components: [] });
+		return interaction.editReply({ content: `Could not start recording: ${error instanceof Error ? error.message : "unknown error"}.` });
 	}
 }
 

@@ -9,7 +9,8 @@ import {
 export type PurgeType = 'ALL' | 'ATTACHMENT' | 'BOT' | 'LINK' | 'TOKEN' | 'USER';
 export type PurgeResult = number | 'MEMBER_PERM' | 'BOT_PERM' | 'NO_MESSAGES' | 'ERROR';
 
-const LINK_REGEX = /https?:\/\/[^\s]+/gi;
+const LINK_REGEX = /https?:\/\/[^\s]+/i;
+const MAX_MESSAGES_SCANNED = 1_000;
 
 /**
  * Advanced message purging utility with multiple filtering options
@@ -45,21 +46,21 @@ export async function purgeMessages(
         return 'BOT_PERM';
     }
 
-    // Validate amount
-    if (amount < 1 || amount > 100) {
-        amount = Math.min(Math.max(amount, 1), 100);
-    }
+    // Discord only accepts 1-100 messages per bulk-delete request.
+    amount = Number.isFinite(amount) ? Math.min(Math.max(Math.trunc(amount), 1), 100) : 1;
 
     try {
         const messagesToDelete = new Collection<string, Message>();
         let lastMessageId: string | undefined;
+        let scanned = 0;
 
-        // Keep fetching until we have enough messages or reach the limit
-        while (messagesToDelete.size < amount) {
-            const fetchOptions = { limit: 100, before: lastMessageId };
+        // Bound history scans so sparse filters cannot walk an entire channel.
+        while (messagesToDelete.size < amount && scanned < MAX_MESSAGES_SCANNED) {
+            const fetchOptions = { limit: Math.min(100, MAX_MESSAGES_SCANNED - scanned), before: lastMessageId };
             const messages = await channel.messages.fetch(fetchOptions);
 
             if (messages.size === 0) break;
+            scanned += messages.size;
 
             for (const message of messages.values()) {
                 if (messagesToDelete.size >= amount) break;
@@ -101,7 +102,7 @@ export async function purgeMessages(
         }
 
         // Perform the bulk delete
-        const deletedMessages = await channel.bulkDelete(messagesToDelete, true).catch(() => new Collection<string, Message>());
+        const deletedMessages = await channel.bulkDelete(messagesToDelete, true);
         return deletedMessages.size;
     } catch (error) {
         console.error('Error purging messages:', error);

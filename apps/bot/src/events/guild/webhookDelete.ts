@@ -1,119 +1,138 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
-import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
+import { AuditLogEvent, Events, type ClientEvents, type Guild } from "discord.js";
+
+const CACHE_TTL_MS = 120_000;
+const REGISTRATION_KEY = Symbol.for("soward.events.webhookDelete.registration");
+
+type WebhooksUpdateListener = (...args: ClientEvents[Events.WebhooksUpdate]) => void;
+type ActionConfig = Parameters<BaseClient["services"]["antinukes"]["trackAction"]>[3];
+
+interface CachedDeletion {
+    executorId: string;
+    timestamp: number;
+}
+
+interface WebhookDeleteRegistration {
+    owner: WebhooksUpdate;
+    listener: WebhooksUpdateListener;
+    cache: Map<string, CachedDeletion>;
+    timers: Map<string, NodeJS.Timeout>;
+}
+
+type ClientWithRegistration = BaseClient & {
+    [key: symbol]: WebhookDeleteRegistration | undefined;
+};
 
 export default class WebhooksUpdate extends Event {
-    // Ultra-fast cache
-    private configCache = new Map<string, AntiNuke>();
-    private trustedCache = new Map<string, any>();
-    private webhookDeleteCache = new Map<string, { executorId: string, timestamp: number }>();
+    private registration: WebhookDeleteRegistration | null = null;
 
     constructor(client: BaseClient) {
-        super(client, {
-            event: Events.WebhooksUpdate,
-        });
+        super(client, { event: Events.WebhooksUpdate });
     }
 
     public async execute(): Promise<void> {
-        this.client.on(Events.WebhooksUpdate, async (channel) => {
-            if (!channel.guild) return;
-            const { guild } = channel;
-            const guildId = guild.id;
+        const registeredClient = this.client as ClientWithRegistration;
+        const existing = registeredClient[REGISTRATION_KEY];
+        if (existing?.owner === this) return;
+        if (existing) removeRegistration(this.client, existing);
 
-            try {
-                // Ultra-fast config check with cache
-                let config = this.configCache.get(guildId);
-                if (!config) {
-                    config = await this.client.services.antinukes.getConfig(guildId);
-                    this.configCache.set(guildId, config);
-                    setTimeout(() => this.configCache.delete(guildId), 30000);
-                }
-
-                const actionConfig = config?.webhook?.find(c => c.type === "delete");
-                if (!actionConfig?.enabled || !config.enabled) return;
-
-                // Fast audit log fetch
-                const logs = await guild.fetchAuditLogs({
-                    limit: 1,
-                    type: AuditLogEvent.WebhookDelete
-                }).catch(() => null);
-
-                if (!logs) return;
-                const log = logs.entries.first();
-                if (!log || !log.executor || !log.target) return;
-
-                const executorId = log.executor.id;
-                const webhookId = log.target.id;
-                const now = Date.now();
-
-                // Check cache for recent webhook deletions first
-                const cachedDeletion = this.webhookDeleteCache.get(webhookId);
-                if (cachedDeletion && (now - cachedDeletion.timestamp) < 120000) {
-                    return this.handleWebhookDeletion(guild, cachedDeletion.executorId, actionConfig);
-                }
-
-                // Cache this webhook deletion for future checks
-                this.webhookDeleteCache.set(webhookId, { executorId, timestamp: now });
-                setTimeout(() => this.webhookDeleteCache.delete(webhookId), 120000);
-
-                // Fast early returns
-                if (executorId === guild.ownerId ||
-                    executorId === this.client.user?.id ||
-                    executorId === config.admin ||
-                    (now - log.createdTimestamp) > 120000) return;
-
-                await this.handleWebhookDeletion(guild, executorId, actionConfig);
-
-            } catch (error) {
-                this.client.logger?.error?.(error);
-            }
-        });
+        const registration: WebhookDeleteRegistration = {
+            owner: this,
+            listener: (channel) => {
+                void this.handleWebhooksUpdate(channel.guild).catch((error) => this.client.logger?.error?.(error));
+            },
+            cache: new Map(),
+            timers: new Map(),
+        };
+        this.registration = registration;
+        registeredClient[REGISTRATION_KEY] = registration;
+        this.client.on(Events.WebhooksUpdate, registration.listener);
     }
 
-    private async handleWebhookDeletion(guild: any, executorId: string, actionConfig: any): Promise<void> {
-        try {
-            // Ultra-fast trusted user check with cache
-            let trustedSet = this.trustedCache.get(guild.id);
-            if (!trustedSet) {
-                const config = this.configCache.get(guild.id);
-                trustedSet = new Set(config?.trustedUsers?.map(u => u.id) || []);
-                this.trustedCache.set(guild.id, trustedSet);
-                setTimeout(() => this.trustedCache.delete(guild.id), 30000);
-            }
+    /** Optional explicit teardown for loaders that support event disposal. */
+    public cleanup(): void {
+        const registration = this.registration;
+        if (!registration) return;
+        removeRegistration(this.client, registration);
+        this.registration = null;
+    }
 
-            if (trustedSet.has(executorId)) return;
+    private async handleWebhooksUpdate(guild: Guild): Promise<void> {
+        const registration = this.registration;
+        if (!registration) return;
 
-            // Fast member check using cache first
-            let member = guild.members.cache.get(executorId) as any;
-            if (!member) {
-                member = await guild.members.fetch(executorId).catch(() => null);
-                if (!member) return;
-            }
+        const config = await this.client.services.antinukes.getConfig(guild.id);
+        const actionConfig = config?.webhook?.find((candidate) => candidate.type === "delete");
+        if (!config?.enabled || !actionConfig?.enabled) return;
 
-            if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
+        const logs = await guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.WebhookDelete });
+        const log = logs.entries.first();
+        if (!log?.executor || !log.target) return;
 
-            const tracked = await this.client.services.antinukes.trackAction(
-                guild,
-                executorId,
-                "webhookDelete",
-                actionConfig
-            );
+        const now = Date.now();
+        if (now - log.createdTimestamp > CACHE_TTL_MS) return;
+        const executorId = log.executor.id;
+        const webhookId = log.target.id;
+        if (registration.cache.has(webhookId)) return;
+        cacheDeletion(registration, webhookId, executorId, now);
 
-            if (tracked) {
-                // Fire punishment immediately without waiting
-                this.client.services.antinukes.punishUser(
-                    guild,
-                    executorId,
-                    actionConfig.action,
-                    "Anti-Webhook Protection | Unauthorized Deletion"
-                ).catch(error => {
-                    this.client.logger?.error?.(error);
-                });
-            }
+        if (
+            executorId === guild.ownerId
+            || executorId === this.client.user?.id
+            || executorId === config.admin
+        ) return;
 
-        } catch (error) {
-            this.client.logger?.error?.(error);
-        }
+        await this.handleWebhookDeletion(guild, executorId, actionConfig);
+    }
+
+    private async handleWebhookDeletion(guild: Guild, executorId: string, actionConfig: ActionConfig): Promise<void> {
+        if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
+
+        const member = guild.members.cache.get(executorId) ?? await guild.members.fetch(executorId);
+        if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
+
+        const tracked = await this.client.services.antinukes.trackAction(
+            guild,
+            executorId,
+            "webhookDelete",
+            actionConfig,
+        );
+        if (!tracked) return;
+
+        await this.client.services.antinukes.punishUser(
+            guild,
+            executorId,
+            actionConfig.action,
+            "Anti-Webhook Protection | Unauthorized Deletion",
+        );
+    }
+}
+
+function cacheDeletion(
+    registration: WebhookDeleteRegistration,
+    webhookId: string,
+    executorId: string,
+    timestamp: number,
+): void {
+    const oldTimer = registration.timers.get(webhookId);
+    if (oldTimer) clearTimeout(oldTimer);
+    registration.cache.set(webhookId, { executorId, timestamp });
+    const timer = setTimeout(() => {
+        registration.cache.delete(webhookId);
+        registration.timers.delete(webhookId);
+    }, CACHE_TTL_MS);
+    timer.unref();
+    registration.timers.set(webhookId, timer);
+}
+
+function removeRegistration(client: BaseClient, registration: WebhookDeleteRegistration): void {
+    client.off(Events.WebhooksUpdate, registration.listener);
+    for (const timer of registration.timers.values()) clearTimeout(timer);
+    registration.timers.clear();
+    registration.cache.clear();
+    const registeredClient = client as ClientWithRegistration;
+    if (registeredClient[REGISTRATION_KEY] === registration) {
+        delete registeredClient[REGISTRATION_KEY];
     }
 }

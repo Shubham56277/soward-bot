@@ -295,4 +295,4 @@ describe("scoreCandidate — incorrect SoundCloud rejection", () => {
     });
 });
 
-console.log("All musicSearchService tests passed ✓");
+console.log("All musicSearchService tests passed.");

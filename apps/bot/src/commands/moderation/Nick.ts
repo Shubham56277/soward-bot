@@ -2,6 +2,7 @@ import { EmbedBuilder, GuildMember, ApplicationCommandOptionType } from "discord
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import * as reply from "../../utils/reply";
+import Help from "../utils/Help";
 
 export default class Nick extends Command {
 	constructor() {
@@ -15,7 +16,7 @@ export default class Nick extends Command {
 			category: "moderation",
 			aliases: ["nickname", "setnick"],
 			cooldown: 5,
-			args: true,
+			args: false,
 			permissions: {
 				dev: false,
 				client: ["ManageNicknames", "ViewChannel", "EmbedLinks", "SendMessages"],
@@ -40,6 +41,8 @@ export default class Nick extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "nick");
+
 		const target = ctx.options.getMember("user") as GuildMember;
 		let nickname = ctx.options.getString("nickname", false);
 
@@ -58,9 +61,11 @@ export default class Nick extends Command {
 			return reply.error(ctx, "Member not found");
 		}
 
-		if (ctx.author?.id !== ctx.guild.ownerId) {
+		// Only enforce hierarchy for non-admin users (skip if they have Administrator)
+		const isAdmin = ctx.member?.permissions.has("Administrator") ?? false;
+		if (!isAdmin && ctx.author?.id !== ctx.guild.ownerId) {
 			if (target.roles.highest.position >= (ctx.member?.roles.highest.position ?? 0)) {
-				return reply.error(ctx, "You cannot modify someone with higher or equal role");
+				return reply.error(ctx, "You cannot modify someone with a higher or equal role");
 			}
 		}
 
@@ -74,7 +79,7 @@ export default class Nick extends Command {
 			await target.setNickname(nickname || null, `Nickname changed by ${ctx.author?.tag}`);
 
 			return reply.success(ctx,
-				`**Member:** ${target.toString()}\n` +
+				`**Member:** ${target.user.username}\n` +
 				`**Before:** ${oldNick}\n` +
 				`**After:** ${nickname || "Reset to default"}`
 			);

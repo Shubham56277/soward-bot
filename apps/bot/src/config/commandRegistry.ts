@@ -32,6 +32,28 @@ export interface CommandRegistryEntry {
 
 type RegistrySeed = Pick<CommandRegistryEntry, "name" | "category" | "description"> & Partial<Omit<CommandRegistryEntry, "name" | "category" | "description">>;
 
+export function normalizeRegistryKey(value: string): string {
+	return value.trim().toLowerCase();
+}
+
+export function buildUniqueRegistryMap<T>(
+	values: readonly T[],
+	keyOf: (value: T) => string,
+	kind: string,
+): Map<string, T> {
+	const result = new Map<string, T>();
+	for (const value of values) {
+		const rawKey = keyOf(value);
+		const key = normalizeRegistryKey(rawKey);
+		const existing = result.get(key);
+		if (existing) {
+			throw new Error(`Duplicate ${kind} after normalization: "${rawKey}" conflicts with "${keyOf(existing)}"`);
+		}
+		result.set(key, value);
+	}
+	return result;
+}
+
 const entry = (seed: RegistrySeed): CommandRegistryEntry => ({
 	label: seed.name.replace(/-/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
 	implemented: false,
@@ -50,15 +72,16 @@ const entry = (seed: RegistrySeed): CommandRegistryEntry => ({
 });
 
 const implemented = new Set([
-	"help", "ping", "uptime", "botinfo", "serverinfo", "userinfo", "avatar", "banner", "membercount", "boostcount",
-	"joinedat", "roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
+	"help", "ping", "uptime", "botinfo", "serverinfo", "info", "pfp", "banner", "membercount", "boostcount",
+	"roleinfo", "channelinfo", "invite", "stats", "vote", "list", "afk", "ban", "unban", "softban", "kick",
 	"timeout", "untimeout", "warn", "warnings", "nickname", "slowmode", "lock", "unlock", "hide", "unhide", "clear",
-	"channel", "role", "quarantine", "security", "antinuke", "mainrole", "trusted", "ignore", "coowner",
+	"channel", "role", "quarantine", "antinuke", "mainrole", "extraowner", "ignore", "coowner",
 	"logging", "automod", "filter", "autorole", "notifier", "autodelete",
 	"autoresponder", "autoreact", "welcome", "customrole", "ticket", "media-only", "sticky",
 	"reaction-role", "variables", "embed", "voice", "voice-role",
-	"giveaway", "music", "fun", "bot", "prefix", "premium",
-	"ai", "record", "dev",
+	"giveaway", "music", "fun", "prefix", "premium",
+	"ai", "record", "dev", "profile", "bio", "badge", "customize", "noprefix", "playlist",
+	"steal", "cloneemoji", "deleteemoji", "renameemoji", "stickerinfo", "stickerurl", "deletesticker", "serversplash", "messageurl", "attachments", "zipsticker",
 ]);
 
 const seeds: RegistrySeed[] = [
@@ -68,12 +91,11 @@ const seeds: RegistrySeed[] = [
 	["uptime", "general", "Show how long the bot has been online"],
 	["botinfo", "general", "Show information about the bot"],
 	["serverinfo", "general", "Show detailed server information"],
-	["userinfo", "general", "Show information about a member"],
-	["avatar", "general", "Show a user or server avatar"],
+	["info", "general", "Show information about a member"],
+	["pfp", "general", "Show a user avatar"],
 	["banner", "general", "Show a user or server banner"],
 	["membercount", "general", "Show the server member count"],
 	["boostcount", "general", "Show server boost information"],
-	["joinedat", "general", "Show when a member joined"],
 	["roleinfo", "general", "Show information about a role"],
 	["channelinfo", "general", "Show information about a channel"],
 	["invite", "general", "Get the bot invite link"],
@@ -81,6 +103,17 @@ const seeds: RegistrySeed[] = [
 	["vote", "general", "Open bot voting links"],
 	["list", "general", "Browse server members and resources", { subcommands: ["members", "boosters", "emojis", "roles", "bots", "bans"] }],
 	["afk", "general", "Manage your AFK status"],
+	["steal", "general", "Steal an emoji or sticker and add to server"],
+	["cloneemoji", "general", "Clone a custom emoji to this server"],
+	["deleteemoji", "general", "Delete an emoji from this server"],
+	["renameemoji", "general", "Rename an emoji in this server"],
+	["stickerinfo", "general", "Get information about a sticker"],
+	["stickerurl", "general", "Get the URL of a sticker"],
+	["deletesticker", "general", "Delete a sticker from this server"],
+	["serversplash", "general", "Get the server splash image"],
+	["messageurl", "general", "Get the link to a message"],
+	["attachments", "general", "Get all attachments from a message"],
+	["zipsticker", "general", "Download all server stickers as a zip to DMs"],
 
 	// === MODERATION (18) ===
 	["ban", "moderation", "Ban a member safely"],
@@ -103,10 +136,9 @@ const seeds: RegistrySeed[] = [
 	["quarantine", "moderation", "Manage member quarantine"],
 
 	// === SECURITY (5) ===
-	["security", "security", "Show active server protections"],
 	["antinuke", "security", "Configure destructive-action protection"],
 	["mainrole", "security", "Manage the server main role"],
-	["trusted", "security", "Manage trusted security members"],
+	["extraowner", "security", "Manage extra owners with configurable security limits"],
 	["ignore", "security", "Manage command ignore rules", { subcommands: ["channel", "role", "user"] }],
 	["coowner", "security", "Manage owner-authorized co-owners"],
 
@@ -131,7 +163,7 @@ const seeds: RegistrySeed[] = [
 	["customrole", "roles", "Configure managed custom roles"],
 
 	// === TICKETS (1) ===
-	["ticket", "tickets", "Configure and operate support tickets"],
+	["ticket", "tickets", "Configure and operate support tickets", { subcommands: ["setup", "edit", "delete", "info", "list"] }],
 
 	// === UTILITY (3) ===
 	["media-only", "utility", "Manage media-only channels", { subcommands: ["add", "remove", "list"] }],
@@ -153,15 +185,20 @@ const seeds: RegistrySeed[] = [
 		subcommands: ["create", "end", "reroll", "list", "pause", "resume", "requirements"],
 	}],
 
-	// === MUSIC (1) ===
+	// === MUSIC (2) ===
 	["music", "music", "Play and manage music", { cooldownSeconds: 2 }],
+	["playlist", "music", "Create and manage personal playlists", { premium: true, subcommands: ["create", "delete", "rename", "list", "info", "add", "remove", "play"] }],
 
 	// === FUN (1) ===
 	["fun", "fun", "Run social and text activities"],
 
-	// === SETTINGS (3) ===
-	["bot", "settings", "Manage bot settings for this server"],
-	["prefix", "settings", "Manage server command prefixes"],
+	// === SETTINGS (6) ===
+	["profile", "settings", "View a user's Elfaria profile"],
+	["bio", "settings", "View or manage your profile bio", { subcommands: ["show", "set", "clear"] }],
+	["badge", "settings", "Manage cosmetic profile badges", { subcommands: ["add", "list", "remove"] }],
+	["prefix", "settings", "Manage server command prefixes", { subcommands: ["list", "set", "add", "remove", "reset"] }],
+	["noprefix", "settings", "Manage no-prefix access for members", { premium: true, slash: false, subcommands: ["add", "remove", "enable", "disable", "list", "reset"] }],
+	["customize", "settings", "Customize premium bot account branding", { premium: true, subcommands: ["show", "avatar", "bio", "banner", "reset"] }],
 	["premium", "premium", "Manage premium access", { subcommands: ["status", "activate", "features"] }],
 
 	// === PREMIUM (2) ===
@@ -184,63 +221,69 @@ export const COMMAND_REGISTRY: readonly CommandRegistryEntry[] = seeds.map((seed
 	implemented: implemented.has(seed.name),
 }));
 
-export const COMMAND_REGISTRY_BY_NAME = new Map(COMMAND_REGISTRY.map((command) => [command.name, command]));
+export const COMMAND_REGISTRY_BY_NAME = buildUniqueRegistryMap(COMMAND_REGISTRY, (command) => command.name, "canonical command");
 
 /**
  * Validate the entire command registry for duplicates, invalid names, and limit violations.
  * Returns an array of error strings. Empty array = no errors.
  */
-export function validateCommandRegistry(): string[] {
+export function validateCommandRegistry(registry: readonly CommandRegistryEntry[] = COMMAND_REGISTRY): string[] {
 	const errors: string[] = [];
-	const names = new Set<string>();
-	const nameSet = new Set<string>();
-	let rootCommandCount = 0;
+	const claimedNames = new Map<string, string>();
+	const slashNames = new Set<string>();
 
-	for (const command of COMMAND_REGISTRY) {
-		// Validate name format
+	for (const command of registry) {
+		const normalizedName = normalizeRegistryKey(command.name);
+
 		if (!/^[a-z0-9_-]{1,32}$/.test(command.name)) {
 			errors.push(`Invalid canonical command name: "${command.name}"`);
 		}
 
-		// Check for duplicate names
-		if (names.has(command.name)) {
-			errors.push(`Duplicate canonical command: "${command.name}"`);
+		const existingOwner = claimedNames.get(normalizedName);
+		if (existingOwner) {
+			errors.push(`Command name collision after normalization: "${command.name}" conflicts with "${existingOwner}"`);
+		} else {
+			claimedNames.set(normalizedName, command.name);
 		}
-		names.add(command.name);
 
-		// Validate description - 100 char limit for Discord
 		if (!command.description || command.description.length > 100) {
 			errors.push(`Invalid description for "${command.name}": must be 1-100 characters`);
 		}
 
-		// Count root commands (only those with slash: true)
 		if (command.slash) {
-			rootCommandCount++;
-		}
-
-		// Check for duplicate names in nameSet (catch re-registrations)
-		if (command.slash) {
-			const lowerName = command.name.toLowerCase();
-			if (nameSet.has(lowerName)) {
+			if (slashNames.has(normalizedName)) {
 				errors.push(`Duplicate root command name after normalization: "${command.name}"`);
 			}
-			nameSet.add(lowerName);
+			slashNames.add(normalizedName);
 		}
-	}
 
-	// Validate subcommand names against known subcommand lists
-	// (basic check that subcommand names are lowercase alphanumeric)
-	for (const command of COMMAND_REGISTRY) {
-		if (command.subcommands) {
-			for (const sub of command.subcommands) {
-				if (!/^[a-z0-9_-]{1,32}$/.test(sub)) {
-					errors.push(`Invalid subcommand name "${sub}" in "${command.name}"`);
-				}
+		for (const alias of command.legacyNames) {
+			const normalizedAlias = normalizeRegistryKey(alias);
+			if (!/^[a-z0-9_-]{1,32}$/.test(alias)) {
+				errors.push(`Invalid legacy alias "${alias}" in "${command.name}"`);
+			}
+			const aliasOwner = claimedNames.get(normalizedAlias);
+			if (aliasOwner) {
+				errors.push(`Command alias collision after normalization: "${alias}" for "${command.name}" conflicts with "${aliasOwner}"`);
+			} else {
+				claimedNames.set(normalizedAlias, command.name);
 			}
 		}
+
+		const subcommands = new Set<string>();
+		for (const subcommand of command.subcommands ?? []) {
+			const normalizedSubcommand = normalizeRegistryKey(subcommand);
+			if (!/^[a-z0-9_-]{1,32}$/.test(subcommand)) {
+				errors.push(`Invalid subcommand name "${subcommand}" in "${command.name}"`);
+			}
+			if (subcommands.has(normalizedSubcommand)) {
+				errors.push(`Duplicate subcommand after normalization: "${subcommand}" in "${command.name}"`);
+			}
+			subcommands.add(normalizedSubcommand);
+		}
 	}
 
-	return errors;
+	return errors.sort();
 }
 
 /**
@@ -264,6 +307,6 @@ export function printRegistrySummary(): void {
 	console.log(`[Registry] ${total} entries · ${slashCount} root commands · ${grouped.length} grouped`);
 	console.log(`[Registry] ${deprecated.length} deprecated · ${devOnly.length} dev-only · ${premium.length} premium`);
 	if (slashCount > 90) {
-		console.warn(`[Registry] ⚠️ Root command count (${slashCount}) exceeds 90! Sync may fail.`);
+		console.warn(`[Registry] Warning: Root command count (${slashCount}) exceeds 90! Sync may fail.`);
 	}
 }

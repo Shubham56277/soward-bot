@@ -111,7 +111,8 @@ async function getCachedGuildWebhooks(
 
 export async function isAutoRecoveryEnabled(guildId: string): Promise<boolean> {
   const config = await getAntiNukeConfig(guildId);
-  return config?.moduleStates?.autoRecovery !== false;
+  if (!config || !config.enabled) return false;
+  return config.moduleStates?.autoRecovery !== false;
 }
 
 async function fetchAssetBuffer(url: string): Promise<Buffer | null> {

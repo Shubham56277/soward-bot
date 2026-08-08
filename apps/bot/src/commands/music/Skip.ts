@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -31,25 +31,24 @@ export default class Skip extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
-        const embed = new EmbedBuilder();
         if (!player) return await ctx.sendMessage("Player is not connected");
         const autoplay = player.get<boolean>('autoplay');
         if (!autoplay && player.queue.tracks.length === 0) {
-            return await ctx.sendMessage({
-                embeds: [embed.setColor(ctx.client.config.colors.red).setDescription("Queue is empty")],
-            });
+            return await ctx.sendMessage(this.msg("Queue is empty"));
         }
         const currentTrack = player.queue.current?.info;
         player.skip(0, !autoplay);
         if (ctx.isInteraction) {
-            return await ctx.sendMessage({
-                embeds: [
-                    embed.setColor(ctx.client.config.colors.main).setDescription(`Skipped [${currentTrack?.title}](${currentTrack?.uri})`),
-                ],
-            });
+            return await ctx.sendMessage(this.msg(`Skipped [${currentTrack?.title}](${currentTrack?.uri})`));
         }
-        ctx.message?.react('👍');
     }
 }

@@ -1,16 +1,21 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { ModerationService } from '../../services/moderation/moderationService';
+import { ModerationService } from '../../services/moderation/moderationService.js';
 import { EmbedBuilder, ApplicationCommandOptionType } from 'discord.js';
 
 export default class BanCommand extends Command {
 	constructor() {
 		super({
 			name: 'moderation',
-			description: 'Moderation commands',
+			description: {
+				content: 'Moderation commands',
+				examples: ['moderation ban @user'],
+				usage: 'moderation <ban|kick|timeout|warn|softban|unban|history>',
+			},
 			category: 'moderation',
-			permissions: ['BanMembers'],
-			subcommands: [
+			permissions: { user: ['BanMembers'] },
+			slashCommand: true,
+			options: [
 				{
 					name: 'ban',
 					description: 'Ban a member from the server',
@@ -33,8 +38,8 @@ export default class BanCommand extends Command {
 							description: 'Days of messages to delete (0-7)',
 							type: ApplicationCommandOptionType.Integer,
 							required: false,
-							minValue: 0,
-							maxValue: 7,
+							min_value: 0,
+							max_value: 7,
 						},
 					],
 				},
@@ -73,8 +78,8 @@ export default class BanCommand extends Command {
 							description: 'Duration in minutes',
 							type: ApplicationCommandOptionType.Integer,
 							required: true,
-							minValue: 1,
-							maxValue: 40320, // 28 days in minutes
+							min_value: 1,
+							max_value: 40320, // 28 days in minutes
 						},
 						{
 							name: 'reason',
@@ -163,8 +168,8 @@ export default class BanCommand extends Command {
 							description: 'Number of cases to show (default: 10)',
 							type: ApplicationCommandOptionType.Integer,
 							required: false,
-							minValue: 1,
-							maxValue: 25,
+							min_value: 1,
+							max_value: 25,
 						},
 					],
 				},
@@ -215,16 +220,16 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.ban(ctx.member!, user, reason, deleteDays);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('🔨 Member Banned')
+			.setTitle('Member Banned')
 			.setColor('Red')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
-				{ name: 'Moderator', value: `${ctx.author.tag}`, inline: true },
+				{ name: 'Moderator', value: `${ctx.author?.tag ?? 'Unknown'}`, inline: true },
 				{ name: 'Case ID', value: `#${result.caseId}`, inline: true },
 				{ name: 'Reason', value: reason },
 			)
@@ -251,16 +256,16 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.kick(ctx.member!, member, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('👢 Member Kicked')
+			.setTitle('Member Kicked')
 			.setColor('Orange')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
-				{ name: 'Moderator', value: `${ctx.author.tag}`, inline: true },
+				{ name: 'Moderator', value: `${ctx.author?.tag ?? 'Unknown'}`, inline: true },
 				{ name: 'Case ID', value: `#${result.caseId}`, inline: true },
 				{ name: 'Reason', value: reason },
 			)
@@ -289,12 +294,12 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.timeout(ctx.member!, member, durationMs, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('⏱️ Member Timed Out')
+			.setTitle('Member Timed Out')
 			.setColor('Yellow')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
@@ -325,16 +330,16 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.warn(ctx.member!, member, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('⚠️ Member Warned')
+			.setTitle('Member Warned')
 			.setColor('Yellow')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
-				{ name: 'Moderator', value: `${ctx.author.tag}`, inline: true },
+				{ name: 'Moderator', value: `${ctx.author?.tag ?? 'Unknown'}`, inline: true },
 				{ name: 'Case ID', value: `#${result.caseId}`, inline: true },
 				{ name: 'Reason', value: reason },
 			)
@@ -355,17 +360,17 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.softban(ctx.member!, user, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('🔨 Member Softbanned')
+			.setTitle('Member Softbanned')
 			.setColor('Purple')
 			.setDescription('User has been banned and immediately unbanned to purge their messages.')
 			.addFields(
 				{ name: 'User', value: `${user.tag} (${user.id})`, inline: true },
-				{ name: 'Moderator', value: `${ctx.author.tag}`, inline: true },
+				{ name: 'Moderator', value: `${ctx.author?.tag ?? 'Unknown'}`, inline: true },
 				{ name: 'Case ID', value: `#${result.caseId}`, inline: true },
 				{ name: 'Reason', value: reason },
 			)
@@ -386,16 +391,16 @@ export default class BanCommand extends Command {
 		const result = await ModerationService.unban(ctx.member!, userId, reason);
 
 		if (!result.success) {
-			await ctx.sendMessage({ content: `❌ ${result.error}` });
+			await ctx.sendMessage({ content: `${result.error}` });
 			return;
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle('✅ User Unbanned')
+			.setTitle('User Unbanned')
 			.setColor('Green')
 			.addFields(
 				{ name: 'User ID', value: userId, inline: true },
-				{ name: 'Moderator', value: `${ctx.author.tag}`, inline: true },
+				{ name: 'Moderator', value: `${ctx.author?.tag ?? 'Unknown'}`, inline: true },
 				{ name: 'Case ID', value: `#${result.caseId}`, inline: true },
 				{ name: 'Reason', value: reason },
 			)
@@ -405,11 +410,17 @@ export default class BanCommand extends Command {
 	}
 
 	private async handleHistory(ctx: Context): Promise<void> {
+		const author = ctx.author;
+		if (!author) {
+			await ctx.sendMessage({ content: 'Unable to identify the requesting user' });
+			return;
+		}
+
 		const user = ctx.options.getUser('user');
 		const caseId = ctx.options.getInteger('case-id');
 		const limit = ctx.options.getInteger('limit') || 10;
 
-		const { ModerationCaseService } = await import('../../services/moderation/moderationCaseService');
+		const { ModerationCaseService } = await import('../../services/moderation/moderationCaseService.js');
 
 		if (caseId) {
 			const case_ = await ModerationCaseService.getCase(ctx.guild!.id, caseId);
@@ -433,7 +444,7 @@ export default class BanCommand extends Command {
 			return;
 		}
 
-		const targetId = user?.id || ctx.author.id;
+		const targetId = user?.id || author.id;
 		const cases = await ModerationCaseService.getUserCases(ctx.guild!.id, targetId, limit);
 
 		if (cases.length === 0) {
@@ -442,7 +453,7 @@ export default class BanCommand extends Command {
 		}
 
 		const embed = new EmbedBuilder()
-			.setTitle(`Moderation History for ${user?.tag || ctx.author.tag}`)
+			.setTitle(`Moderation History for ${user?.tag || author.tag}`)
 			.setColor('Blue')
 			.setDescription(
 				cases.map(c => `**#${c.caseId}** - ${c.action.toUpperCase()} - ${c.reason}`).join('\n')

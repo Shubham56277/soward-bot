@@ -1,115 +1,91 @@
-import BaseClient from "../../base/Client";
+import { AntiNukeMember } from "@repo/db";
+import { AuditLogEvent, Events, Guild } from "discord.js";
 import Event from "../../abstract/Event";
-import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke, AntiNukeMember } from "@repo/db";
+import BaseClient from "../../base/Client";
+import { isMatchingFreshAntiNukeAuditEntry } from "../../modules/antiNukeState";
+
+const AUDIT_LOOKBACK_LIMIT = 6;
 
 export default class GuildMemberRemove extends Event {
-    // Ultra-fast cache
-    private configCache = new Map<string, AntiNuke>();
-    private trustedCache = new Map<string, any>();
-    private kickCache = new Map<string, { executorId: string, timestamp: number }>();
+	constructor(client: BaseClient) {
+		super(client, { event: Events.GuildMemberRemove });
+	}
 
-    constructor(client: BaseClient) {
-        super(client, {
-            event: Events.GuildMemberRemove,
-        });
-    }
+	public async execute(): Promise<void> {
+		this.client.on(Events.GuildMemberRemove, async (member) => {
+			const guild = member.guild;
+			if (!guild) return;
 
-    public async execute(): Promise<void> {
-        this.client.on(Events.GuildMemberRemove, async (member) => {
-            if (!member.guild) return;
-            const { guild, id: memberId } = member;
-            const guildId = guild.id;
+			try {
+				const config = await this.client.services.antinukes.getConfig(guild.id);
+				if (!config.enabled) return;
 
-            try {
-                // Ultra-fast config check with cache
-                let config = this.configCache.get(guildId);
-                if (!config) {
-                    config = await this.client.services.antinukes.getConfig(guildId);
-                    this.configCache.set(guildId, config);
-                    setTimeout(() => this.configCache.delete(guildId), 30000);
-                }
+				const normalKick = config.member.find(entry => entry.type === "kick" && entry.enabled);
+				const infiniteVoid = config.member.find(entry => entry.type === "infiniteVoid" && entry.enabled);
+				if (!normalKick && !infiniteVoid) return;
 
-                const actionConfig = config?.member?.find(c => c.type === "kick");
-                if (!actionConfig?.enabled || !config.enabled) return;
+				const logs = await guild.fetchAuditLogs({
+					limit: AUDIT_LOOKBACK_LIMIT,
+					type: AuditLogEvent.MemberKick,
+				}).catch((error) => {
+					this.client.logger.error("[AntiNuke] MemberKick audit fetch failed:", error);
+					return null;
+				});
+				if (!logs) return;
 
-                // Check cache for recent kicks first
-                const cachedKick = this.kickCache.get(memberId);
-                if (cachedKick && (Date.now() - cachedKick.timestamp) < 120000) {
-                    return this.handleMemberKick(guild, cachedKick.executorId, memberId, actionConfig);
-                }
+				const auditEntry = logs.entries.find(entry => entry.target?.id === member.id);
+				if (!auditEntry?.executor?.id || !auditEntry.target?.id) return;
 
-                // Fast audit log fetch
-                const logs = await guild.fetchAuditLogs({
-                    limit: 1,
-                    type: AuditLogEvent.MemberKick
-                }).catch(() => null);
+				const executorId = auditEntry.executor.id;
+				if (infiniteVoid) {
+					const emergency = await this.client.services.antinukes.recordInfiniteVoidKick(
+						guild,
+						executorId,
+						member.id,
+						auditEntry.id,
+						auditEntry.createdTimestamp,
+					);
+					if (emergency.thresholdReached) return;
+				}
 
-                if (!logs) return;
-                const log = logs.entries.first();
-                if (!log || !log.executor || !log.target) return;
+				if (normalKick) await this.handleNormalMemberKick(guild, executorId, normalKick);
+			} catch (error) {
+				this.client.logger.error("[AntiNuke] MemberKick handling failed:", error);
+			}
+		});
+	}
 
-                const executorId = log.executor.id;
-                const now = Date.now();
+	private async handleNormalMemberKick(
+		guild: Guild,
+		executorId: string,
+		actionConfig: AntiNukeMember,
+	): Promise<void> {
+		if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
-                // Cache this kick for future checks
-                this.kickCache.set(memberId, { executorId, timestamp: now });
-                setTimeout(() => this.kickCache.delete(memberId), 120000);
+		let member = guild.members.cache.get(executorId);
+		if (!member) {
+			member = await guild.members.fetch(executorId).catch((error) => {
+				this.client.logger.error("[AntiNuke] Kick executor fetch failed:", error);
+				return null;
+			}) ?? undefined;
+		}
+		if (!member || !guild.members.me || !this.client.services.antinukes.canModerate(member, guild.members.me)) return;
 
-                // Fast early returns
-                if (executorId === guild.ownerId ||
-                    executorId === this.client.user?.id ||
-                    executorId === config.admin ||
-                    (now - log.createdTimestamp) > 120000) return;
+		if (actionConfig.limit > 1) {
+			const thresholdReached = await this.client.services.antinukes.trackAction(
+				guild,
+				executorId,
+				"memberKick",
+				actionConfig,
+			);
+			if (!thresholdReached) return;
+		}
 
-                await this.handleMemberKick(guild, executorId, memberId, actionConfig);
-
-            } catch (error) {
-                this.client.logger?.error?.(error);
-            }
-        });
-    }
-
-    private async handleMemberKick(guild: any, executorId: string, memberId: string, actionConfig: AntiNukeMember): Promise<void> {
-        try {
-            // Ultra-fast trusted user check with cache
-            let trustedSet = this.trustedCache.get(guild.id);
-            if (!trustedSet) {
-                const config = this.configCache.get(guild.id);
-                trustedSet = new Set(config?.trustedUsers?.map(u => u.id) || []);
-                this.trustedCache.set(guild.id, trustedSet);
-                setTimeout(() => this.trustedCache.delete(guild.id), 30000);
-            }
-
-            if (trustedSet.has(executorId)) return;
-
-            // Fast member check using cache first
-            let member = guild.members.cache.get(executorId) as any;
-            if (!member) {
-                member = await guild.members.fetch(executorId).catch(() => null);
-                if (!member) return;
-            }
-
-            if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
-
-            if (actionConfig.limit <= 1) {
-                await this.client.services.antinukes.trackAction(guild, executorId, "memberKick", actionConfig);
-                return;
-            }
-            const tracked = await this.client.services.antinukes.trackAction(guild, executorId, "memberKick", actionConfig);
-
-            if (tracked) {
-
-                await this.client.services.antinukes.punishUser(
-                    guild,
-                    executorId,
-                    actionConfig.action,
-                    "Anti-Member Protection | Unauthorized Kick",
-                );
-            }
-
-        } catch (error) {
-            this.client.logger?.error?.(error);
-        }
-    }
+		await this.client.services.antinukes.punishUser(
+			guild,
+			executorId,
+			actionConfig.action,
+			"Anti-Member Protection | Unauthorized Kick",
+		);
+	}
 }

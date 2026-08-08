@@ -105,7 +105,7 @@ export default class WelcomeCommand extends Command {
 
 		if (!welcome || !welcome.enabled) {
 			await interaction.reply({
-				content: "<:Cross:1375519752746958858> **Welcome system is not configured or disabled**\n\nPlease configure the welcome system first.",
+				content: "**Welcome system is not configured or disabled**\n\nPlease configure the welcome system first.",
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
@@ -177,7 +177,7 @@ export default class WelcomeCommand extends Command {
 		} catch (error) {
 			console.error("Preview error:", error);
 			await interaction.reply({
-				content: "<:Cross:1375519752746958858> **Failed to generate preview**\n\nThere might be an issue with your welcome configuration.",
+				content: "**Failed to generate preview**\n\nThere might be an issue with your welcome configuration.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -188,7 +188,7 @@ export default class WelcomeCommand extends Command {
 
 		if (!welcome) {
 			await interaction.reply({
-				content: "<:Cross:1375519752746958858> **Welcome system is not configured**\n\nPlease configure the welcome system first.",
+				content: "**Welcome system is not configured**\n\nPlease configure the welcome system first.",
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
@@ -198,7 +198,7 @@ export default class WelcomeCommand extends Command {
 			enabled: !welcome.enabled,
 		});
 
-		const status = updatedWelcome?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled";
+		const status = updatedWelcome?.enabled ? "Enabled" : "Disabled";
 
 		await interaction.reply({
 			content: `### 🔄 Welcome System Toggled\n**Status:** ${status}`,
@@ -213,7 +213,7 @@ export default class WelcomeCommand extends Command {
 			.setStyle(ButtonStyle.Danger);
 
 		await interaction.reply({
-			content: "<:Cross:1375519752746958858> **Are you sure you want to reset the welcome system?**\n\nThis action cannot be undone.",
+			content: "**Are you sure you want to reset the welcome system?**\n\nThis action cannot be undone.",
 			components: [new ActionRowBuilder<ButtonBuilder>().addComponents(confirmButton)],
 			flags: MessageFlags.Ephemeral,
 		}).then((message) => {
@@ -222,7 +222,7 @@ export default class WelcomeCommand extends Command {
 				if (i.customId === "confirm_welcome_reset") {
 					await Welcome.delete(ctx.guild!.id);
 					await i.reply({
-						content: "<:Tick:1375519268292264012> **Welcome system has been reset**",
+						content: "**Welcome system has been reset**",
 						flags: MessageFlags.Ephemeral,
 					});
 					setTimeout(async () => {
@@ -249,7 +249,7 @@ export default class WelcomeCommand extends Command {
 
 		if (!welcome) {
 			await interaction.reply({
-				content: "<:Cross:1375519752746958858> **Welcome system is not configured**\n\nPlease configure the welcome system first.",
+				content: "**Welcome system is not configured**\n\nPlease configure the welcome system first.",
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
@@ -324,7 +324,7 @@ export default class WelcomeCommand extends Command {
 			console.error("Card welcome setup error:", error);
 			if (!interaction.replied && !interaction.deferred) {
 				await interaction.reply({
-					content: "<:Cross:1375519752746958858> **Setup failed**\n\nPlease try again.",
+					content: "**Setup failed**\n\nPlease try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 			}
@@ -358,7 +358,7 @@ export default class WelcomeCommand extends Command {
 			console.error("Embed message setup error:", error);
 			if (!interaction.replied && !interaction.deferred) {
 				await interaction.reply({
-					content: "<:Cross:1375519752746958858> **Setup failed**\n\nPlease try again.",
+					content: "**Setup failed**\n\nPlease try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 			}
@@ -433,7 +433,7 @@ export default class WelcomeCommand extends Command {
 
 								const embed = new ContainerBuilder()
 									.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-										`## <:Tick:1375519268292264012> JSON File Uploaded Successfully\n` +
+										`## JSON File Uploaded Successfully\n` +
 										`### Welcome Embed Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Uploaded JSON File\n**File:** ${jsonAttachment.name}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
 									));
 
@@ -453,13 +453,13 @@ export default class WelcomeCommand extends Command {
 							} catch (parseError) {
 								await msg.reply({
 									// biome-ignore lint/style/useTemplate: <explanation>
-									content: "<:Cross:1375519752746958858> **Invalid JSON Format**\n\nThe uploaded file contains invalid JSON. Please check your JSON syntax and try again.\n\n**Error:** ```" + parseError + "```",
+									content: "**Invalid JSON Format**\n\nThe uploaded file contains invalid JSON. Please check your JSON syntax and try again.\n\n**Error:** ```" + parseError + "```",
 								});
 							}
 						} catch (error) {
 							console.error("File processing error:", error);
 							await msg.reply({
-								content: "<:Cross:1375519752746958858> **Failed to process file**\n\nCouldn't read the uploaded JSON file. Please try again.",
+								content: "**Failed to process file**\n\nCouldn't read the uploaded JSON file. Please try again.",
 							});
 						}
 					});
@@ -505,7 +505,7 @@ export default class WelcomeCommand extends Command {
 
 						const embed = new ContainerBuilder()
 							.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-								`## <:Tick:1375519268292264012> Text Message Setup Complete\n` +
+								`## Text Message Setup Complete\n` +
 								`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Text Message\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
 							));
 
@@ -536,7 +536,7 @@ export default class WelcomeCommand extends Command {
 
 					const embed = new ContainerBuilder()
 						.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-							`## <:Tick:1375519268292264012> Default Embed Setup Complete\n` +
+							`## Default Embed Setup Complete\n` +
 							`### Welcome Embed Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Format:** Default Embed JSON\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
 						));
 
@@ -556,7 +556,7 @@ export default class WelcomeCommand extends Command {
 		});
 	}
 	private createConfigMenuPanel(welcome: any): ContainerBuilder {
-		const status = welcome?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled";
+		const status = welcome?.enabled ? "Enabled" : "Disabled";
 		const type = this.formatWelcomeType(welcome?.type);
 		const channel = welcome?.channelId ? `<#${welcome.channelId}>` : "Not set";
 
@@ -617,7 +617,7 @@ export default class WelcomeCommand extends Command {
 
 						const embed = new ContainerBuilder()
 							.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-								`## <:Tick:1375519268292264012> Setup Complete\n` +
+								`## Setup Complete\n` +
 								`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
 							));
 
@@ -635,7 +635,7 @@ export default class WelcomeCommand extends Command {
 
 					const embed = new ContainerBuilder()
 						.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-							`## <:Tick:1375519268292264012> Setup Complete\n` +
+							`## Setup Complete\n` +
 							`### Welcome Message Configured\n**Channel:** <#${updatedWelcome?.channelId}>\n**Type:** ${this.formatWelcomeType(updatedWelcome?.type!)}\n**Message:** ${updatedWelcome?.message}\n**Status:** ${updatedWelcome?.enabled ? "Enabled" : "Disabled"}`
 						));
 
@@ -683,7 +683,7 @@ export default class WelcomeCommand extends Command {
 		const filter = (interaction: any) => {
 			if (interaction.user.id === ctx.author?.id) return true;
 			interaction.reply({
-				content: "<:Cross:1375519752746958858> You are not allowed to interact with this message",
+				content: "You are not allowed to interact with this message",
 				flags: MessageFlags.Ephemeral,
 			}).catch(() => { });
 			return false;
@@ -765,7 +765,7 @@ export default class WelcomeCommand extends Command {
 				console.error("Welcome setup error:", error);
 				if (!interaction.replied && !interaction.deferred) {
 					await interaction.reply({
-						content: "<:Cross:1375519752746958858> Something went wrong, please try again later.",
+						content: "Something went wrong, please try again later.",
 						flags: MessageFlags.Ephemeral,
 					});
 				}

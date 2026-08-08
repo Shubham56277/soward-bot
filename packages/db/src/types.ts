@@ -1,4 +1,4 @@
-import { schema } from ".";
+import type * as schema from "./schema";
 
 export type GuildType = typeof schema.guilds.$inferInsert;
 export type UserType = typeof schema.users.$inferInsert;
@@ -24,6 +24,8 @@ export type IgnoredChannelsType = typeof schema.ignoredChannels.$inferInsert;
 export type blacklistType = typeof schema.blacklist.$inferInsert;
 export type PremiumType = typeof schema.premium.$inferInsert;
 export type PremiumCodeType = typeof schema.premiumCodes.$inferInsert;
+export type UserProfileType = typeof schema.userProfiles.$inferInsert;
+export type GuildBotSettingsType = typeof schema.guildBotSettings.$inferInsert;
 
 export type Channel = {
 	channelId: string;
@@ -37,14 +39,14 @@ export type AntiNukeChannel = {
 	type: "delete" | "create" | "update";
 	limit: number;
 	enabled: boolean;
-	action: "kick" | "ban" | "role-remove";
+	action: "kick" | "ban" | "role-remove" | "rolestrip";
 };
 
 export type AntiNukeMember = {
-	type: "kick" | "ban" | "unban" | "update";
+	type: "kick" | "ban" | "unban" | "update" | "infiniteVoid";
 	limit: number;
 	enabled: boolean;
-	action: "kick" | "ban" | "role-remove";
+	action: "kick" | "ban" | "role-remove" | "rolestrip";
 };
 
 export type Roles = {

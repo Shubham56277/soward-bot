@@ -14,21 +14,23 @@
   },
   "scripts": {
     "build": "tsup",
-    "lint": "biome lint --write ./src",
+    "check": "biome check ./src",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint ./src",
     "format": "biome format --write ./src"
   },
   "dependencies": {
-    "@discordjs/core": "^2.6.0",
-    "@discordjs/rest": "^2.6.3",
-    "@repo/db": "*",
-    "@repo/env": "*",
-    "discord-api-types": "^0.38.50",
-    "discord.js": "^14.27.0",
-    "ioredis": "^5.11.1",
-    "reflect-metadata": "^0.2.2",
-    "tsyringe": "^4.10.0"
+    "@discordjs/core": "2.6.0",
+    "@discordjs/rest": "2.6.3",
+    "@repo/db": "0.0.0",
+    "@repo/env": "0.0.0",
+    "discord-api-types": "0.38.50",
+    "discord.js": "14.27.0",
+    "ioredis": "5.11.1",
+    "reflect-metadata": "0.2.2",
+    "tsyringe": "4.10.0"
   },
   "devDependencies": {
-    "@repo/typescript-config": "*"
+    "@repo/typescript-config": "0.0.0"
   }
 }

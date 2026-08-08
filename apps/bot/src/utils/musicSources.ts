@@ -2,7 +2,7 @@ const TRUSTED_HOSTS = new Set([
 	"youtube.com",
 	"youtu.be",
 	"spotify.com",
-	"music.apple.com",
+	"soundcloud.com",
 	"cdn.discordapp.com",
 	"media.discordapp.net",
 ]);
@@ -13,6 +13,16 @@ function isHostOrSubdomain(hostname: string, trustedHost: string) {
 
 function isDiscordAttachmentPath(pathname: string) {
 	return pathname.startsWith("/attachments/") || pathname.startsWith("/ephemeral-attachments/");
+}
+
+/** Returns true if the given value is a YouTube (youtube.com / youtu.be) URL. */
+export function isYoutubeUrl(value: string): boolean {
+	try {
+		const hostname = new URL(value).hostname.toLowerCase();
+		return hostname === "youtube.com" || hostname.endsWith(".youtube.com") || hostname === "youtu.be";
+	} catch {
+		return false;
+	}
 }
 
 export function isAllowedDirectMusicUrl(value: string): boolean {

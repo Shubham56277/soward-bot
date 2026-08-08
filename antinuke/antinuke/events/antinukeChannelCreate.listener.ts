@@ -15,17 +15,21 @@ export default class AntiNukeChannelCreateListener extends Event {
   public async run(channel: Channel): Promise<void> {
     if (!("guild" in channel)) return;
 
-    const protection = await runAntiNukeProtectionDetailed(this.client, channel.guild, "channelCreate", `channelCreate:${(channel as any).name || channel.id}`);
-    if (!protection.enforced) return;
+    try {
+      const protection = await runAntiNukeProtectionDetailed(this.client, channel.guild, "channelCreate", `channelCreate:${(channel as any).name || channel.id}`);
+      if (!protection.enforced) return;
 
-    if (!("permissionOverwrites" in channel)) return;
+      if (!("permissionOverwrites" in channel)) return;
 
-    const autoRecoveryEnabled = await isAutoRecoveryEnabled(channel.guild.id);
-    if (!autoRecoveryEnabled) return;
+      const autoRecoveryEnabled = await isAutoRecoveryEnabled(channel.guild.id);
+      if (!autoRecoveryEnabled) return;
 
-    const cleaned = await cleanupUnauthorizedChannel(channel as any);
-    if (!cleaned) return;
+      const cleaned = await cleanupUnauthorizedChannel(channel as any);
+      if (!cleaned) return;
 
-    await sendRecoveryReport(channel.guild, "Unauthorized Channel Removed", `Cleaned up unauthorized channel: **${(channel as any).name || channel.id}**`);
+      await sendRecoveryReport(channel.guild, "Unauthorized Channel Removed", `Cleaned up unauthorized channel: **${(channel as any).name || channel.id}**`).catch(() => null);
+    } catch (err) {
+      // Swallow errors so antinuke never crashes the bot
+    }
   }
 }

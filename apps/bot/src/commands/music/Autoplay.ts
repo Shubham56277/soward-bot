@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -37,26 +37,18 @@ export default class Autoplay extends Command {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
             return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
+                components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("Player is not connected"))],
+                flags: MessageFlags.IsComponentsV2,
             });
         }
 
-        const embed = new EmbedBuilder();
         const autoplay = player.get<boolean>('autoplay');
 
         player.set('autoplay', !autoplay);
 
-        if (autoplay) {
-            embed.setDescription("Autoplay has been disabled").setColor(ctx.client.config.colors.red);
-        } else {
-            embed.setDescription("Autoplay has been enabled").setColor(ctx.client.config.colors.main);
-        }
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(autoplay ? "Autoplay has been disabled" : "Autoplay has been enabled"));
 
-        await ctx.sendMessage({ embeds: [embed] });
+        await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 }

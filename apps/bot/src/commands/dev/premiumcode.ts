@@ -8,6 +8,19 @@ import { TimeFormat } from "../../utils/timeFormat";
 const MAX_PREMIUM_DURATION_MS = 365 * 24 * 60 * 60 * 1_000;
 const MAX_CODE_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
 
+/**
+ * Parse a duration string. If the input is a bare number (no unit suffix),
+ * treat it as days — the most intuitive default for premium durations.
+ */
+function parseDuration(text: string): number | null {
+	const trimmed = text.trim();
+	if (/^\d+$/.test(trimmed)) {
+		const days = parseInt(trimmed, 10);
+		return days > 0 ? days * 24 * 60 * 60 * 1000 : null;
+	}
+	return ms.parse(trimmed) ?? null;
+}
+
 export default class PremiumCodeCommand extends Command {
 	constructor() {
 		super({
@@ -63,8 +76,8 @@ export default class PremiumCodeCommand extends Command {
 				return ctx.sendMessage("Provide a duration, e.g. `?premiumcode create 30d`");
 			}
 
-			const durationMs = ms.parse(durationText);
-			const validityMs = ms.parse(validityText);
+			const durationMs = parseDuration(durationText);
+			const validityMs = parseDuration(validityText);
 
 			if (!durationMs || durationMs <= 0 || durationMs > MAX_PREMIUM_DURATION_MS) {
 				return ctx.sendMessage("Premium duration must be between 1 second and 365 days. Examples: `30d`, `7d`, `12h`");

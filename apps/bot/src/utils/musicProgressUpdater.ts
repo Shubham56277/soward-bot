@@ -1,17 +1,16 @@
 import { MessageFlags, TextChannel } from "discord.js";
-import BaseClient from "../base/Client";
+import type BaseClient from "../base/Client";
 import { createMusicPanel } from "./musicPanel";
 import { readMusicRecommendations } from "./musicRecommendations";
 
 const UPDATE_INTERVAL_MS = 15_000;
-const startedClients = new WeakSet<BaseClient>();
+const clientTimers = new WeakMap<BaseClient, NodeJS.Timeout>();
 
 export function startMusicProgressUpdater(client: BaseClient): void {
-	if (startedClients.has(client)) return;
-	startedClients.add(client);
+	if (clientTimers.has(client)) return;
 
 	let updating = false;
-	const timer = setInterval(async () => {
+	const update = async (): Promise<void> => {
 		if (updating) return;
 		updating = true;
 		try {
@@ -36,6 +35,18 @@ export function startMusicProgressUpdater(client: BaseClient): void {
 		} finally {
 			updating = false;
 		}
+	};
+
+	const timer = setInterval(() => {
+		void update().catch((error) => client.logger.error("[music-progress] Update failed", error));
 	}, UPDATE_INTERVAL_MS);
+	clientTimers.set(client, timer);
 	timer.unref();
+}
+
+export function stopMusicProgressUpdater(client: BaseClient): void {
+	const timer = clientTimers.get(client);
+	if (!timer) return;
+	clearInterval(timer);
+	clientTimers.delete(client);
 }

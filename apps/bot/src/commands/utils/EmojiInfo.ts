@@ -103,10 +103,10 @@ export default class EmojiInfo extends Command {
 
         const fields = [
             `**ID:** ${emoji.id}`,
-            `**Animated:** ${emoji.animated ? '<:Tick:1375519268292264012> Yes' : '<:Cross:1375519752746958858> No'}`,
+            `**Animated:** ${emoji.animated ? 'Yes' : 'No'}`,
             `**Created:** <t:${Math.floor(emoji.createdTimestamp / 1000)}:R>`,
             `**Identifier:** \`${emoji.identifier}\``,
-            `**Available:** ${emoji.available ? '<:Tick:1375519268292264012> Yes' : '<:Cross:1375519752746958858> No'}`,
+            `**Available:** ${emoji.available ? 'Yes' : 'No'}`,
             `**URL:** [Download](${emoji.url})`,
         ];
 

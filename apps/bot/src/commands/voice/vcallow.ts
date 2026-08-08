@@ -43,6 +43,6 @@ export default class VcAllowCommand extends Command {
             Connect: true
         }, { reason: `Allowed by ${ctx.author!.tag}` });
 
-        return ctx.sendMessage(`<:Tick:1375519268292264012> ${targetUser} can now join this channel`);
+        return ctx.sendMessage(`${targetUser} can now join this channel`);
     }
 }

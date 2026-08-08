@@ -68,9 +68,9 @@ export default class Note extends Command {
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Note Added**`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                `**User:** ${targetUser.toString()}\n` +
+                `**User:** ${targetUser.username}\n` +
                 `**Note:** ${noteText}\n` +
-                `**Added by:** ${ctx.author?.toString() ?? "Unknown"}`
+                `**Added by:** ${ctx.author?.username ?? "Unknown"}`
             ))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# Note ID: ${note?.id ?? "unknown"}`));

@@ -3,6 +3,10 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
+    "check": "turbo check",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "validate": "turbo run check typecheck test build",
     "dev": "turbo dev",
     "start": "turbo start",
     "bot:build": "yarn workspace bot build",
@@ -13,7 +17,12 @@
     "bot:launch": "bash scripts/start-bot.sh",
     "bot:health": "curl -sf http://127.0.0.1:9090/health | node -e \"process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.stringify(JSON.parse(d),null,2)))\"",
     "dashboard": "node scripts/dashboard.js",
+    "doctor": "node scripts/doctor.js",
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:local": "node scripts/setup-local-postgres.js",
     "bot:diagnose": "bash deploy/scripts/diagnose-server.sh",
+    "setup": "bash scripts/setup-linux.sh",
+    "health": "bash scripts/health-check.sh",
     "clean": "turbo clean",
     "clean:all": "turbo clean:all",
     "format": "turbo format",
@@ -21,20 +30,21 @@
     "pm2": "turbo pm2"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.5",
-    "@types/node": "^24.13.3",
-    "turbo": "^2.10.5",
+    "@biomejs/biome": "2.5.5",
+    "@types/node": "24.13.3",
+    "turbo": "2.10.5",
     "typescript": "5.9.3"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.0.0 <23.0.0",
+    "yarn": "1.22.22"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "^2.9.0",
-    "@sentry/cli": "^3.6.1",
-    "@sentry/node": "^10.67.0",
-    "tsup": "^8.5.1"
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/core": "2.9.0",
+    "@sentry/cli": "3.6.1",
+    "@sentry/node": "10.67.0",
+    "tsup": "8.5.1"
   },
   "packageManager": "yarn@1.22.22",
   "resolutions": {

@@ -10,25 +10,24 @@ export default class trackEnd extends Event {
     }
 
     public async execute(): Promise<void> {
-        this.client.manager.on("trackEnd", async (player, track) => {
-            const guild = this.client.guilds.cache.get(player.guildId);
-            if (!guild) return;
-            if (!player.textChannelId) return;
-         
-            const messageId = player.get<string | undefined>('messageId');
-            if (!messageId) return;
-
-            const channel = guild.channels.cache.get(player.textChannelId!) as TextChannel;
-            if (!channel) return;
-
-            const message = await channel.messages.fetch(messageId).catch(() => {
-                null;
-            });
-            if (!message) return;
-
-            message.delete().catch(() => {
-                null;
+        this.client.manager.on("trackEnd", (player) => {
+            void this.handleTrackEnd(player).catch((error) => {
+                this.client.logger.error(`[trackEnd] Failed to remove player message for guild ${player.guildId}`, error);
             });
         });
+    }
+
+    private async handleTrackEnd(player: any): Promise<void> {
+        const guild = this.client.guilds.cache.get(player.guildId);
+        if (!guild || !player.textChannelId) return;
+
+        const messageId = player.get("messageId") as string | undefined;
+        if (!messageId) return;
+
+        const channel = guild.channels.cache.get(player.textChannelId) as TextChannel | undefined;
+        if (!channel?.isTextBased()) return;
+
+        const message = await channel.messages.fetch(messageId);
+        await message.delete();
     }
 }

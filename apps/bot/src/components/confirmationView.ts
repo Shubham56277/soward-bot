@@ -4,8 +4,6 @@ import {
 	ButtonStyle,
 	ActionRowBuilder,
 	ButtonInteraction,
-	StringSelectMenuBuilder,
-	StringSelectMenuInteraction,
 } from 'discord.js';
 
 /**
@@ -23,7 +21,7 @@ export class ConfirmationView {
 		confirmLabel?: string;
 		cancelLabel?: string;
 		dangerous?: boolean;
-	}): { embed: EmbedBuilder; components: ActionRowBuilder[] } {
+	}): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] } {
 		const embed = new EmbedBuilder()
 			.setTitle(`⚠️ ${data.title}`)
 			.setColor(data.dangerous ? 'Red' : 'Orange')
@@ -53,30 +51,31 @@ export class ConfirmationView {
 		onCancel?: () => Promise<void>
 	): Promise<void> {
 		const collector = interaction.channel?.createMessageComponentCollector({
-			filter: (i) => i.user.id === interaction.user.id,
+			filter: (i) => i.user.id === interaction.user.id && ['confirm_yes', 'confirm_no'].includes(i.customId),
 			time: this.timeout,
 		});
 
-		collector?.on('collect', async (i) => {
-			if (i.customId === 'confirm_yes') {
-				await i.deferUpdate();
-				await onConfirm();
-				collector.stop('confirmed');
-			} else if (i.customId === 'confirm_no') {
-				await i.deferUpdate();
-				if (onCancel) await onCancel();
-				collector.stop('cancelled');
-			}
+		collector?.on('collect', (i) => {
+			void (async () => {
+				if (i.customId === 'confirm_yes') {
+					await i.deferUpdate();
+					await onConfirm();
+					collector.stop('confirmed');
+				} else {
+					await i.deferUpdate();
+					if (onCancel) await onCancel();
+					collector.stop('cancelled');
+				}
+			})().catch(() => collector.stop('error'));
 		});
 
-		collector?.on('end', async (collected, reason) => {
+		collector?.on('end', (_collected, reason) => {
 			if (reason === 'time') {
 				const embed = new EmbedBuilder()
 					.setTitle('⏱️ Confirmation Timed Out')
 					.setColor('Grey')
 					.setDescription('The confirmation dialog has expired.');
-				
-				await interaction.editReply({ embeds: [embed], components: [] });
+				void interaction.editReply({ embeds: [embed], components: [] }).catch(() => undefined);
 			}
 		});
 	}
@@ -85,7 +84,7 @@ export class ConfirmationView {
 	 * Quick confirmation helper
 	 */
 	static async ask(
-		interaction: ButtonInteraction | any,
+		interaction: ButtonInteraction,
 		title: string,
 		description: string,
 		dangerous = false
@@ -101,21 +100,23 @@ export class ConfirmationView {
 
 		return new Promise((resolve) => {
 			const collector = interaction.channel?.createMessageComponentCollector({
-				filter: (i) => i.user.id === interaction.user.id,
-				time: view['timeout'],
+				filter: (i) => i.user.id === interaction.user.id && ['confirm_yes', 'confirm_no'].includes(i.customId),
+				time: view.timeout,
 			});
 
-			collector?.on('collect', async (i) => {
-				await i.deferUpdate();
-				if (i.customId === 'confirm_yes') {
-					resolve(true);
-				} else {
-					resolve(false);
-				}
-				collector.stop();
+			if (!collector) {
+				resolve(false);
+				return;
+			}
+
+			collector.on('collect', (i) => {
+				void i.deferUpdate()
+					.then(() => resolve(i.customId === 'confirm_yes'))
+					.catch(() => resolve(false))
+					.finally(() => collector.stop());
 			});
 
-			collector?.on('end', () => {
+			collector.on('end', () => {
 				resolve(false);
 			});
 		});
@@ -134,7 +135,7 @@ export class MassActionConfirmation {
 		action: string;
 		count: number;
 		preview: string[];
-	}): { embed: EmbedBuilder; components: ActionRowBuilder[] } {
+	}): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] } {
 		const embed = new EmbedBuilder()
 			.setTitle(`⚠️ ${data.title}`)
 			.setColor('Red')

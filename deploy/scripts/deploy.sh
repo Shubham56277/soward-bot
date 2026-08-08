@@ -8,7 +8,7 @@ set -Eeuo pipefail
 DEPLOY_DIR="${DEPLOY_PATH:-/opt/soward-bot}"
 BRANCH="${1:-main}"
 SERVICE_NAME="soward-bot"
-LOCK_FILE="/tmp/soward-deploy.lock"
+LOCK_DIR="/tmp/soward-deploy.lock"
 HEALTH_URL="http://127.0.0.1:${HEALTH_PORT:-9090}/health"
 HEALTH_TIMEOUT=60
 LOG_FILE="/var/log/soward-deploy.log"
@@ -24,13 +24,13 @@ warn()  { echo -e "${YELLOW}[deploy]${NC} $*" | tee -a "$LOG_FILE" 2>/dev/null |
 error() { echo -e "${RED}[deploy]${NC} $*" | tee -a "$LOG_FILE" 2>/dev/null || echo "[deploy] $*"; }
 
 cleanup() {
-    rm -f "$LOCK_FILE"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ─── Acquire Lock ────────────────────────────────────────────────────────────
-if ! mkdir "$LOCK_FILE" 2>/dev/null; then
-    error "Another deployment is already running (lock: $LOCK_FILE)"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    error "Another deployment is already running (lock: $LOCK_DIR)"
     exit 1
 fi
 
@@ -106,6 +106,10 @@ case "$PKG_MANAGER" in
         ;;
 esac
 
+# ─── Deployment Health Check ──────────────────────────────────────────────────
+log "Running deployment health checks..."
+yarn doctor
+
 # ─── Build ───────────────────────────────────────────────────────────────────
 log "Building project..."
 yarn build
@@ -123,9 +127,10 @@ log "Build validated: $BOT_ENTRY exists"
 
 # ─── Run Database Migrations ─────────────────────────────────────────────────
 if [[ -d "packages/db/drizzle" ]]; then
-    log "Running database migrations..."
-    yarn workspace @repo/db push || {
-        warn "Database migration failed, but continuing (may already be up to date)"
+    log "Checking database connectivity and running migrations..."
+    yarn db:migrate || {
+        error "Database migration failed. The service was not restarted."
+        exit 1
     }
 fi
 

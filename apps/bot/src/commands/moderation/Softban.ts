@@ -1,6 +1,7 @@
 import { ApplicationCommandOptionType, GuildMember } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 export default class Softban extends Command {
 	public constructor() {
@@ -18,6 +19,7 @@ export default class Softban extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "softban");
 		const user = ctx.options.getUser("user", true, 0);
 		if (!user) return ctx.sendMessage("Choose a valid user.");
 		if (user.id === ctx.author?.id || user.id === ctx.guild.ownerId || user.id === ctx.client.user?.id) return ctx.sendMessage("That user cannot be softbanned.");

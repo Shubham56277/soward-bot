@@ -1,0 +1,166 @@
+/**
+ * helpArchitecture.ts
+ *
+ * Data-driven help menu structure.
+ * Home → Category (one page showing all commands grouped by section)
+ */
+
+export interface CommandGroup {
+	heading: string;
+	commands: string[];
+}
+
+export interface Feature {
+	key: string;
+	label: string;
+	description: string;
+	groups: CommandGroup[];
+	premium?: boolean;
+	comingSoon?: boolean;
+}
+
+export interface Category {
+	key: string;
+	label: string;
+	emojiId?: string;
+	tagline: string;
+	features: Feature[];
+}
+
+// ─── Categories ──────────────────────────────────────────────────────────────
+
+export const HELP_CATEGORIES: Category[] = [
+	{
+		key: "bot-settings",
+		label: "Bot Settings",
+		emojiId: "1533007834319421532",
+		tagline: "Personalization, branding, and command prefixes.",
+		features: [
+			{
+				key: "settings-all",
+				label: "Bot Settings",
+				description: "Personalization, branding, and command prefixes.",
+				groups: [
+					{ heading: "Profile", commands: ["profile", "bio", "bio set", "bio clear", "badge", "badge create", "badge edit", "badge delete", "badge list", "badge give", "badge remove", "badge clear", "badge show"] },
+					{ heading: "Branding", commands: ["customize", "customize avatar", "customize bio", "customize banner", "customize reset"] },
+					{
+						heading: "Prefixes",
+						commands: [
+							"prefix",
+							"prefix list",
+							"prefix set ",
+							"prefix add ",
+							"prefix remove ",
+							"prefix reset",
+							"noprefix list",
+							"noprefix enable",
+							"noprefix disable",
+						],
+					},
+				],
+			},
+		],
+	},
+	{
+		key: "management",
+		label: "Management",
+		emojiId: "1533007963890126849",
+		tagline: "Moderate, protect, and configure your server.",
+		features: [
+			{
+				key: "management-all",
+				label: "Management",
+				description: "Moderate, protect, and configure your server.",
+				groups: [
+					{ heading: "Member Moderation", commands: ["ban", "unban", "softban", "kick", "timeout", "mute", "unmute", "massban", "unbanall", "warn", "warns", "clearwarn", "note", "snipe"] },
+					{ heading: "Channel & Server Control", commands: ["lock", "unlock", "lockall", "unlockall", "hide", "unhide", "hideall", "unhideall", "lockdown", "slowmode", "unslowmode", "nuke", "purge", "clear", "clone", "media"] },
+					{ heading: "Roles & Members", commands: ["nick", "nickname", "role", "roleall", "roleicon"] },
+					{ heading: "Protection", commands: ["antinuke", "extraowner", "wl", "automod", "antiswear", "badword", "filter"] },
+					{ heading: "Configuration", commands: ["logging", "logger", "customrole", "ignoredchannels", "autoresponder"] },
+				],
+			},
+		],
+	},
+	{
+		key: "community",
+		label: "Community",
+		emojiId: "1533007999663341618",
+		tagline: "Engage, reward, and grow your members.",
+		features: [
+			{
+				key: "community-all",
+				label: "Community",
+				description: "Engage, reward, and grow your members.",
+				groups: [
+					{ heading: "Welcome System", commands: ["welcome", "autorole", "autonick"] },
+					{ heading: "Tickets", commands: ["ticket"] },
+					{ heading: "Giveaways", commands: ["giveaway", "gstart", "gend", "greroll", "glist"] },
+					{ heading: "Community Features", commands: ["reaction-role", "leveling"] },
+				],
+			},
+		],
+	},
+	{
+		key: "entertainment",
+		label: "Entertainment",
+		emojiId: "1533009553917214780",
+		tagline: "Music, voice, and fun for everyone.",
+		features: [
+			{
+				key: "entertainment-all",
+				label: "Entertainment",
+				description: "Music, voice, and fun for everyone.",
+				groups: [
+					{ heading: "Music Playback", commands: ["play", "search", "pause", "resume", "stop", "skip", "skipto", "replay", "seek", "autoplay", "247", "play-file", "record", "playlist"] },
+					{ heading: "Queue & Controls", commands: ["queue", "nowplaying", "loop", "shuffle", "remove", "clearqueue", "volume", "join", "leave", "music"] },
+					{ heading: "Voice", commands: ["voice", "voice-role", "voicemaster", "deafen", "undeafen", "moveall"] },
+					{ heading: "Fun & Social", commands: ["hug", "kiss", "slap", "pat", "poke", "wink", "cry", "nom", "facepalm", "8ball", "rps", "coinflip", "ship", "gay", "meme", "fact", "aniquote", "animal", "color", "reverse"] },
+				],
+			},
+		],
+	},
+	{
+		key: "utilities",
+		label: "Utilities",
+		emojiId: "1533009101586563155",
+		tagline: "Information, tools, and server assets.",
+		features: [
+			{
+				key: "utilities-all",
+				label: "Utilities",
+				description: "Information, tools, and server assets.",
+				groups: [
+					{ heading: "Server Information", commands: ["serverinfo", "guildinfo", "membercount", "boostcount", "boosters", "emojilist"] },
+					{ heading: "User & Lookup", commands: ["info", "pfp", "banner", "roleinfo", "channelinfo", "emojiinfo", "users", "lists"] },
+					{ heading: "Server Assets", commands: ["servericon", "serverbanner", "serversplash", "steal", "cloneemoji", "deleteemoji", "renameemoji", "zipemoji", "stickerinfo", "stickerurl", "deletesticker", "zipsticker"] },
+					{ heading: "Media", commands: ["messageurl", "attachments"] },
+					{ heading: "General", commands: ["ping", "uptime", "botinfo", "stats", "invite", "vote", "help", "afk", "remind", "calc", "ai", "premium"] },
+				],
+			},
+		],
+	},
+];
+
+// ─── Lookup helpers ──────────────────────────────────────────────────────────
+
+export const COMMAND_LOCATION: Record<string, { categoryKey: string; featureKey: string }> = (() => {
+	const map: Record<string, { categoryKey: string; featureKey: string }> = {};
+	for (const category of HELP_CATEGORIES) {
+		for (const feature of category.features) {
+			for (const group of feature.groups) {
+				for (const name of group.commands) {
+					map[name] = { categoryKey: category.key, featureKey: feature.key };
+				}
+			}
+		}
+	}
+	return map;
+})();
+
+export function getCategory(key: string): Category | undefined {
+	return HELP_CATEGORIES.find(c => c.key === key);
+}
+
+export function getFeature(categoryKey: string, featureKey: string): Feature | undefined {
+	return getCategory(categoryKey)?.features.find(f => f.key === featureKey);
+}

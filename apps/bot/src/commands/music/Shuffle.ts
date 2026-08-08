@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -30,36 +30,25 @@ export default class Shuffle extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("Player is not connected"));
         }
 
         if (player.queue.tracks.length === 0) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "The queue is empty - nothing to shuffle",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("The queue is empty - nothing to shuffle"));
         }
 
         player.queue.shuffle();
 
-        const embed = new EmbedBuilder()
-            .setDescription("🔀 Shuffled the queue")
-            .setColor(ctx.client.config.colors.main);
-
-        await ctx.sendMessage({ embeds: [embed] });
+        await ctx.sendMessage(this.msg("Shuffled the queue"));
     }
 }

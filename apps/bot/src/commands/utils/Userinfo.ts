@@ -1,161 +1,156 @@
-import { ContainerBuilder, GuildMember, MessageFlags, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, UserFlagsString } from "discord.js";
+import {
+	ContainerBuilder,
+	GuildMember,
+	MediaGalleryBuilder,
+	MediaGalleryItemBuilder,
+	MessageFlags,
+	PermissionFlagsBits,
+	SectionBuilder,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder,
+	ThumbnailBuilder,
+} from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
-function buildPanel(title: string, body: string): ContainerBuilder {
-    return new ContainerBuilder()
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
-        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
-}
+const KEY_PERMISSIONS = [
+	{ flag: PermissionFlagsBits.Administrator, name: "Administrator" },
+	{ flag: PermissionFlagsBits.ManageGuild, name: "Manage Guild" },
+	{ flag: PermissionFlagsBits.ManageChannels, name: "Manage Channels" },
+	{ flag: PermissionFlagsBits.ManageRoles, name: "Manage Roles" },
+	{ flag: PermissionFlagsBits.ManageMessages, name: "Manage Messages" },
+	{ flag: PermissionFlagsBits.BanMembers, name: "Ban Members" },
+	{ flag: PermissionFlagsBits.KickMembers, name: "Kick Members" },
+	{ flag: PermissionFlagsBits.ManageWebhooks, name: "Manage Webhooks" },
+	{ flag: PermissionFlagsBits.MentionEveryone, name: "Mention Everyone" },
+	{ flag: PermissionFlagsBits.ManageNicknames, name: "Manage Nicknames" },
+];
 
-const badges: Record<UserFlagsString, string> = {
-    Staff: "Staff",
-    ActiveDeveloper: "<:ActiveDeveloper:1367032636748464189>",
-    Partner: "Partner",
-    Hypesquad: "HypeSquad",
-    BugHunterLevel1: "Bug Hunter Lv1",
-    BugHunterLevel2: "Bug Hunter Lv2",
-    HypeSquadOnlineHouse1: "<:HYPERSQUADBRAVERY:1367032259588132864>",
-    HypeSquadOnlineHouse2: "<:hypersquadsbrilliance:1367033544064368651>",
-    HypeSquadOnlineHouse3: "<:HYPERSQUADBALANCE:1367033577602027590>",
-    PremiumEarlySupporter: "Early Supporter",
-    TeamPseudoUser: "Team User",
-    VerifiedBot: "Verified Bot",
-    VerifiedDeveloper: "Verified Dev",
-    CertifiedModerator: "Certified Mod",
-    BotHTTPInteractions: "Bot",
-    Spammer: "Spammer",
-    Quarantined: "Quarantined",
-    MFASMS: "2FA SMS",
-    PremiumPromoDismissed: "Premium Promo Dismissed",
-    HasUnreadUrgentMessages: "Unread Urgent Messages",
-    DisablePremium: "Premium Disabled",
-    Collaborator: "Collaborator",
-    RestrictedCollaborator: "Restricted Collaborator",
-};
+export default class UserInfoCommand extends Command {
+	constructor() {
+		super({
+			name: "info",
+			description: {
+				content: "Get detailed information about a user",
+				examples: ["info", "info @user"],
+				usage: "info [user]",
+			},
+			category: "utils",
+			aliases: ["userinfo", "whois", "ui"],
+			cooldown: 5,
+			args: false,
+			permissions: {
+				dev: false,
+				client: ["SendMessages", "ViewChannel"],
+				user: [],
+			},
+			slashCommand: true,
+			options: [
+				{ name: "user", description: "User to look up", type: 6, required: false },
+			],
+		});
+	}
 
-export default class Userinfo extends Command {
-    constructor() {
-        super({
-            name: 'userinfo',
-            description: {
-                content: 'Get information about a user',
-                examples: ['userinfo @user'],
-                usage: 'userinfo [user]',
-            },
-            category: 'utils',
-            aliases: ['whois', 'user', "ui"],
-            cooldown: 5,
-            args: false,
-            player: {
-                voice: false,
-                active: false,
-            },
-            permissions: {
-                dev: false,
-                client: ['SendMessages', 'ViewChannel', 'EmbedLinks'],
-                user: [],
-            },
-            slashCommand: true,
-            options: [
-                {
-                    name: "user",
-                    description: "The user to get information about",
-                    type: 6,
-                    required: false
-                }
-            ],
-        });
-    }
+	public async run(ctx: Context): Promise<any> {
+		const member = (ctx.options.getMember("user", 0) as GuildMember | undefined) ?? ctx.member;
+		if (!member) return ctx.sendMessage("User not found.");
 
-    public async run(ctx: Context): Promise<any> {
-        let member: GuildMember | undefined | null = ctx.member;
-        if (!member) return ctx.editOrReply({
-            embeds: [{
-                color: ctx.client.config.colors.red,
-                description: "Could not find the specified user.",
-            }]
-        });
-        if (!ctx.isInteraction) {
-            member = ctx.args[0] ?  ctx.message?.mentions.members?.first() || ctx.message?.guild?.members.cache.get(ctx.args[0]) : ctx.member;
-        } else {
-            member = ctx.interaction?.options.getMember("user") as GuildMember;
-        }
-        if (!member) member = ctx.member;
-        if (!member) return ctx.editOrReply({
-            embeds: [{
-                color: ctx.client.config.colors.red,
-                description: "Could not find the specified user.",
-            }]
-        });
-        const user = await member?.user.fetch(true);
+		const user = member.user;
+		// Force fetch to get banner
+		const fetchedUser = await ctx.client.users.fetch(user.id, { force: true }).catch(() => user);
 
-        // Process basic information
-        const basicInfo = [
-            `**ID:** (\`${member?.id}\`)`,
-            `**Username:** \`${member?.user.username || "None"}\``,
-            `**Bot:** \`${member?.user.bot ? "Yes" : "No"}\``,
-            `**Status:** \`${member?.presence?.status || "Offline"}\``,
-            `**Account Created:** <t:${Math.floor(member?.user.createdTimestamp! / 1000)}:R>`,
-            `**Server Joined:** <t:${Math.floor(member?.joinedTimestamp! / 1000)}:R>`,
-        ];
+		const avatar = member.displayAvatarURL({ size: 512, forceStatic: false });
+		const banner = fetchedUser.bannerURL({ size: 1024, forceStatic: false });
 
-        // Process roles
-        const roles = member?.roles.cache
-            .filter(r => r.id !== ctx.guild?.id)
-            .sort((a, b) => b.position - a.position)
-            .map(r => r.toString());
-        const rolesText = roles?.length! > 0 ? roles?.join(", ") : "None";
+		const topRole = member.roles.highest.id !== ctx.guild.id ? member.roles.highest : null;
+		const totalRoles = member.roles.cache.size - 1; // Exclude @everyone
 
-        // Process badges
-        const userFlags = user?.flags?.toArray() || [];
-        const badgesText = userFlags.length > 0
-            ? userFlags.map(flag => badges[flag]).join(", ")
-            : "None";
+		const keyPerms = KEY_PERMISSIONS
+			.filter(p => member.permissions.has(p.flag))
+			.map(p => p.name);
 
-        const lines = [
-            ...basicInfo,
-            "",
-            `**Roles [${roles?.length}]:** ${rolesText.length > 1024 ? "Too many roles to display" : rolesText}`,
-        ];
+		// Acknowledgement
+		let acknowledgement = "Member";
+		if (user.id === ctx.guild.ownerId) acknowledgement = "Server Owner";
+		else if (member.permissions.has(PermissionFlagsBits.Administrator)) acknowledgement = "Server Administrator";
+		else if (member.permissions.has(PermissionFlagsBits.ManageGuild)) acknowledgement = "Server Manager";
+		else if (member.permissions.has(PermissionFlagsBits.ModerateMembers)) acknowledgement = "Server Moderator";
 
-        if (badgesText !== "None") {
-            lines.push(`**Badges:** ${badgesText}`);
-        }
+		// Build container
+		const container = new ContainerBuilder();
 
-        if (member.roles.highest.id !== ctx.guild?.id) {
-            lines.push(`**Highest Role:** ${member.roles.highest.toString()}`);
-        }
+		// Header with avatar thumbnail
+		container.addSectionComponents(
+			new SectionBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${user.username}'s info`))
+				.setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar).setDescription("Avatar")),
+		);
 
-        const permissions = member.permissions.toArray();
-        if (permissions.length > 0) {
-            lines.push(`**Key Permissions:** \`${member.permissions.has("Administrator") ? "Administrator" : permissions.slice(0, 5).join("`, `")}${permissions.length > 5 ? ` (+${permissions.length - 5} more)` : ""}\``);
-        }
+		// General section
+		const generalLines = [
+			"**General**",
+			`**Name**: ${user.username}`,
+			`**ID**: ${user.id}`,
+			`**Nickname**: ${member.nickname ?? "None"}`,
+			`**Is Bot**: ${user.bot ? "Yes" : "No"}`,
+			`**Account Created**: <t:${Math.floor(user.createdTimestamp / 1000)}:R>`,
+			`**Server Joined**: <t:${Math.floor((member.joinedTimestamp ?? Date.now()) / 1000)}:R>`,
+		];
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(generalLines.join("\n")));
 
-        if (member.voice.channel) {
-            lines.push(`**Voice Channel:** ${member.voice.channel.toString()}`);
-        }
-        if (member.premiumSinceTimestamp) {
-            lines.push(`**Boosting Since:** <t:${Math.floor(member.premiumSinceTimestamp! / 1000)}:R>`);
-        }
-        if (user.banner) {
-            lines.push(`**Banner:** [View Banner](${user.bannerURL({ size: 4096 })})`);
-        }
-        if (user.accentColor) {
-            lines.push(`**Accent Color:** \`#${user.accentColor.toString(16).padStart(6, '0')}\``);
-        }
-        if (user.avatarDecorationData) {
-            lines.push(`**Avatar Decoration:** [View Decoration](${user.avatarDecorationURL({ size: 4096 })})`);
-        }
+		// Roles section
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+		const rolesLines = [
+			"**Roles**",
+			`**Top Role**: ${topRole ? `<@&${topRole.id}>` : "None"}`,
+			`**Total Roles**: ${totalRoles}`,
+		];
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(rolesLines.join("\n")));
 
-        lines.push("", `-# Requested by ${ctx.author?.username}`);
+		// Extras section
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+		const extrasLines = [
+			"**Extras**",
+			`**Boosting**: ${member.premiumSince ? `Since <t:${Math.floor(member.premiumSinceTimestamp! / 1000)}:R>` : "Not boosting"}`,
+			`**Voice**: ${member.voice.channel ? `#${member.voice.channel.name}` : "Not in a voice channel"}`,
+		];
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(extrasLines.join("\n")));
 
-        const panel = buildPanel(
-            `${member?.user.username}${member?.user.bot ? " [BOT]" : ""}'s Info`,
-            lines.join("\n"),
-        );
+		// Key Perms section
+		if (keyPerms.length > 0) {
+			container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+			container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+				`**Key Perms**\n${keyPerms.join(", ")}`
+			));
+		}
 
-        return ctx.editOrReply({ components: [panel], flags: MessageFlags.IsComponentsV2 });
-    }
+		// Acknowledgement
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+			`**Acknowledgement**\n${acknowledgement}`
+		));
+
+		// Banner (if user has one)
+		if (banner) {
+			container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+			container.addMediaGalleryComponents(
+				new MediaGalleryBuilder().addItems(
+					new MediaGalleryItemBuilder().setURL(banner).setDescription("Banner"),
+				),
+			);
+		}
+
+		// Footer
+		container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+		container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+			`-# Requested by ${ctx.author?.username} · Today at ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+		));
+
+		return ctx.sendMessage({
+			components: [container],
+			flags: MessageFlags.IsComponentsV2,
+			allowedMentions: { parse: [] },
+		});
+	}
 }

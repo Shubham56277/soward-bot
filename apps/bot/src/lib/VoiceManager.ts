@@ -21,6 +21,7 @@ export default class VoiceManager {
 		timeWindow: 30 * 1000, // 30 seconds in milliseconds
 		cooldown: 60 * 1000, // 60 seconds in milliseconds
 	};
+
 	static async checkRateLimit(userId: string): Promise<{ limited: boolean; retryAfter: number }> {
 		const now = Date.now();
 		const key = `voice:ratelimit:${userId}`;
@@ -44,6 +45,7 @@ export default class VoiceManager {
 
 		return { limited: false, retryAfter: 0 };
 	}
+
 	static async onRoomJoin(newState: VoiceState) {
 		const { member, channel, guild, client } = newState;
 		VoiceManager.redis = client.redis;
@@ -52,28 +54,30 @@ export default class VoiceManager {
 		const creator = await VoiceCreator.getByVoiceChannelId(newState.guild.id!, channel.id);
 		if (!creator) return;
 		if (member.user.bot) {
-			return member.voice.disconnect().catch(() => { });
+			return member.voice.disconnect().catch(() => {});
 		}
 
 		const settings = await VoiceSettings.get(newState.guild.id!, member.id);
 
 		if (settings.leave > Date.now()) {
-			return member.voice.disconnect().catch(() => { });
+			return member.voice.disconnect().catch(() => {});
 		}
+
 		// Check rate limit
 		const rateLimit = await VoiceManager.checkRateLimit(member.id);
 		if (rateLimit.limited) {
 			// Apply cooldown
-			settings.leave = Date.now() + Math.max(settings.leave - Date.now(), VoiceManager.rateLimit.cooldown);
+			settings.leave = Date.now() + VoiceManager.rateLimit.cooldown;
 			await VoiceSettings.update(newState.guild.id!, member.id, settings);
-			return member.voice.disconnect().catch(() => { });
+			return member.voice.disconnect().catch(() => {});
 		}
+
 		const name = resolveChannelName(member);
 
 		if (member.voice.channelId !== creator.voiceChannelId) return;
 
-		guild.channels
-			.create({
+		try {
+			const newChannel = await guild.channels.create({
 				name: settings.name === "0" ? name : settings.name,
 				userLimit: settings.userLimit,
 				type: ChannelType.GuildVoice,
@@ -86,33 +90,34 @@ export default class VoiceManager {
 					},
 				],
 				reason: "Creating a private room",
-			})
-			.then(async (channel) => {
-				await channel.permissionOverwrites.edit(newState.guild.roles.everyone, {
-					Connect: settings.locked,
-					ViewChannel: settings.visible,
-				});
-				member?.voice
-					?.setChannel(channel.id)
-					.then(async () => {
-						settings.leave = Date.now();
-						settings.name = name;
-
-						await VoiceSettings.update(newState.guild.id!, member.id, settings);
-						await Room.create({
-							voiceChannelId: channel.id,
-							ownerId: member.id,
-							cooldown: 0,
-						});
-					})
-					.catch(async (e) => {
-						await channel.delete("Voice channel error").catch(() => { });
-					});
-			}).catch(async (e) => {
-				await member.voice.disconnect().catch(() => { });
-				await channel.delete("Voice channel error").catch(() => { });
-				await Room.delete(channel.id).catch(() => { });
 			});
+
+			// Apply lock/visibility settings correctly:
+			// locked = true means Connect should be DENIED (false)
+			// visible = false means ViewChannel should be DENIED (false)
+			await newChannel.permissionOverwrites.edit(newState.guild.roles.everyone, {
+				Connect: !settings.locked,     // locked=true → Connect=false (denied)
+				ViewChannel: !settings.visible ? null : true, // visible=false (default) → don't override (inherit), visible=true → explicit allow
+			});
+
+			try {
+				await member.voice.setChannel(newChannel.id);
+				settings.leave = 0;
+				settings.name = settings.name === "0" ? name : settings.name;
+				await VoiceSettings.update(newState.guild.id!, member.id, settings);
+				await Room.create({
+					voiceChannelId: newChannel.id,
+					ownerId: member.id,
+					cooldown: 0,
+				});
+			} catch (e) {
+				// Failed to move member — clean up the channel
+				await newChannel.delete("Voice channel error — failed to move member").catch(() => {});
+			}
+		} catch (e) {
+			// Failed to create channel
+			await member.voice.disconnect().catch(() => {});
+		}
 	}
 
 	static async onRoomLeave(oldState: VoiceState) {
@@ -126,16 +131,11 @@ export default class VoiceManager {
 		if (creatorDbs.voiceChannelId === channel.id || creatorDbs.categoryId === channel.parentId) {
 			if (!channel?.parent || channel.id === creatorDbs.voiceChannelId) return;
 			if (channel.parent.id !== creatorDbs.categoryId) return;
-			const nonBotMembers = channel.members.filter((member) => !member.user.bot);
+
+			const nonBotMembers = channel.members.filter((m) => !m.user.bot);
 			if (nonBotMembers.size === 0 && room?.voiceChannelId === channel.id) {
 				await Room.delete(channel.id);
-				await channel.delete("No one in the room").catch(() => { });
-			}
-
-			if (room && room?.ownerId === member.id) {
-				const settings = await VoiceSettings.get(member.guild.id!, member.id);
-				settings.leave = 1000;
-				await VoiceSettings.update(member.guild.id!, member.id, settings);
+				await channel.delete("No one in the room").catch(() => {});
 			}
 		}
 	}

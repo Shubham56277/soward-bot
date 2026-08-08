@@ -42,25 +42,25 @@ export default class Slap extends Command {
 
     private getSlapStrength(power: number): string {
         const strengths = [
-            { emoji: '👋', text: '**Gentle tap**', threshold: 20 },
-            { emoji: '✋', text: '**Medium slap**', threshold: 40 },
-            { emoji: '👊', text: '**Strong slap**', threshold: 60 },
-            { emoji: '🔥', text: '**BRUTAL SLAP**', threshold: 80 },
-            { emoji: '💥', text: '**ATOMIC SLAP!**', threshold: 100 }
+            { text: '**Gentle tap**', threshold: 20 },
+            { text: '**Medium slap**', threshold: 40 },
+            { text: '**Strong slap**', threshold: 60 },
+            { text: '**BRUTAL SLAP**', threshold: 80 },
+            { text: '**ATOMIC SLAP!**', threshold: 100 }
         ];
 
-        return strengths.find(s => power <= s.threshold)?.text || '**👋 Gentle tap**';
+        return strengths.find(s => power <= s.threshold)?.text || '**Gentle tap**';
     }
 
     private getSlapResult(victim: User, power: number): string {
         const results = [
-            `${victim} is seeing stars! ✨`,
-            `${victim} went flying! 🚀`,
-            "The sound echoed for miles! 📢",
-            `${victim} is now orbiting Earth! 🛰️`,
-            `Critical hit! ${victim} is rethinking life choices! 🤔`,
-            "SLAPPED into next week! 📅",
-            `${victim}'s ancestors felt that! 👻`
+            `${victim} is seeing stars!`,
+            `${victim} went flying!`,
+            "The sound echoed for miles!",
+            `${victim} is now orbiting Earth!`,
+            `Critical hit! ${victim} is rethinking life choices!`,
+            "SLAPPED into next week!",
+            `${victim}'s ancestors felt that!`
         ];
     
         const weightedResults = [
@@ -120,7 +120,7 @@ export default class Slap extends Command {
                 })
                 .setFooter({
                     text: power > 90
-                        ? '🚑 Medical attention might be needed...'
+                        ? 'Medical attention might be needed...'
                         : 'They probably deserved it...'
                 });
     

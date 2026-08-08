@@ -1,6 +1,14 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { EmbedBuilder, GuildMember, Role } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, SectionBuilder, ThumbnailBuilder, GuildMember, Role } from "discord.js";
+import Help from "../utils/Help";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class RoleIconCommand extends Command {
     constructor() {
@@ -9,7 +17,7 @@ export default class RoleIconCommand extends Command {
             description: {
                 content: "Set a role's icon",
                 examples: [
-                    "roleicon @role 🎮",
+                    "roleicon @role <emoji>",
                     "roleicon @role :emoji:",
                     "roleicon @role https://example.com/image.png"
                 ],
@@ -18,7 +26,7 @@ export default class RoleIconCommand extends Command {
             category: "moderation",
             aliases: ["setroleicon"],
             cooldown: 5,
-            args: true,
+            args: false,
             permissions: {
                 dev: false,
                 client: ["ManageRoles"],
@@ -43,22 +51,21 @@ export default class RoleIconCommand extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
+        if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "roleicon");
+
         const role = ctx.options.getRole("role") as Role;
         const icon = ctx.options.getString("icon", true, 1)!;
 
         // Check if the server has sufficient boosts (level 2 or higher)
         if (ctx.guild.premiumTier < 2) {
             return ctx.sendMessage({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle("Insufficient Server Boosts")
-                        .setDescription("This server needs to be at least **level 2 boosted** to set role icons.")
-                        .addFields(
-                            { name: "Current Boost Level", value: `Level ${ctx.guild.premiumTier}` },
-                            { name: "Required Boost Level", value: "Level 2 (15+ boosts)" }
-                        )
-                ]
+                components: [buildPanel(
+                    "Insufficient Server Boosts",
+                    "This server needs to be at least **level 2 boosted** to set role icons.\n\n" +
+                    `**Current Boost Level:** Level ${ctx.guild.premiumTier}\n` +
+                    "**Required Boost Level:** Level 2 (15+ boosts)"
+                )],
+                flags: MessageFlags.IsComponentsV2,
             });
         }
 
@@ -74,29 +81,26 @@ export default class RoleIconCommand extends Command {
             // Check if the input is a URL
             if (icon.match(/^https?:\/\/.+\..+$/)) {
                 await role.setIcon(icon);
+                const section = new SectionBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Role Icon Updated**\nSuccessfully set ${role}'s icon using the provided URL`))
+                    .setThumbnailAccessory(new ThumbnailBuilder().setURL(icon).setDescription(`${role.name} icon`));
                 return ctx.sendMessage({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setColor(role.color)
-                            .setTitle("Role Icon Updated")
-                            .setDescription(`Successfully set ${role}'s icon using the provided URL`)
-                            .setThumbnail(icon)
-                    ]
+                    components: [new ContainerBuilder().addSectionComponents(section)],
+                    flags: MessageFlags.IsComponentsV2,
                 });
             }
 
             const customEmojiMatch = icon.match(/<?(a)?:?(\w{2,32}):(\d{17,19})>?/);
             if (customEmojiMatch) {
                 const emojiId = customEmojiMatch[3];
-                await role.setIcon(`https://cdn.discordapp.com/emojis/${emojiId}.${customEmojiMatch[1] ? "gif" : "png"}`);
+                const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${customEmojiMatch[1] ? "gif" : "png"}`;
+                await role.setIcon(emojiUrl);
+                const section = new SectionBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Role Icon Updated**\nSuccessfully set ${role}'s icon using the emoji ${icon}`))
+                    .setThumbnailAccessory(new ThumbnailBuilder().setURL(emojiUrl).setDescription(`${role.name} icon`));
                 return ctx.sendMessage({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setColor(role.color)
-                            .setTitle("Role Icon Updated")
-                            .setDescription(`Successfully set ${role}'s icon using the emoji ${icon}`)
-                            .setThumbnail(`https://cdn.discordapp.com/emojis/${emojiId}.${customEmojiMatch[1] ? "gif" : "png"}`)
-                    ]
+                    components: [new ContainerBuilder().addSectionComponents(section)],
+                    flags: MessageFlags.IsComponentsV2,
                 });
             }
 
@@ -104,12 +108,8 @@ export default class RoleIconCommand extends Command {
             if (unicodeEmojiMatch) {
                 await role.setIcon(icon);
                 return ctx.sendMessage({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setColor(role.color)
-                            .setTitle("Role Icon Updated")
-                            .setDescription(`Successfully set ${role}'s icon using the emoji ${icon}`)
-                    ]
+                    components: [buildPanel("Role Icon Updated", `Successfully set ${role}'s icon using the emoji ${icon}`)],
+                    flags: MessageFlags.IsComponentsV2,
                 });
             }
 
@@ -118,17 +118,14 @@ export default class RoleIconCommand extends Command {
         } catch (error) {
             console.error(error);
             return ctx.sendMessage({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle("Error Setting Role Icon")
-                        .setDescription("An error occurred while trying to set the role icon. Please ensure:")
-                        .addFields(
-                            { name: "Valid Input", value: "You provided a valid emoji or image URL" },
-                            { name: "Image Requirements", value: "Image must be under 256KB and in JPEG, PNG, or GIF format" },
-                            { name: "Role Position", value: "The role must be below my highest role" }
-                        )
-                ]
+                components: [buildPanel(
+                    "Error Setting Role Icon",
+                    "An error occurred while trying to set the role icon. Please ensure:\n\n" +
+                    "**Valid Input:** You provided a valid emoji or image URL\n" +
+                    "**Image Requirements:** Image must be under 256KB and in JPEG, PNG, or GIF format\n" +
+                    "**Role Position:** The role must be below my highest role"
+                )],
+                flags: MessageFlags.IsComponentsV2,
             });
         }
     }

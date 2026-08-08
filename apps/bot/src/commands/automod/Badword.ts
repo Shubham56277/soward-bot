@@ -1,10 +1,9 @@
 import Command from "../../abstract/Command";
-import BaseClient from "../../base/Client";
 import Context from "../../lib/Context";
-import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from "discord.js";
+import { ButtonBuilder, ActionRowBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags } from "discord.js";
+import Help from "../utils/Help";
 
 export default class BadWord extends Command {
-    client!: BaseClient
     constructor() {
         super({
             name: 'badword',
@@ -16,7 +15,7 @@ export default class BadWord extends Command {
             category: 'automod',
             aliases: ['bw', 'filter'],
             cooldown: 5,
-            args: true,
+            args: false,
             player: {
                 voice: false,
                 active: false,
@@ -68,13 +67,20 @@ export default class BadWord extends Command {
         });
     }
 
-    private createEmbed(title: string, description: string, color: number, client = this.client): EmbedBuilder {
-        return new EmbedBuilder()
-            .setTitle(`📝 ${title}`)
-            .setDescription(description)
-            .setColor(color)
-            .setTimestamp()
-            .setFooter({ text: 'Soward Filter System', iconURL: client.user!.displayAvatarURL() });
+    private createEmbed(title: string, description: string, _color?: number, extraFields: { name: string; value: string }[] = []): { components: ContainerBuilder[]; flags: MessageFlags.IsComponentsV2 } {
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
+
+        for (const field of extraFields) {
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${field.name}**\n${field.value}`));
+        }
+
+        container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+        container.addTextDisplayComponents(new TextDisplayBuilder().setContent("-# Soward Filter System"));
+
+        return { components: [container], flags: MessageFlags.IsComponentsV2 };
     }
 
     private createConfirmationButtons() {
@@ -93,22 +99,10 @@ export default class BadWord extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        this.client = ctx.client;
         const subCommand = ctx.isInteraction ? ctx.options.getSubCommand() : ctx.args[0]?.toLowerCase();
 
         if (!subCommand) {
-            const helpEmbed = this.createEmbed(
-                'Word Filter Help',
-                `**Available Commands:**
-                • \`/badword add <word>\` - Add a word to the filter
-                • \`/badword remove <word>\` - Remove a word from the filter
-                • \`/badword list\` - View all filtered words
-                • \`/badword clear\` - Remove all filtered words
-                
-                ℹ️ **Note:** Filtered words will be blocked in all channels`,
-                ctx.client.config.colors.orange
-            );
-            return ctx.editOrReply({ embeds: [helpEmbed] });
+            return new Help().showCommand(ctx, "badword");
         }
 
         if (subCommand === 'add') {
@@ -116,12 +110,10 @@ export default class BadWord extends Command {
             if (!ctx.isInteraction) badword = ctx.args.slice(1).join(' ');
 
             if (!badword) {
-                const errorEmbed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Missing Word',
-                    '<:Cross:1375519752746958858> Please specify a word to add to the filter.',
-                    ctx.client.config.colors.red
-                );
-                return ctx.editOrReply({ embeds: [errorEmbed] });
+                    'Please specify a word to add to the filter.',
+                ));
             }
 
             const guild = await ctx.client.guilds.fetch(ctx.guild.id);
@@ -140,7 +132,7 @@ export default class BadWord extends Command {
                         actions: [{
                             type: 1,
                             metadata: {
-                                customMessage: '🛑 Your message was blocked for containing inappropriate language (Soward Filter)',
+                                customMessage: 'Your message was blocked for containing inappropriate language (Soward Filter)',
                             }
                         }],
                         enabled: true,
@@ -148,21 +140,17 @@ export default class BadWord extends Command {
                         exemptChannels: []
                     });
 
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'Word Added to Filter',
-                        `<:Tick:1375519268292264012> Successfully created filter and added: \`${badword}\`\n\n**Important:** Do not rename the filter rule "soward badwords" in server settings.`,
-                        ctx.client.config.colors.main
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        `Successfully created filter and added: \`${badword}\`\n\n**Important:** Do not rename the filter rule "soward badwords" in server settings.`,
+                    ));
                 }
 
                 if (rule.triggerMetadata.keywordFilter.includes(badword.toLowerCase())) {
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'Word Already Filtered',
-                        `ℹ️ The word \`${badword}\` is already in the filter.`,
-                        ctx.client.config.colors.orange
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        `The word \`${badword}\` is already in the filter.`,
+                    ));
                 }
 
                 const updatedKeywords = [...rule.triggerMetadata.keywordFilter, badword.toLowerCase()];
@@ -172,20 +160,16 @@ export default class BadWord extends Command {
                     },
                 });
 
-                const embed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Word Added to Filter',
-                    `<:Tick:1375519268292264012> Successfully added \`${badword}\` to the filter.\n\nUse \`/badword list\` to see all filtered words.`,
-                    ctx.client.config.colors.main
-                );
-                return ctx.editOrReply({ embeds: [embed] });
+                    `Successfully added \`${badword}\` to the filter.\n\nUse \`/badword list\` to see all filtered words.`,
+                ));
 
             } catch (error: any) {
-                const embed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Error Adding Word',
-                    `<:Cross:1375519752746958858> Failed to add word: ${error.message}\n\nPlease check that the bot has the required permissions.`,
-                    ctx.client.config.colors.red
-                );
-                return ctx.editOrReply({ embeds: [embed] });
+                    `Failed to add word: ${error.message}\n\nPlease check that the bot has the required permissions.`,
+                ));
             }
         }
 
@@ -194,12 +178,10 @@ export default class BadWord extends Command {
             if (!ctx.isInteraction) badword = ctx.args.slice(1).join(' ');
 
             if (!badword) {
-                const errorEmbed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Missing Word',
-                    '<:Cross:1375519752746958858> Please specify a word to remove from the filter.',
-                    ctx.client.config.colors.red
-                );
-                return ctx.editOrReply({ embeds: [errorEmbed] });
+                    'Please specify a word to remove from the filter.',
+                ));
             }
 
             const guild = await ctx.client.guilds.fetch(ctx.guild.id);
@@ -208,33 +190,27 @@ export default class BadWord extends Command {
 
             try {
                 if (!rule) {
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'No Filter Active',
-                        '<:Cross:1375519752746958858> There is no word filter active on this server.',
-                        ctx.client.config.colors.orange
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        'There is no word filter active on this server.',
+                    ));
                 }
 
                 if (!rule.triggerMetadata.keywordFilter.includes(badword.toLowerCase())) {
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'Word Not Found',
-                        `<:Cross:1375519752746958858> The word \`${badword}\` is not in the filter.\n\nUse \`/badword list\` to see all filtered words.`,
-                        ctx.client.config.colors.orange
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        `The word \`${badword}\` is not in the filter.\n\nUse \`/badword list\` to see all filtered words.`,
+                    ));
                 }
 
                 const updatedKeywords = rule.triggerMetadata.keywordFilter.filter(word => word !== badword.toLowerCase());
 
                 if (updatedKeywords.length === 0) {
                     await rule.delete();
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'Filter Removed',
-                        `<:Tick:1375519268292264012> Removed the last word (\`${badword}\`) and disabled the filter.\n\nThe filter will be recreated when you add a new word.`,
-                        ctx.client.config.colors.main
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        `Removed the last word (\`${badword}\`) and disabled the filter.\n\nThe filter will be recreated when you add a new word.`,
+                    ));
                 }
 
                 await rule.edit({
@@ -243,20 +219,16 @@ export default class BadWord extends Command {
                     },
                 });
 
-                const embed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Word Removed',
-                    `<:Tick:1375519268292264012> Successfully removed \`${badword}\` from the filter.\n\n${updatedKeywords.length} word${updatedKeywords.length !== 1 ? 's' : ''} still filtered.`,
-                    ctx.client.config.colors.main
-                );
-                return ctx.editOrReply({ embeds: [embed] });
+                    `Successfully removed \`${badword}\` from the filter.\n\n${updatedKeywords.length} word${updatedKeywords.length !== 1 ? 's' : ''} still filtered.`,
+                ));
 
             } catch (error: any) {
-                const embed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Error Removing Word',
-                    `<:Cross:1375519752746958858> Failed to remove word: ${error.message}`,
-                    ctx.client.config.colors.red
-                );
-                return ctx.editOrReply({ embeds: [embed] });
+                    `Failed to remove word: ${error.message}`,
+                ));
             }
         }
 
@@ -267,48 +239,43 @@ export default class BadWord extends Command {
                 const rule = rules.find(r => r.name === 'soward badwords');
 
                 if (!rule || rule.triggerMetadata.keywordFilter.length === 0) {
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'No Filtered Words',
-                        '📝 There are no words currently being filtered.\n\nAdd words with `/badword add <word>`.',
-                        ctx.client.config.colors.orange
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        'There are no words currently being filtered.\n\nAdd words with `/badword add <word>`.',
+                    ));
                 }
 
                 const words = rule.triggerMetadata.keywordFilter;
                 const wordCount = words.length;
 
-                const embed = this.createEmbed(
-                    'Filtered Words',
-                    `📋 Currently filtering **${wordCount}** word${wordCount !== 1 ? 's' : ''}.\n\n*Use \`/badword remove <word>\` to remove specific words.*`,
-                    ctx.client.config.colors.orange
-                );
-
+                const fields: { name: string; value: string }[] = [];
                 if (words.length > 0) {
-                    // Split into chunks of 15 words to avoid exceeding embed limits
+                    // Split into chunks of 15 words to avoid exceeding message limits
                     const chunks = [];
                     for (let i = 0; i < words.length; i += 15) {
                         chunks.push(words.slice(i, i + 15));
                     }
 
                     chunks.forEach((chunk, index) => {
-                        embed.addFields({
-                            name: index === 0 ? '📝 Words' : '📝 More Words',
+                        fields.push({
+                            name: index === 0 ? 'Words' : 'More Words',
                             value: chunk.map(w => `\`${w}\``).join(', '),
-                            inline: false
                         });
                     });
                 }
 
-                return ctx.editOrReply({ embeds: [embed] });
+                return ctx.editOrReply(this.createEmbed(
+                    'Filtered Words',
+                    `Currently filtering **${wordCount}** word${wordCount !== 1 ? 's' : ''}.\n\n*Use \`/badword remove <word>\` to remove specific words.*`,
+                    undefined,
+                    fields,
+                ));
 
             } catch (error: any) {
-                const embed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Error',
-                    `<:Cross:1375519752746958858> Failed to list words: ${error.message}`,
-                    ctx.client.config.colors.red
-                );
-                return ctx.editOrReply({ embeds: [embed] });
+                    `Failed to list words: ${error.message}`,
+                ));
             }
         }
 
@@ -319,28 +286,25 @@ export default class BadWord extends Command {
                 const rule = rules.find(r => r.name === 'soward badwords');
 
                 if (!rule || rule.triggerMetadata.keywordFilter.length === 0) {
-                    const embed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'No Filtered Words',
-                        '📝 There are no words currently being filtered.',
-                        ctx.client.config.colors.orange
-                    );
-                    return ctx.editOrReply({ embeds: [embed] });
+                        'There are no words currently being filtered.',
+                    ));
                 }
 
                 const wordCount = rule.triggerMetadata.keywordFilter.length;
 
-                const confirmEmbed = this.createEmbed(
+                const confirmMsg = this.createEmbed(
                     'Confirm Clear Filter',
-                    `⚠️ Are you sure you want to remove **all ${wordCount} filtered words**?\n\nThis action cannot be undone.`,
-                    ctx.client.config.colors.orange
+                    `Are you sure you want to remove **all ${wordCount} filtered words**?\n\nThis action cannot be undone.`,
                 );
 
                 // For interaction commands, we can use buttons
                 if (ctx.isInteraction) {
                     const buttons = this.createConfirmationButtons();
                     const response = await ctx.editOrReply({
-                        embeds: [confirmEmbed],
-                        components: [buttons]
+                        components: [...confirmMsg.components, buttons],
+                        flags: confirmMsg.flags,
                     });
 
                     try {
@@ -352,60 +316,52 @@ export default class BadWord extends Command {
                         if (confirmation.customId === 'confirm_clear') {
                             await rule.delete();
 
-                            const successEmbed = this.createEmbed(
+                            const successMsg = this.createEmbed(
                                 'Filter Cleared',
-                                `<:Tick:1375519268292264012> Successfully removed all ${wordCount} filtered words.\n\nYou can add new words with \`/badword add <word>\`.`,
-                                ctx.client.config.colors.main
+                                `Successfully removed all ${wordCount} filtered words.\n\nYou can add new words with \`/badword add <word>\`.`,
                             );
 
                             await confirmation.update({
-                                embeds: [successEmbed],
-                                components: []
+                                components: successMsg.components,
+                                flags: successMsg.flags,
                             });
                         } else {
-                            const cancelEmbed = this.createEmbed(
+                            const cancelMsg = this.createEmbed(
                                 'Action Cancelled',
-                                '⚠️ Word filter clear operation cancelled.',
-                                ctx.client.config.colors.orange
+                                'Word filter clear operation cancelled.',
                             );
 
                             await confirmation.update({
-                                embeds: [cancelEmbed],
-                                components: []
+                                components: cancelMsg.components,
+                                flags: cancelMsg.flags,
                             });
                         }
                     } catch (error) {
                         // Button timed out
-                        const timeoutEmbed = this.createEmbed(
+                        const timeoutMsg = this.createEmbed(
                             'Action Cancelled',
-                            '⏱️ Confirmation timed out. No changes were made to the filter.',
-                            ctx.client.config.colors.orange
+                            'Confirmation timed out. No changes were made to the filter.',
                         );
 
                         await response.edit({
-                            embeds: [timeoutEmbed],
-                            components: []
+                            components: timeoutMsg.components,
+                            flags: timeoutMsg.flags,
                         });
                     }
                 } else {
                     // For text commands, just clear immediately
                     await rule.delete();
 
-                    const successEmbed = this.createEmbed(
+                    return ctx.editOrReply(this.createEmbed(
                         'Filter Cleared',
-                        `<:Tick:1375519268292264012> Successfully removed all ${wordCount} filtered words.\n\nYou can add new words with \`/badword add <word>\`.`,
-                        ctx.client.config.colors.main
-                    );
-
-                    return ctx.editOrReply({ embeds: [successEmbed] });
+                        `Successfully removed all ${wordCount} filtered words.\n\nYou can add new words with \`/badword add <word>\`.`,
+                    ));
                 }
             } catch (error: any) {
-                const embed = this.createEmbed(
+                return ctx.editOrReply(this.createEmbed(
                     'Error',
-                    `<:Cross:1375519752746958858> Failed to clear words: ${error.message}`,
-                    ctx.client.config.colors.red
-                );
-                return ctx.editOrReply({ embeds: [embed] });
+                    `Failed to clear words: ${error.message}`,
+                ));
             }
         }
     }

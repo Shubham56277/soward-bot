@@ -1,8 +1,9 @@
 import { MediaChannel } from "@repo/db";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { ChannelType, EmbedBuilder, TextChannel } from "discord.js";
+import { ChannelType, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, TextChannel } from "discord.js";
 import { ApplicationCommandOptionType } from "discord.js";
+import Help from "../utils/Help";
 
 export default class Media extends Command {
     constructor() {
@@ -20,7 +21,7 @@ export default class Media extends Command {
             category: "moderation",
             aliases: ["mediachannel"],
             cooldown: 10,
-            args: true,
+            args: false,
             player: {
                 voice: false,
                 active: false,
@@ -74,7 +75,9 @@ export default class Media extends Command {
     }
 
     public async run(ctx: Context): Promise<any> {
-        const subcommand = ctx.options.getSubCommand();
+        const subcommand = ctx.options.getSubCommand(false, 0);
+
+        if (!subcommand) return new Help().showCommand(ctx, "media");
 
         switch (subcommand) {
             case "add":
@@ -115,19 +118,15 @@ export default class Media extends Command {
             channelId: channel.id,
         });
 
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Media Channel Configured")
-            .setDescription(`${channel} is now a media-only channel.`)
-            .addFields([
-                {
-                    name: "Rules",
-                    value:
-                        "Only media attachments will be preserved. Text messages will be deleted.",
-                },
-            ]);
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Media Channel Configured**`))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                `${channel} is now a media-only channel.\n\n` +
+                `**Rules:** Only media attachments will be preserved. Text messages will be deleted.`
+            ));
 
-        return ctx.sendMessage({ embeds: [embed] });
+        return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 
     private async removeMediaChannel(ctx: Context): Promise<any> {
@@ -152,12 +151,12 @@ export default class Media extends Command {
         }
 
         await MediaChannel.delete(result.id);
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Media Channel Removed")
-            .setDescription(`${channel} is no longer a media-only channel.`);
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Media Channel Removed**`))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${channel} is no longer a media-only channel.`));
 
-        return ctx.sendMessage({ embeds: [embed] });
+        return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 
     private async listMediaChannels(ctx: Context): Promise<any> {
@@ -169,18 +168,18 @@ export default class Media extends Command {
             );
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle("Media Channels")
-            .setDescription(
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Media Channels**`))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                 mediaChannels.map((mc) => {
                     const channel = ctx.guild.channels.cache.get(mc.channelId);
                     return channel
                         ? `${channel}`
                         : `Deleted Channel (ID: ${mc.channelId})`;
                 }).join("\n"),
-            );
+            ));
 
-        return ctx.sendMessage({ embeds: [embed] });
+        return ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 }

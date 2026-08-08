@@ -1,6 +1,6 @@
 import { env } from "@repo/env";
-import { relations } from "drizzle-orm";
-import { pgTable, json, text, integer, boolean, timestamp, bigint, jsonb } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { bigint, boolean, check, index, integer, json, jsonb, pgTable, primaryKey, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { AntiNukeChannel, AntiNukeMember, EmbedType, ID, Roles } from "./types";
 
 export const moderationCases = pgTable("moderation_cases", {
@@ -248,6 +248,7 @@ export const welcome_configs = pgTable("welcome_configs", {
 export const guilds = pgTable("guilds", {
 	guildId: text("guild_id").primaryKey(),
 	prefix: text("prefix").default(env.PREFIX),
+	prefixes: text("prefixes").array().notNull().default([]),
 	language: text("language").default("en"),
 	twoFourSeven: json("247").$type<{ channelId: string }>(),
 	customRoles: json("custom_roles").$type<ID[]>(),
@@ -262,6 +263,7 @@ export const guilds = pgTable("guilds", {
 export const users = pgTable("users", {
 	userId: text("user_id").primaryKey(),
 	noPrefix: boolean("no_prefix").default(false),
+	noPrefixAllowed: boolean("no_prefix_allowed").default(false),
 	noPrefixExpiresAt: timestamp("no_prefix_expires_at", { withTimezone: true }),
 	level: integer("level").default(0),
 	xp: integer("xp").default(0),
@@ -270,6 +272,104 @@ export const users = pgTable("users", {
 	updatedAt: timestamp("updated_at")
 		.notNull()
 		.$onUpdate(() => new Date()),
+});
+
+export const userProfiles = pgTable("user_profiles", {
+	userId: text("user_id")
+		.primaryKey()
+		.references(() => users.userId, { onDelete: "cascade", onUpdate: "cascade" }),
+	bio: text("bio"),
+	badges: text("badges").array().notNull().default([]),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const badgeDefinitions = pgTable(
+	"badge_definitions",
+	{
+		key: text("key").primaryKey(),
+		displayName: text("display_name").notNull(),
+		imageUrl: text("image_url"),
+		assetPath: text("asset_path"),
+		description: text("description").notNull(),
+		sortPriority: integer("sort_priority").notNull().default(0),
+		enabled: boolean("enabled").notNull().default(true),
+		type: text("type").notNull().$type<"animated" | "static">(),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		version: integer("version").notNull().default(1),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		check("badge_definitions_key_check", sql`${table.key} ~ '^[a-z0-9]+([a-z0-9_-]*[a-z0-9])?$'`),
+		check("badge_definitions_asset_check", sql`((${table.imageUrl} IS NOT NULL AND ${table.assetPath} IS NULL AND ${table.imageUrl} ~ '^https://') OR (${table.imageUrl} IS NULL AND ${table.assetPath} IS NOT NULL AND ${table.assetPath} ~ '^[A-Za-z0-9_./-]+$' AND ${table.assetPath} !~ '(^|/)\.\.(/|$)' AND ${table.assetPath} !~ '^/'))`),
+		check("badge_definitions_priority_check", sql`${table.sortPriority} >= 0`),
+		check("badge_definitions_type_check", sql`${table.type} IN ('animated', 'static')`),
+		check("badge_definitions_version_check", sql`${table.version} > 0`),
+		index("badge_definitions_active_priority_idx").on(table.enabled, table.sortPriority),
+	],
+);
+
+export const userBadges = pgTable(
+	"user_badges",
+	{
+		userId: text("user_id").notNull().references(() => users.userId, { onDelete: "cascade", onUpdate: "cascade" }),
+		badgeKey: text("badge_key").notNull().references(() => badgeDefinitions.key, { onDelete: "cascade", onUpdate: "cascade" }),
+		grantMetadata: jsonb("grant_metadata").$type<Record<string, unknown>>().notNull().default({}),
+		grantedBy: text("granted_by"),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		version: integer("version").notNull().default(1),
+		grantedAt: timestamp("granted_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		primaryKey({ name: "user_badges_user_id_badge_key_pk", columns: [table.userId, table.badgeKey] }),
+		check("user_badges_version_check", sql`${table.version} > 0`),
+		index("user_badges_user_expiry_idx").on(table.userId, table.expiresAt),
+		index("user_badges_badge_key_idx").on(table.badgeKey),
+	],
+);
+
+export const guildBotSettings = pgTable("guild_bot_settings", {
+	guildId: text("guild_id")
+		.primaryKey()
+		.references(() => guilds.guildId, { onDelete: "cascade", onUpdate: "cascade" }),
+	avatarUrl: text("avatar_url"),
+	bio: text("bio"),
+	bannerUrl: text("banner_url"),
+	baselineAvatarUrl: text("baseline_avatar_url"),
+	baselineBio: text("baseline_bio"),
+	baselineBannerUrl: text("baseline_banner_url"),
+	baselineCapturedAt: timestamp("baseline_captured_at", { withTimezone: true }),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const playlists = pgTable(
+	"playlists",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.userId, { onDelete: "cascade", onUpdate: "cascade" }),
+		name: text("name").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [unique("playlists_user_id_name_unique").on(table.userId, table.name)],
+);
+
+export const playlistTracks = pgTable("playlist_tracks", {
+	id: text("id").primaryKey(),
+	playlistId: text("playlist_id")
+		.notNull()
+		.references(() => playlists.id, { onDelete: "cascade", onUpdate: "cascade" }),
+	title: text("title"),
+	uri: text("uri").notNull(),
+	author: text("author"),
+	duration: integer("duration"),
+	position: integer("position").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const AFK = pgTable("afk", {

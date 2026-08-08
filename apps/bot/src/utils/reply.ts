@@ -1,4 +1,4 @@
-import { EmbedBuilder, type ColorResolvable } from "discord.js";
+import { ContainerBuilder, EmbedBuilder, MessageFlags, TextDisplayBuilder, type ColorResolvable } from "discord.js";
 import type Context from "../lib/Context";
 import { constants } from "../config/constants";
 
@@ -6,6 +6,13 @@ import { constants } from "../config/constants";
 const TICK = constants.emojis.on;
 const CROSS = constants.emojis.off;
 const TIME = constants.emojis.time;
+
+// ─── V2 Panel Builder ───────────────────────────────────────────────────────
+
+function buildV2Panel(text: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
+}
 
 // ─── Low-level builder ──────────────────────────────────────────────────────
 
@@ -25,41 +32,42 @@ function buildReplyEmbed({ color, description, emoji }: ReplyEmbedOptions): Embe
 // ─── High-level helpers ─────────────────────────────────────────────────────
 
 /**
- * Send a success response (black embed with tick emoji).
- *
- * ```ts
- * return reply.success(ctx, "Nickname updated");
- * ```
+ * Send a success response (Components V2 panel).
  */
 export function success(ctx: Context, message: string) {
 	return ctx.sendMessage({
-		embeds: [buildReplyEmbed({ color: 0x000000, description: message, emoji: TICK })],
+		components: [buildV2Panel(message)],
+		flags: MessageFlags.IsComponentsV2,
 	});
 }
 
 /**
- * Send an error response (black embed with cross emoji).
- *
- * ```ts
- * return reply.error(ctx, "User not found");
- * ```
+ * Send an error response (Components V2 panel).
  */
 export function error(ctx: Context, message: string) {
 	return ctx.sendMessage({
-		embeds: [buildReplyEmbed({ color: 0x000000, description: message, emoji: CROSS })],
+		components: [buildV2Panel(message)],
+		flags: MessageFlags.IsComponentsV2,
 	});
 }
 
 /**
- * Send a warning response (black embed, no emoji by default).
- *
- * ```ts
- * return reply.warning(ctx, "This action cannot be undone");
- * ```
+ * Send a warning response (Components V2 panel).
  */
 export function warning(ctx: Context, message: string) {
 	return ctx.sendMessage({
-		embeds: [buildReplyEmbed({ color: 0x000000, description: message })],
+		components: [buildV2Panel(message)],
+		flags: MessageFlags.IsComponentsV2,
+	});
+}
+
+/**
+ * Send an info response (Components V2 panel).
+ */
+export function info(ctx: Context, message: string) {
+	return ctx.sendMessage({
+		components: [buildV2Panel(message)],
+		flags: MessageFlags.IsComponentsV2,
 	});
 }
 
@@ -81,25 +89,8 @@ export async function cooldown(ctx: Context, remainingSeconds: number, deleteAft
 }
 
 /**
- * Send an informational response (black embed, no emoji).
- *
- * ```ts
- * return reply.info(ctx, "This user has no warnings");
- * ```
- */
-export function info(ctx: Context, message: string) {
-	return ctx.sendMessage({
-		embeds: [buildReplyEmbed({ color: 0x000000, description: message })],
-	});
-}
-
-/**
  * Send a plain subtext message (compact `-#` formatting).
  * Useful for ephemeral status messages.
- *
- * ```ts
- * return reply.subtext(ctx, "Processing your request...");
- * ```
  */
 export function subtext(ctx: Context, message: string) {
 	return ctx.sendMessage(`-# ${message}`);

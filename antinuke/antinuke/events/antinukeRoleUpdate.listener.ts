@@ -24,43 +24,47 @@ export default class AntiNukeRoleUpdateListener extends Event {
   }
 
   public async run(oldRole: Role, newRole: Role): Promise<void> {
-    const permissionsChanged = oldRole.permissions.bitfield !== newRole.permissions.bitfield;
-    const mentionabilityChanged = oldRole.mentionable !== newRole.mentionable;
-    const changed = oldRole.name !== newRole.name
-      || oldRole.color !== newRole.color
-      || oldRole.hoist !== newRole.hoist
-      || mentionabilityChanged
-      || permissionsChanged;
+    try {
+      const permissionsChanged = oldRole.permissions.bitfield !== newRole.permissions.bitfield;
+      const mentionabilityChanged = oldRole.mentionable !== newRole.mentionable;
+      const changed = oldRole.name !== newRole.name
+        || oldRole.color !== newRole.color
+        || oldRole.hoist !== newRole.hoist
+        || mentionabilityChanged
+        || permissionsChanged;
 
-    if (!changed) return;
+      if (!changed) return;
 
-    const hasDangerousPermissionEscalation = permissionsChanged && DANGEROUS_ROLE_LINK_PERMISSIONS
-      .some((permission) => !oldRole.permissions.has(permission) && newRole.permissions.has(permission));
+      const hasDangerousPermissionEscalation = permissionsChanged && DANGEROUS_ROLE_LINK_PERMISSIONS
+        .some((permission) => !oldRole.permissions.has(permission) && newRole.permissions.has(permission));
 
-    const action = hasDangerousPermissionEscalation ? "linkRole" : "roleUpdate";
-    const protection = await runAntiNukeProtectionDetailed(
-      this.client,
-      newRole.guild,
-      action,
-      `${action}:${oldRole.name}->${newRole.name}`,
-      { targetId: newRole.id },
-    );
-
-    if (!protection.enforced) return;
-
-    const autoRecoveryEnabled = await isAutoRecoveryEnabled(newRole.guild.id);
-    if (!autoRecoveryEnabled) return;
-
-    const restored = await restoreUpdatedRole(oldRole, newRole);
-    if (!restored) {
-      await sendRecoveryReport(
+      const action = hasDangerousPermissionEscalation ? "linkRole" : "roleUpdate";
+      const protection = await runAntiNukeProtectionDetailed(
+        this.client,
         newRole.guild,
-        "Role Revert Failed",
-        `Failed to restore role: **${oldRole.name}**. Check role hierarchy and Manage Roles permission.`,
+        action,
+        `${action}:${oldRole.name}->${newRole.name}`,
+        { targetId: newRole.id },
       );
-      return;
-    }
 
-    await sendRecoveryReport(newRole.guild, "Role Reverted", `Restored role: **${oldRole.name}**`);
+      if (!protection.enforced) return;
+
+      const autoRecoveryEnabled = await isAutoRecoveryEnabled(newRole.guild.id);
+      if (!autoRecoveryEnabled) return;
+
+      const restored = await restoreUpdatedRole(oldRole, newRole);
+      if (!restored) {
+        await sendRecoveryReport(
+          newRole.guild,
+          "Role Revert Failed",
+          `Failed to restore role: **${oldRole.name}**. Check role hierarchy and Manage Roles permission.`,
+        ).catch(() => null);
+        return;
+      }
+
+      await sendRecoveryReport(newRole.guild, "Role Reverted", `Restored role: **${oldRole.name}**`).catch(() => null);
+    } catch (err) {
+      // Swallow errors so antinuke never crashes the bot
+    }
   }
 }

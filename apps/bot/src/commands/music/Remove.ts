@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -37,49 +37,31 @@ export default class Remove extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context, args: string[]): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("Player is not connected"));
         }
 
         if (player.queue.tracks.length === 0) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "There are no songs in the queue to remove",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("There are no songs in the queue to remove"));
         }
 
         const songNumber = Number(args[0]);
         if (Number.isNaN(songNumber) || songNumber <= 0 || songNumber > player.queue.tracks.length) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: `Please provide a valid number between 1 and ${player.queue.tracks.length}`,
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg(`Please provide a valid number between 1 and ${player.queue.tracks.length}`));
         }
 
         const removedTrack = player.queue.tracks[songNumber - 1];
         player.queue.remove(songNumber - 1);
 
-        const embed = new EmbedBuilder()
-            .setDescription(`Removed track #${songNumber}: **${removedTrack?.info.title}**`)
-            .setColor(ctx.client.config.colors.main);
-
-        await ctx.sendMessage({ embeds: [embed] });
+        await ctx.sendMessage(this.msg(`Removed track #${songNumber}: **${removedTrack?.info.title}**`));
     }
 }

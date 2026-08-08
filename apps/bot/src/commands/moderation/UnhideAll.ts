@@ -1,6 +1,13 @@
-import { EmbedBuilder, ChannelType, ApplicationCommandOptionType, Role, Collection, GuildChannel } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ChannelType, ApplicationCommandOptionType, Role, Collection, GuildChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class UnhideAll extends Command {
 	constructor() {
@@ -31,37 +38,30 @@ export default class UnhideAll extends Command {
 		});
 	}
 
+	private msg(text: string): any {
+		return {
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+			flags: MessageFlags.IsComponentsV2,
+		};
+	}
+
 	public async run(ctx: Context): Promise<any> {
 		const role = ctx.options?.getRole("role", false) || ctx.guild.roles.everyone;
 
 		// Confirmation
-		const confirmEmbed = new EmbedBuilder()
-			.setColor(0x000000)
-			.setTitle("⚠️ Confirm Mass Unhide")
-			.setDescription(`This will unhide ALL channels for ${role.toString()}.`)
-			.addFields({ name: "Moderator", value: ctx.author?.toString() || "Unknown" });
+		const confirmContainer = buildPanel(
+			"Confirm Mass Unhide",
+			`This will unhide ALL channels for ${role.name}.\n\n**Moderator:** ${ctx.author?.username || "Unknown"}`,
+		);
+
+		const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder().setCustomId("confirm_unhideall").setLabel("Confirm").setStyle(ButtonStyle.Success),
+			new ButtonBuilder().setCustomId("cancel_unhideall").setLabel("Cancel").setStyle(ButtonStyle.Danger),
+		);
 
 		const confirmMessage = await ctx.sendMessage({
-			embeds: [confirmEmbed],
-			components: [
-				{
-					type: 1,
-					components: [
-						{
-							type: 2,
-							style: 3,
-							label: "Confirm",
-							customId: "confirm_unhideall",
-						},
-						{
-							type: 2,
-							style: 4,
-							label: "Cancel",
-							customId: "cancel_unhideall",
-						},
-					],
-				},
-			],
+			components: [confirmContainer, actionRow],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		try {
@@ -72,40 +72,37 @@ export default class UnhideAll extends Command {
 
 			if (confirmation.customId === "cancel_unhideall") {
 				await confirmation.update({
-					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> Operation cancelled")],
-					components: [],
+					components: [buildPanel("Cancelled", "Operation cancelled")],
+					flags: MessageFlags.IsComponentsV2,
 				});
 				return;
 			}
 
 			await confirmation.update({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("⏳ Processing...")],
-				components: [],
+				components: [buildPanel("Processing", "Processing...")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		} catch {
 			await confirmMessage.edit({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
-				components: [],
+				components: [buildPanel("Timed Out", "Confirmation timed out")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 			return;
 		}
 
 		try {
 			const channels = ctx.guild.channels.cache.filter((c) => [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice, ChannelType.GuildAnnouncement].includes(c.type)) as Collection<string, GuildChannel>;
-			
+
 			if (channels.size === 0) {
-				return await ctx.sendMessage({
-					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("No channels found to unhide")],
-				});
+				return await ctx.sendMessage(this.msg("No channels found to unhide"));
 			}
 
-			const progressEmbed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("👁️ Unhiding All Channels")
-				.setDescription(`Processing ${channels.size} channels...`)
-				.addFields({ name: "Progress", value: `0/${channels.size} (0%)` }, { name: "Unhidden For", value: role.toString() });
+			let progressBody = `Processing ${channels.size} channels...\n\n**Progress:** 0/${channels.size} (0%)\n**Unhidden For:** ${role.name}`;
 
-			const progressMessage = await ctx.sendMessage({ embeds: [progressEmbed] });
+			const progressMessage = await ctx.sendMessage({
+				components: [buildPanel("Unhiding All Channels", progressBody)],
+				flags: MessageFlags.IsComponentsV2,
+			});
 
 			let processed = 0;
 			const startTime = Date.now();
@@ -126,11 +123,11 @@ export default class UnhideAll extends Command {
 
 					if (processed % Math.max(1, Math.floor(channels.size / 10)) === 0 || processed === channels.size) {
 						const percentage = Math.round((processed / channels.size) * 100);
-						progressEmbed.spliceFields(0, 1, {
-							name: "Progress",
-							value: `${processed}/${channels.size} (${percentage}%)`,
-						});
-						progressMessage.edit({ embeds: [progressEmbed] }).catch(console.error);
+						progressBody = `Processing ${channels.size} channels...\n\n**Progress:** ${processed}/${channels.size} (${percentage}%)\n**Unhidden For:** ${role.name}`;
+						progressMessage.edit({
+							components: [buildPanel("Unhiding All Channels", progressBody)],
+							flags: MessageFlags.IsComponentsV2,
+						}).catch(console.error);
 					}
 				} catch (error) {
 					console.error(`Failed to unhide ${channel.id}:`, error);
@@ -142,18 +139,19 @@ export default class UnhideAll extends Command {
 			}
 
 			const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-			const resultEmbed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("<:Tick:1375519268292264012> Mass Unhide Complete")
-				.setDescription(`Successfully unhided ${processed} channels for ${role.toString()}`)
-				.addFields({ name: "Total Time", value: `${elapsed} seconds` }, { name: "Moderator", value: ctx.author?.toString() || "Unknown" });
+			const resultContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Mass Unhide Complete**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`Successfully unhided ${processed} channels for ${role.name}\n\n` +
+					`**Total Time:** ${elapsed} seconds\n` +
+					`**Moderator:** ${ctx.author?.username || "Unknown"}`
+				));
 
-			await progressMessage.edit({ embeds: [resultEmbed] });
+			await progressMessage.edit({ components: [resultContainer], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("UnhideAll Error:", error);
-			await ctx.sendMessage({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> An error occurred during mass unhide")],
-			});
+			await ctx.sendMessage(this.msg("An error occurred during mass unhide"));
 		}
 	}
 }

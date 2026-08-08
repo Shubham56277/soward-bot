@@ -1,8 +1,8 @@
-import { db } from '@repo/db';
-import { moderationCases } from "@repo/db";
+import { db, schema } from '@repo/db';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import type { GuildMember, User } from 'discord.js';
 import { generateId } from '../../utils/helper';
+
+const { moderationCases } = schema;
 
 /**
  * Moderation Case Service - Manages moderation case IDs and history
@@ -35,7 +35,7 @@ export class ModerationCaseService {
 			createdAt: new Date(),
 		});
 
-		return caseId;
+		return String(caseId);
 	}
 
 	/**

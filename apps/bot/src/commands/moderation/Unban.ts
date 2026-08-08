@@ -83,11 +83,11 @@ export default class Unban extends Command {
             await ctx.guild.bans.remove(user, reason);
 
             const container = new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**<:Tick:1375519268292264012> Ban Removed**`))
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Ban Removed**`))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     `**User:** ${user.tag}\n` +
-                    `**Moderator:** ${ctx.author?.toString() ?? "Unknown"}\n` +
+                    `**Moderator:** ${ctx.author?.username ?? "Unknown"}\n` +
                     `**Reason:** ${reason}`
                 ))
                 .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))

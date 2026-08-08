@@ -1,6 +1,6 @@
 import { db, schema } from "..";
 import { AFKType, blacklistType, ID, PremiumType, UserType, WarningsType } from "../types";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { cacheAside, invalidateCache } from "../cache";
 import { env } from "@repo/env";
 
@@ -12,6 +12,7 @@ const PREMIUM_CACHE_TTL_SECONDS = 30;
 export class User implements UserType {
 	userId: string;
 	noPrefix?: boolean | null | undefined;
+	noPrefixAllowed?: boolean | null | undefined;
 	noPrefixExpiresAt?: Date | null | undefined;
 	level?: number | null | undefined;
 	xp?: number | null | undefined;
@@ -19,25 +20,21 @@ export class User implements UserType {
 	createdAt?: Date | undefined;
 	updatedAt?: Date | undefined;
 
-	constructor(userId: string, data: Partial<UserType>) {
+	constructor(userId: string, data: Partial<UserType> = {}) {
 		this.userId = userId;
 		this.noPrefix = data.noPrefix ?? false;
-		this.noPrefixExpiresAt = data.noPrefixExpiresAt ? new Date(data.noPrefixExpiresAt) : data.noPrefixExpiresAt;
+		this.noPrefixAllowed = data.noPrefixAllowed ?? false;
+		this.noPrefixExpiresAt = data.noPrefixExpiresAt ? new Date(data.noPrefixExpiresAt) : null;
 		this.level = data.level ?? 0;
-		this.xp = data.xp;
-		this.relationships = data.relationships;
-		this.createdAt = data.createdAt ? new Date(data.createdAt) : data.createdAt;
-		this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : data.updatedAt;
-
-		// Check if noPrefix has expired
-		if (this.noPrefixExpiresAt && new Date() > this.noPrefixExpiresAt) {
-			this.noPrefix = false;
-			this.noPrefixExpiresAt = null;
-		}
+		this.xp = data.xp ?? 0;
+		this.relationships = data.relationships ?? "single";
+		this.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
+		this.updatedAt = data.updatedAt ? new Date(data.updatedAt) : new Date();
 	}
 
-	public static async create(userId: string, data?: Partial<UserType>) {
-		const user = new User(userId, data!);
+	public static async create(userId: string, data: Partial<UserType> = {}) {
+		if (!userId) throw new Error("userId is required");
+		const user = new User(userId, data);
 		await db.insert(schema.users).values(user).onConflictDoNothing().execute();
 		await invalidateCache(userCacheKey(userId));
 		return user;
@@ -68,7 +65,10 @@ export class User implements UserType {
 	}
 
 	public static async setNoPrefix(userId: string, durationMs: number, addedBy: string) {
-		const expiresAt = new Date(Date.now() + durationMs);
+		if (!Number.isSafeInteger(durationMs) || durationMs <= 0) throw new Error("durationMs must be a positive integer");
+		const expiresAtMs = Date.now() + durationMs;
+		if (!Number.isSafeInteger(expiresAtMs)) throw new Error("No-prefix expiry exceeds the supported date range");
+		const expiresAt = new Date(expiresAtMs);
 		await User.update(userId, {
 			noPrefix: true,
 			noPrefixExpiresAt: expiresAt,
@@ -94,9 +94,10 @@ export class User implements UserType {
 	public static async getNoPrefix(userId: string) {
 		const user = await User.get(userId);
 		if (user.noPrefixExpiresAt && new Date() > user.noPrefixExpiresAt) {
-			await db.update(schema.users).set({ noPrefix: false, noPrefixExpiresAt: null }).where(eq(schema.users.userId, userId)).execute();
+			await db.update(schema.users).set({ noPrefix: false, noPrefixAllowed: false, noPrefixExpiresAt: null }).where(eq(schema.users.userId, userId)).execute();
 			await invalidateCache(userCacheKey(userId));
 			user.noPrefix = false;
+			user.noPrefixAllowed = false;
 			user.noPrefixExpiresAt = null;
 			if (env.NO_PREFIX_WEBHOOK_URL) await fetch(env.NO_PREFIX_WEBHOOK_URL, {
 				method: "POST",
@@ -116,6 +117,69 @@ export class User implements UserType {
 			return false;
 		}
 		return user.noPrefix;
+	}
+
+	/**
+	 * Grant a user permission to use no-prefix (they must still enable it themselves).
+	 * When durationMs is provided, access automatically expires after that time.
+	 */
+	public static async grantNoPrefixAccess(userId: string, durationMs?: number) {
+		const expiresAt = durationMs && durationMs > 0 ? new Date(Date.now() + durationMs) : null;
+		await User.update(userId, { noPrefixAllowed: true, noPrefixExpiresAt: expiresAt });
+	}
+
+	/** Revoke a user's no-prefix permission and disable it. */
+	public static async revokeNoPrefixAccess(userId: string) {
+		await User.update(userId, { noPrefixAllowed: false, noPrefix: false, noPrefixExpiresAt: null });
+	}
+
+	/** Whether the user currently has (non-expired) permission to use no-prefix. */
+	public static async isNoPrefixAllowed(userId: string): Promise<boolean> {
+		const user = await User.get(userId);
+		if (user.noPrefixExpiresAt && new Date() > user.noPrefixExpiresAt) {
+			await db.update(schema.users).set({ noPrefix: false, noPrefixAllowed: false, noPrefixExpiresAt: null }).where(eq(schema.users.userId, userId)).execute();
+			await invalidateCache(userCacheKey(userId));
+			return false;
+		}
+		return Boolean(user.noPrefixAllowed);
+	}
+
+	/** Toggle a user's own no-prefix on/off, preserving any access-expiry window. */
+	public static async setNoPrefixEnabled(userId: string, enabled: boolean) {
+		if (enabled && !(await User.isNoPrefixAllowed(userId))) {
+			throw new Error("No-prefix access is not enabled for this user");
+		}
+		await User.update(userId, { noPrefix: enabled });
+	}
+
+	/** List every user who has no-prefix permission, with their state and expiry. */
+	public static async getAllNoPrefix(): Promise<{ userId: string; allowed: boolean; enabled: boolean; expiresAt: Date | null }[]> {
+		const rows = await db
+			.select({ userId: schema.users.userId, allowed: schema.users.noPrefixAllowed, enabled: schema.users.noPrefix, expiresAt: schema.users.noPrefixExpiresAt })
+			.from(schema.users)
+			.where(or(eq(schema.users.noPrefixAllowed, true), eq(schema.users.noPrefix, true)))
+			.execute();
+		const now = Date.now();
+		return rows
+			.filter((row) => !row.expiresAt || row.expiresAt.getTime() > now)
+			.map((row) => ({ userId: row.userId, allowed: Boolean(row.allowed), enabled: Boolean(row.enabled), expiresAt: row.expiresAt ?? null }));
+	}
+
+	/** Remove no-prefix permission and state from every user. Returns the number affected. */
+	public static async resetAllNoPrefix(): Promise<number> {
+		const rows = await db
+			.select({ userId: schema.users.userId })
+			.from(schema.users)
+			.where(or(eq(schema.users.noPrefixAllowed, true), eq(schema.users.noPrefix, true)))
+			.execute();
+		if (!rows.length) return 0;
+		await db
+			.update(schema.users)
+			.set({ noPrefix: false, noPrefixAllowed: false, noPrefixExpiresAt: null })
+			.where(or(eq(schema.users.noPrefixAllowed, true), eq(schema.users.noPrefix, true)))
+			.execute();
+		await Promise.all(rows.map((row) => invalidateCache(userCacheKey(row.userId)).catch(() => {})));
+		return rows.length;
 	}
 }
 
@@ -242,7 +306,7 @@ export class Warning implements WarningsType {
 			.execute()
 			.then((result) => result.at(0));
 
-		return result?.count ?? 0;
+		return Number(result?.count ?? 0);
 	}
 
 	public static async create(data: Omit<WarningsType, "id" | "createdAt" | "updatedAt">) {
@@ -517,5 +581,35 @@ export class Premium implements PremiumType {
 	public static async hasPremium(userId: string): Promise<boolean> {
 		const premium = await Premium.get(userId);
 		return premium?.isPremium ?? false;
+	}
+
+	/**
+	 * Check whether ANY of the supplied user IDs has an active premium subscription.
+	 * Used to grant server-wide premium: if one member of a guild has premium,
+	 * every member of that guild gets premium access.
+	 *
+	 * Runs a single indexed query and returns as soon as a match is found.
+	 */
+	public static async anyHasPremium(userIds: string[]): Promise<boolean> {
+		if (!userIds.length) return false;
+
+		// Deduplicate and cap the list to keep the IN clause reasonable.
+		const unique = [...new Set(userIds)].slice(0, 5_000);
+		const now = new Date();
+
+		const rows = await db
+			.select({ userId: schema.premium.userId })
+			.from(schema.premium)
+			.where(
+				and(
+					inArray(schema.premium.userId, unique),
+					eq(schema.premium.isPremium, true),
+					gt(schema.premium.premiumUntil, now),
+				),
+			)
+			.limit(1)
+			.execute();
+
+		return rows.length > 0;
 	}
 }

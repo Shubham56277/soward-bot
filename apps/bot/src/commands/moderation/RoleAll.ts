@@ -1,6 +1,7 @@
-import { EmbedBuilder, Role, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, PermissionResolvable } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, Role, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, PermissionResolvable } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+import Help from "../utils/Help";
 
 // Dangerous permissions to check against
 const dangerPermissions: PermissionResolvable[] = [
@@ -15,6 +16,13 @@ const dangerPermissions: PermissionResolvable[] = [
     PermissionFlagsBits.ManageWebhooks,
 ];
 
+function buildPanel(title: string, body: string): ContainerBuilder {
+    return new ContainerBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+        .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
+
 export default class RoleAll extends Command {
     constructor() {
         super({
@@ -27,7 +35,7 @@ export default class RoleAll extends Command {
             category: "moderation",
             aliases: ["massrole", "addroleall"],
             cooldown: 30,
-            args: true,
+            args: false,
             permissions: {
                 dev: false,
                 client: ["ManageRoles"],
@@ -63,7 +71,16 @@ export default class RoleAll extends Command {
         return dangerPermissions.some(perm => role.permissions.has(perm));
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
+        if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "roleall");
+
         const role = ctx.options.getRole("role", true) as Role;
         const targetType = ctx.options.getString("type", false) || "humans";
 
@@ -79,35 +96,24 @@ export default class RoleAll extends Command {
 
         // Safety checks
         if (this.hasDangerousPermissions(role)) {
-            const embed = new EmbedBuilder()
-                .setColor(0x000000)
-                .setDescription("This role has dangerous permissions and cannot be mass assigned");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("This role has dangerous permissions and cannot be mass assigned"));
         }
 
         if (role.position >= (ctx.guild.members.me?.roles.highest.position || Number.POSITIVE_INFINITY)) {
-            const embed = new EmbedBuilder()
-                .setColor(0x000000)
-                .setDescription("I cannot assign roles higher than my highest role");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("I cannot assign roles higher than my highest role"));
         }
 
         if (role.managed) {
-            const embed = new EmbedBuilder()
-                .setColor(0x000000)
-                .setDescription("This role is managed by an integration and cannot be assigned");
-            return await ctx.sendMessage({ embeds: [embed] });
+            return await ctx.sendMessage(this.msg("This role is managed by an integration and cannot be assigned"));
         }
 
         // Confirmation
-        const confirmEmbed = new EmbedBuilder()
-            .setColor(0x000000)
-            .setTitle("Confirm Role Assignment")
-            .setDescription(`This will add ${role} to all ${filterType === "all" ? "members" : filterType} in the server.`)
-            .addFields(
-                { name: "Safety Check", value: "✓ No dangerous permissions\n✓ Role position verified", inline: true }
-            )
-            .setFooter({ text: "This action cannot be undone automatically" });
+        const confirmContainer = buildPanel(
+            "Confirm Role Assignment",
+            `This will add ${role} to all ${filterType === "all" ? "members" : filterType} in the server.\n\n` +
+            "**Safety Check:** No dangerous permissions, role position verified\n\n" +
+            "-# This action cannot be undone automatically"
+        );
 
         const actionRow = new ActionRowBuilder<ButtonBuilder>()
             .addComponents(
@@ -121,9 +127,11 @@ export default class RoleAll extends Command {
                     .setStyle(ButtonStyle.Danger)
             );
 
+        let lastContainer: ContainerBuilder = confirmContainer;
+
         const confirmMsg = await ctx.sendMessage({
-            embeds: [confirmEmbed],
-            components: [actionRow]
+            components: [confirmContainer, actionRow],
+            flags: MessageFlags.IsComponentsV2,
         });
 
         const collector = confirmMsg.createMessageComponentCollector({ time: 60000 });
@@ -148,17 +156,14 @@ export default class RoleAll extends Command {
                     const startTime = Date.now();
 
                     // Update with initial count
-                    const progressEmbed = new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle("Role Assignment In Progress")
-                        .setDescription(
-                            `Adding ${role} to ${memberArray.length} members...\n\n` +
-                            `Progress: 0/${memberArray.length}\n` +
-                            `Estimated time: ${memberArray.length} seconds`
-                        )
-                        .setFooter({ text: "Processing with 1s delay between members" });
+                    let progressBody =
+                        `Adding ${role} to ${memberArray.length} members...\n\n` +
+                        `Progress: 0/${memberArray.length}\n` +
+                        `Estimated time: ${memberArray.length} seconds\n\n` +
+                        "-# Processing with 1s delay between members";
 
-                    await confirmMsg.edit({ embeds: [progressEmbed], components: [] });
+                    lastContainer = buildPanel("Role Assignment In Progress", progressBody);
+                    await confirmMsg.edit({ components: [lastContainer], flags: MessageFlags.IsComponentsV2 });
 
                     // Process each member with delay
                     for (const member of memberArray) {
@@ -183,13 +188,13 @@ export default class RoleAll extends Command {
                         if ((processed + errors) % 3 === 0 || (processed + errors + skipped) === memberArray.length) {
                             const elapsed = Math.floor((Date.now() - startTime) / 1000);
                             const remaining = memberArray.length - processed - errors - skipped;
-                            progressEmbed.setDescription(
+                            progressBody =
                                 `Adding ${role} to members...\n\n` +
                                 `Progress: ${processed + errors}/${memberArray.length}\n` +
                                 `Assigned: ${processed} | Errors: ${errors} | Skipped: ${skipped}\n` +
-                                `Elapsed: ${elapsed}s | Remaining: ~${remaining}s`
-                            );
-                            await confirmMsg.edit({ embeds: [progressEmbed] });
+                                `Elapsed: ${elapsed}s | Remaining: ~${remaining}s`;
+                            lastContainer = buildPanel("Role Assignment In Progress", progressBody);
+                            await confirmMsg.edit({ components: [lastContainer], flags: MessageFlags.IsComponentsV2 });
                         }
 
                         // 1s delay between each member
@@ -198,37 +203,32 @@ export default class RoleAll extends Command {
 
                     // Final result
                     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-                    const resultEmbed = new EmbedBuilder()
-                        .setColor(errors > 0 ? Colors.Orange : Colors.Green)
-                        .setTitle("Role Assignment Complete")
-                        .setDescription(
-                            `Results for ${role} assignment:\n\n` +
-                            `<:Tick:1375519268292264012> Successfully added: ${processed}\n` +
-                            `⚠️ Already had role: ${skipped}\n` +
-                            `<:Cross:1375519752746958858> Failed assignments: ${errors}\n` +
-                            `⏱️ Time taken: ${totalTime} seconds`
-                        )
-                        .setFooter({ text: "Processed with 1s delay between members" });
+                    const resultBody =
+                        `Results for ${role} assignment:\n\n` +
+                        `Successfully added: ${processed}\n` +
+                        `Already had role: ${skipped}\n` +
+                        `Failed assignments: ${errors}\n` +
+                        `Time taken: ${totalTime} seconds\n\n` +
+                        "-# Processed with 1s delay between members";
 
-                    await confirmMsg.edit({ embeds: [resultEmbed] });
+                    lastContainer = buildPanel("Role Assignment Complete", resultBody);
+                    await confirmMsg.edit({ components: [lastContainer], flags: MessageFlags.IsComponentsV2 });
 
                 } catch (error) {
                     console.error("Role assignment error:", error);
-                    const errorEmbed = new EmbedBuilder()
-                        .setColor(0x000000)
-                        .setTitle("Error During Role Assignment")
-                        .setDescription("An unexpected error occurred during the process");
-                    await confirmMsg.edit({ embeds: [errorEmbed] });
+                    lastContainer = buildPanel("Error During Role Assignment", "An unexpected error occurred during the process");
+                    await confirmMsg.edit({
+                        components: [lastContainer],
+                        flags: MessageFlags.IsComponentsV2,
+                    });
                 }
 
             } else if (interaction.customId === "cancel") {
                 await interaction.deferUpdate();
-                confirmEmbed
-                    .setColor(0x000000)
-                    .setTitle("Operation Cancelled");
+                lastContainer = buildPanel("Operation Cancelled", `This will add ${role} to all ${filterType === "all" ? "members" : filterType} in the server.`);
                 await confirmMsg.edit({
-                    embeds: [confirmEmbed],
-                    components: []
+                    components: [lastContainer],
+                    flags: MessageFlags.IsComponentsV2,
                 });
                 collector.stop();
             }
@@ -236,7 +236,7 @@ export default class RoleAll extends Command {
 
         collector.on('end', () => {
             if (!confirmMsg.editable) return;
-            confirmMsg.edit({ components: [] }).catch(() => { });
+            confirmMsg.edit({ components: [lastContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => { });
         });
     }
 }

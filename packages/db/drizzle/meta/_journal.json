@@ -15,6 +15,48 @@
       "when": 1784666944204,
       "tag": "0001_watery_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784666944205,
+      "tag": "0003_bot_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784666944206,
+      "tag": "0004_no_prefix_allowed",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784666944207,
+      "tag": "0005_playlists",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784666944208,
+      "tag": "0002_add_moderation_and_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784666944209,
+      "tag": "0006_profile_badges",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784666944210,
+      "tag": "0007_profile_badges_compatibility",
+      "breakpoints": true
     }
   ]
 }

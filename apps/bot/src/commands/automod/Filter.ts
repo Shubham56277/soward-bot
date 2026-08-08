@@ -2,6 +2,7 @@ import { ApplicationCommandOptionType } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 import BadWord from "./Badword";
+import Help from "../utils/Help";
 
 export default class Filter extends Command {
 	private readonly words = new BadWord();
@@ -23,6 +24,7 @@ export default class Filter extends Command {
 	}
 
 	public async run(ctx: Context): Promise<any> {
+		if (!ctx.isInteraction && !ctx.args?.length) return new Help().showCommand(ctx, "filter");
 		if (ctx.options.getSubCommand(true, 1) === "reset" && ctx.isInteraction) {
 			(ctx.interaction!.options as any).getSubcommand = () => "clear";
 		}

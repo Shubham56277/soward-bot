@@ -1,6 +1,13 @@
-import { EmbedBuilder, ChannelType, ApplicationCommandOptionType } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ChannelType, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class LockAll extends Command {
 	constructor() {
@@ -31,39 +38,30 @@ export default class LockAll extends Command {
 		});
 	}
 
+	private msg(text: string): any {
+		return {
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+			flags: MessageFlags.IsComponentsV2,
+		};
+	}
+
 	public async run(ctx: Context): Promise<any> {
 		const reason = ctx.options?.getString("reason", false) || "No reason provided";
 
 		// Confirmation
-		const confirmEmbed = new EmbedBuilder()
-			.setColor(0x000000)
-			.setTitle("⚠️ Confirm Mass Lock")
-			.setDescription("This will lock ALL text channels in the server.")
-			.addFields(
-				{ name: "Moderator", value: ctx.author?.toString() || "Unknown" },
-			);
+		const confirmContainer = buildPanel(
+			"Confirm Mass Lock",
+			`This will lock ALL text channels in the server.\n\n**Moderator:** ${ctx.author?.username || "Unknown"}`,
+		);
+
+		const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder().setCustomId("confirm_lockall").setLabel("Confirm").setStyle(ButtonStyle.Success),
+			new ButtonBuilder().setCustomId("cancel_lockall").setLabel("Cancel").setStyle(ButtonStyle.Danger),
+		);
 
 		const confirmMessage = await ctx.sendMessage({
-			embeds: [confirmEmbed],
-			components: [
-				{
-					type: 1,
-					components: [
-						{
-							type: 2,
-							style: 3,
-							label: "Confirm",
-							customId: "confirm_lockall",
-						},
-						{
-							type: 2,
-							style: 4,
-							label: "Cancel",
-							customId: "cancel_lockall",
-						},
-					],
-				},
-			],
+			components: [confirmContainer, actionRow],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		try {
@@ -74,20 +72,20 @@ export default class LockAll extends Command {
 
 			if (confirmation.customId === "cancel_lockall") {
 				await confirmation.update({
-					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> Operation cancelled")],
-					components: [],
+					components: [buildPanel("Cancelled", "Operation cancelled")],
+					flags: MessageFlags.IsComponentsV2,
 				});
 				return;
 			}
 
 			await confirmation.update({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("⏳ Processing...")],
-				components: [],
+				components: [buildPanel("Processing", "Processing...")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		} catch (_error) {
 			await confirmMessage.edit({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
-				components: [],
+				components: [buildPanel("Timed Out", "Confirmation timed out")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 			return;
 		}
@@ -97,18 +95,15 @@ export default class LockAll extends Command {
 				(c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildVoice || c.type === ChannelType.GuildStageVoice || c.type === ChannelType.GuildAnnouncement,
 			);
 			if (channels.size === 0) {
-				const embed = new EmbedBuilder().setColor(0x000000).setDescription("No channels found to lock");
-				return await ctx.sendMessage({ embeds: [embed] });
+				return await ctx.sendMessage(this.msg("No channels found to lock"));
 			}
 
-			const progressEmbed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("🔒 Locking All Channels")
-				.setDescription(`Processing ${channels.size} channels...`)
-				.addFields({ name: "Progress", value: `0/${channels.size} (0%)` }, { name: "Reason", value: reason });
+			let progressBody = `Processing ${channels.size} channels...\n\n**Progress:** 0/${channels.size} (0%)\n**Reason:** ${reason}`;
 
-			const progressMessage = await ctx.sendMessage({ embeds: [progressEmbed] });
-
+			const progressMessage = await ctx.sendMessage({
+				components: [buildPanel("Locking All Channels", progressBody)],
+				flags: MessageFlags.IsComponentsV2,
+			});
 
 			const startTime = Date.now();
 			let processed = 0;
@@ -129,9 +124,12 @@ export default class LockAll extends Command {
 					if (processed % Math.max(1, Math.floor(channels.size / 10)) === 0 || processed === channels.size) {
 						const percentage = Math.round((processed / channels.size) * 100);
 
-						progressEmbed.spliceFields(0, 1, { name: "Progress", value: `${processed}/${channels.size} (${percentage}%)` });
+						progressBody = `Processing ${channels.size} channels...\n\n**Progress:** ${processed}/${channels.size} (${percentage}%)\n**Reason:** ${reason}`;
 
-						progressMessage.edit({ embeds: [progressEmbed] }).catch(console.error);
+						progressMessage.edit({
+							components: [buildPanel("Locking All Channels", progressBody)],
+							flags: MessageFlags.IsComponentsV2,
+						}).catch(console.error);
 					}
 				} catch (error) {
 					console.error(`Failed to lock ${channel.id}:`, error);
@@ -143,17 +141,19 @@ export default class LockAll extends Command {
 			}
 
 			const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-			const resultEmbed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("<:Tick:1375519268292264012> Mass Lock Complete")
-				.setDescription(`Successfully locked ${processed} channels`)
-				.addFields({ name: "Total Time", value: `${elapsed} seconds` }, { name: "Moderator", value: ctx.author?.toString() || "Unknown" });
+			const resultContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Mass Lock Complete**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`Successfully locked ${processed} channels\n\n` +
+					`**Total Time:** ${elapsed} seconds\n` +
+					`**Moderator:** ${ctx.author?.username || "Unknown"}`
+				));
 
-			await progressMessage.edit({ embeds: [resultEmbed] });
+			await progressMessage.edit({ components: [resultContainer], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("LockAll Error:", error);
-			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> An error occurred during mass lock");
-			await ctx.sendMessage({ embeds: [embed] });
+			await ctx.sendMessage(this.msg("An error occurred during mass lock"));
 		}
 	}
 }

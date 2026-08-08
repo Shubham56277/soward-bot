@@ -84,20 +84,20 @@ export default class AutoModCommand extends Command {
 		}
 
 		const getContainer = (ctx: Context, settings: AutoMod) => {
-			const on = ctx.client.config.emojis.on || "<:Tick:1375519268292264012>";
-			const off = ctx.client.config.emojis.off || "<:Cross:1375519752746958858>";
+			const on = ctx.client.config.emojis.on || "[OK]";
+			const off = ctx.client.config.emojis.off || "[X]";
 
 			const body = [
 				`**Global Status:** ${settings.enabled ? `${on} Enabled` : `${off} Disabled`}`,
 				"",
-				`🔄 **Spam Protection**`,
+				`**Spam Protection**`,
 				`**Status:** ${settings.spam?.enabled ? `${on} Enabled` : `${off} Disabled`}`,
 				`**Action:** ${settings.spam?.action || "None"}`,
 				`**Message Limit:** ${settings.spam?.spamLimit || 0} messages`,
 				`**Max Emojis:** ${settings.spam?.maxEmojis || 0} per message`,
 				`**Ignored:** ${settings.spam?.ignoredChannels?.length || 0} channels, ${settings.spam?.ignoredRoles?.length || 0} roles, ${settings.spam?.ignoredUsers?.length || 0} users`,
 				"",
-				`🔗 **Link Protection**`,
+				`**Link Protection**`,
 				`**Status:** ${settings.link?.enabled ? `${on} Enabled` : `${off} Disabled`}`,
 				`**Action:** ${settings.link?.action || "None"}`,
 				`**Allowed Domains:** ${settings.link?.allowedDomains?.length || 0}`,
@@ -106,7 +106,7 @@ export default class AutoModCommand extends Command {
 				`-# Select an option below to configure AutoMod settings`,
 			].join("\n");
 
-			return buildPanel("🛡️ AutoMod Configuration", body);
+			return buildPanel("AutoMod Configuration", body);
 		};
 
 		// Main navigation buttons
@@ -115,8 +115,7 @@ export default class AutoModCommand extends Command {
 				new ButtonBuilder()
 					.setCustomId("automod_toggle")
 					.setLabel(settings.enabled ? "Disable AutoMod" : "Enable AutoMod")
-					.setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
-					.setEmoji(settings.enabled ? "🔴" : "🟢"),
+					.setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
 			);
 
 			const row2 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -124,16 +123,16 @@ export default class AutoModCommand extends Command {
 					.setCustomId("automod_menu")
 					.setPlaceholder("Select a feature to configure...")
 					.addOptions([
-						new StringSelectMenuOptionBuilder().setLabel("Spam Protection").setDescription("Configure spam message and emoji limits").setValue("spam").setEmoji("🔄"),
-						new StringSelectMenuOptionBuilder().setLabel("Link Protection").setDescription("Configure link filtering and allowed domains").setValue("links").setEmoji("🔗"),
-						new StringSelectMenuOptionBuilder().setLabel("Manage Exceptions").setDescription("Configure ignored channels, roles, and users").setValue("ignored").setEmoji("🛡️"),
+						new StringSelectMenuOptionBuilder().setLabel("Spam Protection").setDescription("Configure spam message and emoji limits").setValue("spam"),
+						new StringSelectMenuOptionBuilder().setLabel("Link Protection").setDescription("Configure link filtering and allowed domains").setValue("links"),
+						new StringSelectMenuOptionBuilder().setLabel("Manage Exceptions").setDescription("Configure ignored channels, roles, and users").setValue("ignored"),
 					]),
 			);
 
 			return [row1, row2];
 		};
 
-		const homeButton = new ButtonBuilder().setCustomId("automod_home").setLabel("Back to Main Menu").setStyle(ButtonStyle.Secondary).setEmoji("🏠");
+		const homeButton = new ButtonBuilder().setCustomId("automod_home").setLabel("Back to Main Menu").setStyle(ButtonStyle.Secondary);
 
 		const msg = await ctx.editOrReply({
 			components: [getContainer(ctx, settings), ...getMainButtons(settings)],
@@ -146,7 +145,7 @@ export default class AutoModCommand extends Command {
 				embeds: [
 					{
 						color: ctx.client.config.colors.red,
-						description: "<:Cross:1375519752746958858> Only the command author can use these controls.",
+						description: "Only the command author can use these controls.",
 					},
 				],
 				flags: MessageFlags.Ephemeral,
@@ -223,7 +222,7 @@ export default class AutoModCommand extends Command {
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
 				await i.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated spam protection ignored users")],
+					components: [buildPanel("Success", "Updated spam protection ignored users")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 				await handleSpamIgnoredMenu(i);
@@ -238,7 +237,7 @@ export default class AutoModCommand extends Command {
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
 				await i.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated spam protection ignored roles")],
+					components: [buildPanel("Success", "Updated spam protection ignored roles")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 				await handleSpamIgnoredMenu(i);
@@ -253,7 +252,7 @@ export default class AutoModCommand extends Command {
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
 				await i.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated spam protection ignored channels")],
+					components: [buildPanel("Success", "Updated spam protection ignored channels")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 				await handleSpamIgnoredMenu(i);
@@ -268,7 +267,7 @@ export default class AutoModCommand extends Command {
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
 				await i.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated link protection ignored users")],
+					components: [buildPanel("Success", "Updated link protection ignored users")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 				await handleLinkIgnoredMenu(i);
@@ -283,7 +282,7 @@ export default class AutoModCommand extends Command {
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
 				await i.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated link protection ignored roles")],
+					components: [buildPanel("Success", "Updated link protection ignored roles")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 				await handleLinkIgnoredMenu(i);
@@ -298,7 +297,7 @@ export default class AutoModCommand extends Command {
 				settings = await AutoMod.update(ctx.guild.id!, settings);
 
 				await i.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Success", "Updated link protection ignored channels")],
+					components: [buildPanel("Success", "Updated link protection ignored channels")],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 				await handleLinkIgnoredMenu(i);
@@ -325,7 +324,7 @@ export default class AutoModCommand extends Command {
 		// Handle spam menu
 		async function handleSpamMenu(i: any) {
 			const body = [
-				`**Status:** ${settings.spam?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}`,
+				`**Status:** ${settings.spam?.enabled ? "Enabled" : "Disabled"}`,
 				`**Action:** ${settings.spam?.action || "None"}`,
 				`**Message Limit:** ${settings.spam?.spamLimit || 0} messages`,
 				`**Max Emojis:** ${settings.spam?.maxEmojis || 0} per message`,
@@ -333,19 +332,18 @@ export default class AutoModCommand extends Command {
 				"-# Use the buttons below to configure spam protection",
 			].join("\n");
 
-			const container = buildPanel("🔄 Spam Protection", body);
+			const container = buildPanel("Spam Protection", body);
 
 			const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
 					.setCustomId("spam_toggle")
 					.setLabel(settings.spam?.enabled ? "Disable Spam Protection" : "Enable Spam Protection")
-					.setStyle(settings.spam?.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
-					.setEmoji(settings.spam?.enabled ? "🔴" : "🟢"),
-				new ButtonBuilder().setCustomId("spam_settings").setLabel("Configure Settings").setStyle(ButtonStyle.Primary).setEmoji("⚙️"),
+					.setStyle(settings.spam?.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+				new ButtonBuilder().setCustomId("spam_settings").setLabel("Configure Settings").setStyle(ButtonStyle.Primary),
 			);
 
 			const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("spam_ignored").setLabel("Manage Exceptions").setStyle(ButtonStyle.Secondary).setEmoji("🛡️"),
+				new ButtonBuilder().setCustomId("spam_ignored").setLabel("Manage Exceptions").setStyle(ButtonStyle.Secondary),
 				homeButton,
 			);
 
@@ -361,7 +359,7 @@ export default class AutoModCommand extends Command {
 				: "No domains added";
 
 			const body = [
-				`**Status:** ${settings.link?.enabled ? "<:Tick:1375519268292264012> Enabled" : "<:Cross:1375519752746958858> Disabled"}`,
+				`**Status:** ${settings.link?.enabled ? "Enabled" : "Disabled"}`,
 				`**Action:** ${settings.link?.action || "None"}`,
 				`**Allowed Domains:** ${settings.link?.allowedDomains?.length || 0}`,
 				"",
@@ -370,19 +368,18 @@ export default class AutoModCommand extends Command {
 				"-# Use the buttons below to configure link protection",
 			].join("\n");
 
-			const container = buildPanel("🔗 Link Protection", body);
+			const container = buildPanel("Link Protection", body);
 
 			const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
 					.setCustomId("link_toggle")
 					.setLabel(settings.link?.enabled ? "Disable Link Protection" : "Enable Link Protection")
-					.setStyle(settings.link?.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
-					.setEmoji(settings.link?.enabled ? "🔴" : "🟢"),
-				new ButtonBuilder().setCustomId("link_settings").setLabel("Configure Settings").setStyle(ButtonStyle.Primary).setEmoji("⚙️"),
+					.setStyle(settings.link?.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+				new ButtonBuilder().setCustomId("link_settings").setLabel("Configure Settings").setStyle(ButtonStyle.Primary),
 			);
 
 			const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("link_ignored").setLabel("Manage Exceptions").setStyle(ButtonStyle.Secondary).setEmoji("🛡️"),
+				new ButtonBuilder().setCustomId("link_ignored").setLabel("Manage Exceptions").setStyle(ButtonStyle.Secondary),
 				homeButton,
 			);
 
@@ -393,11 +390,11 @@ export default class AutoModCommand extends Command {
 
 		// Handle ignored menu
 		async function handleIgnoredMenu(i: any) {
-			const container = buildPanel("🛡️ Exception Management", "Select which protection feature you want to configure exceptions for.");
+			const container = buildPanel("Exception Management", "Select which protection feature you want to configure exceptions for.");
 
 			const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("spam_ignored").setLabel("Spam Protection Exceptions").setStyle(ButtonStyle.Primary).setEmoji("🔄"),
-				new ButtonBuilder().setCustomId("link_ignored").setLabel("Link Protection Exceptions").setStyle(ButtonStyle.Primary).setEmoji("🔗"),
+				new ButtonBuilder().setCustomId("spam_ignored").setLabel("Spam Protection Exceptions").setStyle(ButtonStyle.Primary),
+				new ButtonBuilder().setCustomId("link_ignored").setLabel("Link Protection Exceptions").setStyle(ButtonStyle.Primary),
 				homeButton,
 			);
 
@@ -457,7 +454,7 @@ export default class AutoModCommand extends Command {
 				// Validate action
 				if (!actionOptions.includes(action)) {
 					return submission.reply({
-						components: [buildPanel("<:Cross:1375519752746958858> Error", `Invalid action. Please use one of: ${actionOptions.join(", ")}`)],
+						components: [buildPanel("Error", `Invalid action. Please use one of: ${actionOptions.join(", ")}`)],
 						flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 					});
 				}
@@ -465,7 +462,7 @@ export default class AutoModCommand extends Command {
 				// Validate numbers
 				if (Number.isNaN(Number(spamLimit)) || Number.isNaN(Number(maxEmojis))) {
 					return submission.reply({
-						components: [buildPanel("<:Cross:1375519752746958858> Error", "Message limit and max emojis must be numbers.")],
+						components: [buildPanel("Error", "Message limit and max emojis must be numbers.")],
 						flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 					});
 				}
@@ -490,7 +487,7 @@ export default class AutoModCommand extends Command {
 				].join("\n");
 
 				await submission.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Spam Protection Updated", spamUpdatedBody)],
+					components: [buildPanel("Spam Protection Updated", spamUpdatedBody)],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 
@@ -542,7 +539,7 @@ export default class AutoModCommand extends Command {
 				// Validate action
 				if (!actionOptions.includes(action)) {
 					return submission.reply({
-						components: [buildPanel("<:Cross:1375519752746958858> Error", `Invalid action. Please use one of: ${actionOptions.join(", ")}`)],
+						components: [buildPanel("Error", `Invalid action. Please use one of: ${actionOptions.join(", ")}`)],
 						flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 					});
 				}
@@ -571,7 +568,7 @@ export default class AutoModCommand extends Command {
 				].join("\n");
 
 				await submission.reply({
-					components: [buildPanel("<:Tick:1375519268292264012> Link Protection Updated", linkUpdatedBody)],
+					components: [buildPanel("Link Protection Updated", linkUpdatedBody)],
 					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
 				});
 
@@ -602,7 +599,7 @@ export default class AutoModCommand extends Command {
 				"-# Use the select menus below to update exceptions",
 			].join("\n");
 
-			const container = buildPanel("🔄 Spam Protection Exceptions", body);
+			const container = buildPanel("Spam Protection Exceptions", body);
 
 			const usermenu = new UserSelectMenuBuilder().setCustomId("automod_spam_ignored_user").setPlaceholder("Select users to exempt from spam protection").setMinValues(0).setMaxValues(25);
 
@@ -628,7 +625,7 @@ export default class AutoModCommand extends Command {
 			const row3 = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelmenu);
 
 			const row4 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("back_to_spam").setLabel("Back to Spam Settings").setStyle(ButtonStyle.Secondary).setEmoji("↩️"),
+				new ButtonBuilder().setCustomId("back_to_spam").setLabel("Back to Spam Settings").setStyle(ButtonStyle.Secondary),
 				homeButton,
 			);
 
@@ -653,7 +650,7 @@ export default class AutoModCommand extends Command {
 				"-# Use the select menus below to update exceptions",
 			].join("\n");
 
-			const container = buildPanel("🔗 Link Protection Exceptions", body);
+			const container = buildPanel("Link Protection Exceptions", body);
 
 			const usermenu = new UserSelectMenuBuilder()
 				.setCustomId("automod_links_ignored_user")
@@ -691,7 +688,7 @@ export default class AutoModCommand extends Command {
 			const row3 = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelmenu);
 
 			const row4 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder().setCustomId("back_to_link").setLabel("Back to Link Settings").setStyle(ButtonStyle.Secondary).setEmoji("↩️"),
+				new ButtonBuilder().setCustomId("back_to_link").setLabel("Back to Link Settings").setStyle(ButtonStyle.Secondary),
 				homeButton,
 			);
 

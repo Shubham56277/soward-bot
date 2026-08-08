@@ -17,7 +17,7 @@ fi
 cd "$ROOT_DIR"
 
 echo "Installing dependencies..."
-yarn install --frozen-lockfile
+yarn install --frozen-lockfile --non-interactive
 
 echo "Building bot..."
 yarn workspace bot build

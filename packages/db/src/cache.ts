@@ -22,13 +22,14 @@ export async function invalidateCache(...keys: string[]) {
 }
 
 export async function cacheAside<T>(key: string, ttlSeconds: number, load: () => Promise<T>): Promise<T> {
-	if (!client) return load();
+	const cacheClient = client;
+	if (!cacheClient || !Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) return load();
 
 	try {
-		const cached = await client.get(key);
+		const cached = await cacheClient.get(key);
 		if (cached !== null) return JSON.parse(cached) as T;
 	} catch {
-		return load();
+		// Treat cache read and deserialization failures as misses.
 	}
 
 	const pending = inFlight.get(key) as Promise<T> | undefined;
@@ -37,7 +38,8 @@ export async function cacheAside<T>(key: string, ttlSeconds: number, load: () =>
 	const request = load()
 		.then(async (value) => {
 			try {
-				await client?.set(key, JSON.stringify(value), "EX", ttlSeconds);
+				const serialized = JSON.stringify(value);
+				if (serialized !== undefined) await cacheClient.set(key, serialized, "EX", ttlSeconds);
 			} catch {
 				// Serve the database result even when Redis is unavailable.
 			}

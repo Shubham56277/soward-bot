@@ -37,9 +37,9 @@ export default class Nom extends Command {
         const data = await body.json() as { link: string };
 
         let message: string;
-        if (hungerLevel < 40) message = "Gentle nibble 🦷";
-        else if (hungerLevel < 80) message = "Big chomp! 🦖";
-        else message = "DEVOURED WHOLE! 🍖";
+        if (hungerLevel < 40) message = "Gentle nibble";
+        else if (hungerLevel < 80) message = "Big chomp!";
+        else message = "DEVOURED WHOLE!";
 
         const embed = new EmbedBuilder()
             .setColor(0x000000)

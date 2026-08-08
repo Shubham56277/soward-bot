@@ -18,7 +18,7 @@ import {
 	ChannelType,
 	ComponentType,
 } from "discord.js";
-import {} from "../../utils/colors";
+import { colors } from "../../utils/colors";
 
 export default class EmbedBuilderCommand extends Command {
 	private embed: EmbedBuilder = new EmbedBuilder();
@@ -54,15 +54,15 @@ export default class EmbedBuilderCommand extends Command {
 	private createInstructionEmbed() {
 		return new EmbedBuilder()
 			.setColor(0x000000)
-			.setTitle("🛠️ Embed Builder - Guide")
+			.setTitle("Embed Builder - Guide")
 			.setDescription("Select options from the menu below to customize your embed. When you're satisfied with your creation, click **Send Embed** to choose where to send it.")
 			.addFields(
 				{
-					name: "💡 Available Options",
+					name: "Available Options",
 					value:
 						"• **Author**: Set author name, icon, and URL\n• **Title**: Add title and optional URL\n• **Description**: Main embed content\n• **Color**: Choose embed color\n• **Fields**: Add fields with name-value pairs\n• **Thumbnail**: Small image in corner\n• **Image**: Large image\n• **Footer**: Text at bottom with optional icon\n• **Timestamp**: Toggle date/time",
 				},
-				{ name: "🎨 Current Preview", value: "Your embed will appear above these instructions." },
+				{ name: "Current Preview", value: "Your embed will appear above these instructions." },
 			)
 			.setFooter({ text: "Tip: You can reset your embed or go back at any time" });
 	}
@@ -93,38 +93,38 @@ export default class EmbedBuilderCommand extends Command {
 		return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
 			new StringSelectMenuBuilder()
 				.setCustomId("embed_builder_menu")
-				.setPlaceholder("✨ Select an option to customize your embed")
+				.setPlaceholder("Select an option to customize your embed")
 				.addOptions([
-					new StringSelectMenuOptionBuilder().setLabel("Author").setValue("author").setDescription("Set author name, icon, and URL").setEmoji("👤"),
-					new StringSelectMenuOptionBuilder().setLabel("Title").setValue("title").setDescription("Add title and optional URL").setEmoji("📝"),
-					new StringSelectMenuOptionBuilder().setLabel("Description").setValue("description").setDescription("Add main content text").setEmoji("📄"),
-					new StringSelectMenuOptionBuilder().setLabel("Color").setValue("color").setDescription("Choose your embed color").setEmoji("🎨"),
-					new StringSelectMenuOptionBuilder().setLabel("Fields").setValue("fields").setDescription("Add name-value field pairs").setEmoji("📋"),
-					new StringSelectMenuOptionBuilder().setLabel("Thumbnail").setValue("thumbnail").setDescription("Add small image in corner").setEmoji("🖼️"),
-					new StringSelectMenuOptionBuilder().setLabel("Image").setValue("image").setDescription("Add large image").setEmoji("📸"),
-					new StringSelectMenuOptionBuilder().setLabel("Footer").setValue("footer").setDescription("Add text at bottom with optional icon").setEmoji("🏷️"),
-					new StringSelectMenuOptionBuilder().setLabel("Timestamp").setValue("timestamp").setDescription("Toggle date and time").setEmoji("🕒"),
+					new StringSelectMenuOptionBuilder().setLabel("Author").setValue("author").setDescription("Set author name, icon, and URL"),
+					new StringSelectMenuOptionBuilder().setLabel("Title").setValue("title").setDescription("Add title and optional URL"),
+					new StringSelectMenuOptionBuilder().setLabel("Description").setValue("description").setDescription("Add main content text"),
+					new StringSelectMenuOptionBuilder().setLabel("Color").setValue("color").setDescription("Choose your embed color"),
+					new StringSelectMenuOptionBuilder().setLabel("Fields").setValue("fields").setDescription("Add name-value field pairs"),
+					new StringSelectMenuOptionBuilder().setLabel("Thumbnail").setValue("thumbnail").setDescription("Add small image in corner"),
+					new StringSelectMenuOptionBuilder().setLabel("Image").setValue("image").setDescription("Add large image"),
+					new StringSelectMenuOptionBuilder().setLabel("Footer").setValue("footer").setDescription("Add text at bottom with optional icon"),
+					new StringSelectMenuOptionBuilder().setLabel("Timestamp").setValue("timestamp").setDescription("Toggle date and time"),
 				]),
 		);
 	}
 
 	private createActionButtons() {
 		return new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder().setCustomId("send_embed").setLabel("Send Embed").setEmoji("📤").setStyle(ButtonStyle.Success),
-			new ButtonBuilder().setCustomId("preview_embed").setLabel("Preview").setEmoji("👁️").setStyle(ButtonStyle.Primary),
-			new ButtonBuilder().setCustomId("reset_embed").setLabel("Reset").setEmoji("🔄").setStyle(ButtonStyle.Danger),
+			new ButtonBuilder().setCustomId("send_embed").setLabel("Send Embed").setStyle(ButtonStyle.Success),
+			new ButtonBuilder().setCustomId("preview_embed").setLabel("Preview").setStyle(ButtonStyle.Primary),
+			new ButtonBuilder().setCustomId("reset_embed").setLabel("Reset").setStyle(ButtonStyle.Danger),
 		);
 	}
 
 	private createBackButton() {
-		return new ButtonBuilder().setCustomId("back_button").setLabel("Back to Menu").setEmoji("⬅️").setStyle(ButtonStyle.Secondary);
+		return new ButtonBuilder().setCustomId("back_button").setLabel("Back to Menu").setStyle(ButtonStyle.Secondary);
 	}
 
 	private setupCollector(ctx: Context) {
 		const filter = (i: any) => {
 			if (i.user.id !== ctx.author?.id) {
 				i.reply({
-					content: "<:Cross:1375519752746958858> This interaction is not for you.",
+					content: "This interaction is not for you.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return false;
@@ -153,7 +153,7 @@ export default class EmbedBuilderCommand extends Command {
 			if (this.message?.editable) {
 				this.message
 					.edit({
-						content: "⏱️ Embed builder session has expired.",
+						content: "Embed builder session has expired.",
 						components: [],
 					})
 					.catch(() => { });
@@ -266,9 +266,9 @@ export default class EmbedBuilderCommand extends Command {
 
 	private async handleAuthorOption(i: any, ctx: Context) {
 		const authorRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder().setCustomId("author_name").setLabel("Set Name").setEmoji("✏️").setStyle(ButtonStyle.Primary),
-			new ButtonBuilder().setCustomId("author_icon").setLabel("Set Icon").setEmoji("🖼️").setStyle(ButtonStyle.Primary).setDisabled(!this.embed.data.author?.name),
-			new ButtonBuilder().setCustomId("author_url").setLabel("Set URL").setEmoji("🔗").setStyle(ButtonStyle.Primary).setDisabled(!this.embed.data.author?.name),
+			new ButtonBuilder().setCustomId("author_name").setLabel("Set Name").setStyle(ButtonStyle.Primary),
+			new ButtonBuilder().setCustomId("author_icon").setLabel("Set Icon").setStyle(ButtonStyle.Primary).setDisabled(!this.embed.data.author?.name),
+			new ButtonBuilder().setCustomId("author_url").setLabel("Set URL").setStyle(ButtonStyle.Primary).setDisabled(!this.embed.data.author?.name),
 			this.createBackButton(),
 		);
 
@@ -277,8 +277,8 @@ export default class EmbedBuilderCommand extends Command {
 			.setTitle("Author Settings")
 			.setDescription("Customize the author section of your embed.")
 			.addFields(
-				{ name: "📝 Instructions", value: "1. First set the author name (required)\n2. Then optionally add an icon and URL" },
-				{ name: "💡 Tips", value: "• Author name appears at the top of your embed\n• Icon appears as a small image next to the author name\n• URL makes the author name clickable" },
+				{ name: "Instructions", value: "1. First set the author name (required)\n2. Then optionally add an icon and URL" },
+				{ name: "Tips", value: "• Author name appears at the top of your embed\n• Icon appears as a small image next to the author name\n• URL makes the author name clickable" },
 			);
 
 		await i.update({
@@ -305,7 +305,7 @@ export default class EmbedBuilderCommand extends Command {
 			const msg = collected.first();
 			if (!msg || !msg.content.trim()) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid name provided. Please try again.",
+					content: "No valid name provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -344,7 +344,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			await msg.delete().catch(() => { });
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Author name updated successfully!",
+				content: "Author name updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -358,7 +358,7 @@ export default class EmbedBuilderCommand extends Command {
 		} catch (error) {
 			console.error(error);
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Author name update timed out. Please try again.",
+				content: "Author name update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -389,7 +389,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			if (!iconUrl) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid URL or image provided. Please try again.",
+					content: "No valid URL or image provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -399,7 +399,7 @@ export default class EmbedBuilderCommand extends Command {
 				new URL(iconUrl);
 			} catch (error) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> Invalid URL format. Please provide a valid URL.",
+					content: "Invalid URL format. Please provide a valid URL.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -415,7 +415,7 @@ export default class EmbedBuilderCommand extends Command {
 			}
 
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Author icon updated successfully!",
+				content: "Author icon updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -426,7 +426,7 @@ export default class EmbedBuilderCommand extends Command {
 			await msg.delete().catch(() => { });
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Author icon update timed out. Please try again.",
+				content: "Author icon update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -450,7 +450,7 @@ export default class EmbedBuilderCommand extends Command {
 			const msg = collected.first();
 			if (!msg || !msg.content.trim()) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid URL provided. Please try again.",
+					content: "No valid URL provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -461,7 +461,7 @@ export default class EmbedBuilderCommand extends Command {
 				new URL(url);
 			} catch (error) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> Invalid URL format. Please provide a valid URL that starts with http:// or https://",
+					content: "Invalid URL format. Please provide a valid URL that starts with http:// or https://",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -478,7 +478,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			await msg.delete().catch(() => { });
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Author URL updated successfully!",
+				content: "Author URL updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -488,7 +488,7 @@ export default class EmbedBuilderCommand extends Command {
 			});
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Author URL update timed out. Please try again.",
+				content: "Author URL update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -539,7 +539,7 @@ export default class EmbedBuilderCommand extends Command {
 					this.embed.setURL(url);
 				} catch (error) {
 					await submission.reply({
-						content: "⚠️ Invalid URL format. Title was updated but URL was ignored.",
+						content: "Invalid URL format. Title was updated but URL was ignored.",
 						flags: MessageFlags.Ephemeral,
 					});
 
@@ -558,7 +558,7 @@ export default class EmbedBuilderCommand extends Command {
 			}
 
 			await submission.reply({
-				content: "<:Tick:1375519268292264012> Title updated successfully!",
+				content: "Title updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -601,7 +601,7 @@ export default class EmbedBuilderCommand extends Command {
 			this.embed.setDescription(description);
 
 			await submission.reply({
-				content: "<:Tick:1375519268292264012> Description updated successfully!",
+				content: "Description updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -619,12 +619,12 @@ export default class EmbedBuilderCommand extends Command {
 			new ButtonBuilder().setCustomId("color_red").setLabel("Red").setStyle(ButtonStyle.Danger),
 			new ButtonBuilder().setCustomId("color_blue").setLabel("Blue").setStyle(ButtonStyle.Primary),
 			new ButtonBuilder().setCustomId("color_green").setLabel("Green").setStyle(ButtonStyle.Success),
-			new ButtonBuilder().setCustomId("color_yellow").setLabel("Yellow").setStyle(ButtonStyle.Secondary).setEmoji("🟡"),
-			new ButtonBuilder().setCustomId("color_purple").setLabel("Purple").setStyle(ButtonStyle.Secondary).setEmoji("🟣"),
+			new ButtonBuilder().setCustomId("color_yellow").setLabel("Yellow").setStyle(ButtonStyle.Secondary),
+			new ButtonBuilder().setCustomId("color_purple").setLabel("Purple").setStyle(ButtonStyle.Secondary),
 		);
 
 		const colorRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder().setCustomId("color_custom").setLabel("Custom Color").setStyle(ButtonStyle.Secondary).setEmoji("🎨"),
+			new ButtonBuilder().setCustomId("color_custom").setLabel("Custom Color").setStyle(ButtonStyle.Secondary),
 			this.createBackButton(),
 		);
 
@@ -632,7 +632,7 @@ export default class EmbedBuilderCommand extends Command {
 			.setColor(0x000000)
 			.setTitle("Color Selection")
 			.setDescription("Choose a preset color or enter a custom color.")
-			.addFields({ name: "🎨 Custom Colors", value: 'For custom you can enter:\n• A color name (e.g., "gold", "navy")\n• A hex code (e.g., "#FF5500")' });
+			.addFields({ name: "Custom Colors", value: 'For custom you can enter:\n• A color name (e.g., "gold", "navy")\n• A hex code (e.g., "#FF5500")' });
 
 		await i.update({
 			embeds: [this.embed, colorGuide],
@@ -658,7 +658,7 @@ export default class EmbedBuilderCommand extends Command {
 			const msg = collected.first();
 			if (!msg || !msg.content.trim()) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No color provided. Please try again.",
+					content: "No color provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -676,14 +676,14 @@ export default class EmbedBuilderCommand extends Command {
 			// Check if it's a color name in the colors object
 			else {
 				const lowerInput = colorInput.toLowerCase();
-				if (Object.hasOwn(lowerInput)) {
+				if (Object.hasOwn(colors, lowerInput)) {
 					validColor = colors[lowerInput as keyof typeof colors];
 				}
 			}
 
 			if (!validColor) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> Invalid color. Please provide a valid color name or hex code.",
+					content: "Invalid color. Please provide a valid color name or hex code.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -693,7 +693,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			await msg.delete().catch(() => { });
 			await i.editReply({
-				content: `<:Tick:1375519268292264012> Color updated to ${colorInput}!`,
+				content: `Color updated to ${colorInput}!`,
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -703,7 +703,7 @@ export default class EmbedBuilderCommand extends Command {
 			});
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Color selection timed out. Please try again.",
+				content: "Color selection timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -741,7 +741,7 @@ export default class EmbedBuilderCommand extends Command {
 			this.embed.addFields({ name, value, inline });
 
 			await submission.reply({
-				content: "<:Tick:1375519268292264012> Field added successfully!",
+				content: "Field added successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -784,7 +784,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			if (!thumbnailUrl) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid URL or image provided. Please try again.",
+					content: "No valid URL or image provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -794,7 +794,7 @@ export default class EmbedBuilderCommand extends Command {
 				new URL(thumbnailUrl);
 			} catch (error) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> Invalid URL format. Please provide a valid URL.",
+					content: "Invalid URL format. Please provide a valid URL.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -804,7 +804,7 @@ export default class EmbedBuilderCommand extends Command {
 
 
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Thumbnail updated successfully!",
+				content: "Thumbnail updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -815,7 +815,7 @@ export default class EmbedBuilderCommand extends Command {
 			await msg.delete().catch(() => { });
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Thumbnail update timed out. Please try again.",
+				content: "Thumbnail update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -846,7 +846,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			if (!imageUrl) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid URL or image provided. Please try again.",
+					content: "No valid URL or image provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -856,7 +856,7 @@ export default class EmbedBuilderCommand extends Command {
 				new URL(imageUrl);
 			} catch (error) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> Invalid URL format. Please provide a valid URL.",
+					content: "Invalid URL format. Please provide a valid URL.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -866,7 +866,7 @@ export default class EmbedBuilderCommand extends Command {
 
 
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Image updated successfully!",
+				content: "Image updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -877,7 +877,7 @@ export default class EmbedBuilderCommand extends Command {
 			await msg.delete().catch(() => { });
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Image update timed out. Please try again.",
+				content: "Image update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
@@ -886,8 +886,8 @@ export default class EmbedBuilderCommand extends Command {
 
 	private async handleFooterOption(i: any, ctx: Context) {
 		const footerRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder().setCustomId("footer_name").setLabel("Set Text").setEmoji("✏️").setStyle(ButtonStyle.Primary),
-			new ButtonBuilder().setCustomId("footer_icon").setLabel("Set Icon").setEmoji("🖼️").setStyle(ButtonStyle.Primary).setDisabled(!this.embed.data.footer?.text),
+			new ButtonBuilder().setCustomId("footer_name").setLabel("Set Text").setStyle(ButtonStyle.Primary),
+			new ButtonBuilder().setCustomId("footer_icon").setLabel("Set Icon").setStyle(ButtonStyle.Primary).setDisabled(!this.embed.data.footer?.text),
 			this.createBackButton(),
 		);
 
@@ -896,8 +896,8 @@ export default class EmbedBuilderCommand extends Command {
 			.setTitle("Footer Settings")
 			.setDescription("Customize the footer section of your embed.")
 			.addFields(
-				{ name: "📝 Instructions", value: "1. First set the footer text (required)\n2. Then optionally add an icon" },
-				{ name: "💡 Tips", value: "• Footer text appears at the bottom of your embed\n• Icon appears as a small image next to the footer text" },
+				{ name: "Instructions", value: "1. First set the footer text (required)\n2. Then optionally add an icon" },
+				{ name: "Tips", value: "• Footer text appears at the bottom of your embed\n• Icon appears as a small image next to the footer text" },
 			);
 
 		await i.update({
@@ -924,7 +924,7 @@ export default class EmbedBuilderCommand extends Command {
 			const msg = collected.first();
 			if (!msg || !msg.content.trim()) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid text provided. Please try again.",
+					content: "No valid text provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -957,7 +957,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			await msg.delete().catch(() => { });
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Footer text updated successfully!",
+				content: "Footer text updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -970,7 +970,7 @@ export default class EmbedBuilderCommand extends Command {
 			});
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Footer text update timed out. Please try again.",
+				content: "Footer text update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -1001,7 +1001,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			if (!iconUrl) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> No valid URL or image provided. Please try again.",
+					content: "No valid URL or image provided. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -1011,7 +1011,7 @@ export default class EmbedBuilderCommand extends Command {
 				new URL(iconUrl);
 			} catch (error) {
 				await i.followUp({
-					content: "<:Cross:1375519752746958858> Invalid URL format. Please provide a valid URL.",
+					content: "Invalid URL format. Please provide a valid URL.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -1027,7 +1027,7 @@ export default class EmbedBuilderCommand extends Command {
 
 
 			await i.editReply({
-				content: "<:Tick:1375519268292264012> Footer icon updated successfully!",
+				content: "Footer icon updated successfully!",
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -1038,7 +1038,7 @@ export default class EmbedBuilderCommand extends Command {
 			await msg.delete().catch(() => { });
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Footer icon update timed out. Please try again.",
+				content: "Footer icon update timed out. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -1049,14 +1049,14 @@ export default class EmbedBuilderCommand extends Command {
 			// Remove timestamp if it exists
 			this.embed.setTimestamp(null);
 			await i.reply({
-				content: "<:Tick:1375519268292264012> Timestamp removed!",
+				content: "Timestamp removed!",
 				flags: MessageFlags.Ephemeral,
 			});
 		} else {
 			// Add current timestamp
 			this.embed.setTimestamp();
 			await i.reply({
-				content: "<:Tick:1375519268292264012> Current timestamp added!",
+				content: "Current timestamp added!",
 				flags: MessageFlags.Ephemeral,
 			});
 		}
@@ -1067,7 +1067,7 @@ export default class EmbedBuilderCommand extends Command {
 	private async handlePreviewEmbed(i: any) {
 		// Just refresh the current view to show the embed preview
 		await i.reply({
-			content: "📊 Here's a preview of your embed:",
+			content: "Here's a preview of your embed:",
 			embeds: [this.embed],
 			flags: MessageFlags.Ephemeral,
 		});
@@ -1080,7 +1080,7 @@ export default class EmbedBuilderCommand extends Command {
 			.setDescription("Your embed will appear here. Use the menu below to customize it.");
 
 		await i.reply({
-			content: "🔄 Embed has been reset to default!",
+			content: "Embed has been reset to default!",
 			flags: MessageFlags.Ephemeral,
 		});
 
@@ -1099,7 +1099,7 @@ export default class EmbedBuilderCommand extends Command {
 		const backButtonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(this.createBackButton());
 
 		await i.update({
-			content: "📤 Select a channel to send your embed:",
+			content: "Select a channel to send your embed:",
 			embeds: [this.embed],
 			components: [channelSelector, backButtonRow],
 		});
@@ -1118,7 +1118,7 @@ export default class EmbedBuilderCommand extends Command {
 
 			if (!selectedChannel || !selectedChannel.isTextBased()) {
 				await channelResponse.reply({
-					content: "<:Cross:1375519752746958858> Invalid channel selection. Please try again.",
+					content: "Invalid channel selection. Please try again.",
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
@@ -1128,7 +1128,7 @@ export default class EmbedBuilderCommand extends Command {
 			await selectedChannel.send({ embeds: [this.embed] });
 
 			await channelResponse.reply({
-				content: `<:Tick:1375519268292264012> Embed sent successfully to ${selectedChannel}!`,
+				content: `Embed sent successfully to ${selectedChannel}!`,
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -1140,7 +1140,7 @@ export default class EmbedBuilderCommand extends Command {
 			});
 		} catch (error) {
 			await i.followUp({
-				content: "<:Cross:1375519752746958858> Channel selection timed out or encountered an error. Please try again.",
+				content: "Channel selection timed out or encountered an error. Please try again.",
 				flags: MessageFlags.Ephemeral,
 			});
 		}

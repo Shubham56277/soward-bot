@@ -5,11 +5,7 @@ import { AntiNuke } from "@repo/db";
 
 
 export default class GuildUpdate extends Event {
-	// Enhanced caching with TTL
-	private configCache = new Map<string, { config: AntiNuke; expires: number }>();
-	private trustedCache = new Map<string, { users: Set<string>; expires: number }>();
 	private guildSettingsCache = new Map<string, { settings: any; expires: number }>();
-	private CACHE_TTL = 30000; // 30 seconds
 
 	constructor(client: BaseClient) {
 		super(client, {
@@ -24,15 +20,20 @@ export default class GuildUpdate extends Event {
 
 
 			try {
-				// Parallelize initial checks
-				const [config, logs] = await Promise.all([
-					this.getConfig(guildId),
-					newGuild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.GuildUpdate }).catch(() => null)
-				]);
+				const config = await this.client.services.antinukes.getConfig(guildId);
 
 				// Fast path: return early if no action needed
 				const actionConfig = config?.guild?.find(c => c.type === "update");
-				if (!actionConfig?.enabled || !config?.enabled || !logs) return;
+				if (!actionConfig?.enabled || !config?.enabled) return;
+
+				const logs = await newGuild.fetchAuditLogs({
+					limit: 1,
+					type: AuditLogEvent.GuildUpdate
+				}).catch(error => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
+				if (!logs) return;
 
 				const log = logs.entries.first();
 				if (!log?.executor) return;
@@ -45,8 +46,7 @@ export default class GuildUpdate extends Event {
 					return;
 				}
 
-				// Check if user is trusted (cached)
-				if (await this.isTrustedUser(guildId, executorId, config)) {
+				if (await this.client.services.antinukes.isBypassed(newGuild, executorId)) {
 					return;
 				}
 
@@ -55,18 +55,19 @@ export default class GuildUpdate extends Event {
 					return;
 				}
 				if (actionConfig.limit <= 1) {
-					await this.client.services.antinukes.punishUser(
+					const enforced = await this.client.services.antinukes.punishUser(
 						newGuild,
 						executorId,
 						actionConfig.action,
 						"Anti-Guild Protection | Not Whitelisted",
 					);
-					this.updateGuild(oldGuild, newGuild).catch(error => {
-						this.client.logger?.error?.(`GuildUpdate Error: ${error}`);
-					});
+					if (enforced) {
+						this.updateGuild(oldGuild, newGuild).catch(error => {
+							this.client.logger?.error?.(`GuildUpdate Error: ${error}`);
+						});
+					}
 					return;
 				}
-				// Track action and handle punishment in parallel
 				const tracked = await this.client.services.antinukes.trackAction(
 					newGuild,
 					executorId,
@@ -75,15 +76,17 @@ export default class GuildUpdate extends Event {
 				);
 
 				if (tracked) {
-					await this.client.services.antinukes.punishUser(
+					const enforced = await this.client.services.antinukes.punishUser(
 						newGuild,
 						executorId,
 						actionConfig.action,
 						"Anti-Guild Protection | Not Whitelisted",
 					);
-					this.updateGuild(oldGuild, newGuild).catch(error => {
-						this.client.logger?.error?.(`GuildUpdate Error: ${error}`);
-					});
+					if (enforced) {
+						this.updateGuild(oldGuild, newGuild).catch(error => {
+							this.client.logger?.error?.(`GuildUpdate Error: ${error}`);
+						});
+					}
 				}
 
 			} catch (error) {
@@ -91,24 +94,6 @@ export default class GuildUpdate extends Event {
 				this.guildSettingsCache.delete(guildId);
 			}
 		});
-	}
-
-	private async getConfig(guildId: string): Promise<AntiNuke | undefined> {
-		// Check cache first
-		const cached = this.configCache.get(guildId);
-		if (cached && cached.expires > Date.now()) {
-			return cached.config;
-		}
-
-		// Fetch fresh config
-		const config = await this.client.services.antinukes.getConfig(guildId);
-		if (config) {
-			this.configCache.set(guildId, {
-				config,
-				expires: Date.now() + this.CACHE_TTL
-			});
-		}
-		return config;
 	}
 
 	private shouldSkipAction(
@@ -126,28 +111,14 @@ export default class GuildUpdate extends Event {
 		);
 	}
 
-	private async isTrustedUser(guildId: string, executorId: string, config: AntiNuke): Promise<boolean> {
-		// Check cache first
-		const cached = this.trustedCache.get(guildId);
-		if (cached && cached.expires > Date.now()) {
-			return cached.users.has(executorId);
-		}
-
-		// Build fresh trusted set
-		const trustedSet = new Set(config.trustedUsers?.map(u => u.id) || []);
-		this.trustedCache.set(guildId, {
-			users: trustedSet,
-			expires: Date.now() + this.CACHE_TTL
-		});
-
-		return trustedSet.has(executorId);
-	}
-
 	private async canModerate(guild: any, executorId: string): Promise<boolean> {
 		// Check cache first
 		let member = guild.members.cache.get(executorId);
 		if (!member) {
-			member = await guild.members.fetch(executorId).catch(() => null);
+			member = await guild.members.fetch(executorId).catch((error: unknown) => {
+				this.client.logger?.error?.(error);
+				return null;
+			});
 			if (!member) return false;
 		}
 		return this.client.services.antinukes.canModerate(member, guild.members.me!);

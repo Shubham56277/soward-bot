@@ -33,7 +33,7 @@ export default class Cry extends Command {
         let message: string;
         if (dramaLevel < 30) message = "A single tear falls...";
         else if (dramaLevel < 70) message = "Full on sobbing!";
-        else message = "OSCAR-WORTHY DRAMA! 🎭";
+        else message = "OSCAR-WORTHY DRAMA!";
 
         const embed = new EmbedBuilder()
             .setColor(0x000000)

@@ -1,13 +1,9 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 
 export default class GuildEmojiDelete extends Event {
-	// Ultra-fast cache
-	private configCache = new Map<string, AntiNuke>();
-	private trustedCache = new Map<string, any>();
 	private emojiCache = new Map<string, { name: string; url: string }>();
 
 	constructor(client: BaseClient) {
@@ -29,13 +25,7 @@ export default class GuildEmojiDelete extends Event {
 			});
 
 			try {
-				// Ultra-fast config check with cache
-				let config = this.configCache.get(guildId);
-				if (!config) {
-					config = await this.client.services.antinukes.getConfig(guildId);
-					this.configCache.set(guildId, config);
-					setTimeout(() => this.configCache.delete(guildId), 30000);
-				}
+				const config = await this.client.services.antinukes.getConfig(guildId);
 
 				const actionConfig = config?.emoji?.find(c => c.type === "delete");
 				if (!actionConfig?.enabled || !config.enabled) return;
@@ -44,7 +34,10 @@ export default class GuildEmojiDelete extends Event {
 				const logs = await guild.fetchAuditLogs({
 					limit: 1,
 					type: AuditLogEvent.EmojiDelete
-				}).catch(() => null);
+				}).catch(error => {
+					this.client.logger?.error?.(error);
+					return null;
+				});
 
 				if (!logs) return;
 				const log = logs.entries.first();
@@ -59,44 +52,44 @@ export default class GuildEmojiDelete extends Event {
 					executorId === config.admin ||
 					(now - log.createdTimestamp) > 120000) return;
 
-				// Ultra-fast trusted user check with cache
-				let trustedSet = this.trustedCache.get(guildId);
-				if (!trustedSet) {
-					trustedSet = new Set(config.trustedUsers?.map(u => u.id) || []);
-					this.trustedCache.set(guildId, trustedSet);
-					setTimeout(() => this.trustedCache.delete(guildId), 30000);
-				}
-
-				if (trustedSet.has(executorId)) return;
+				if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
 				// Fast member check using cache first
 				let member = guild.members.cache.get(executorId) as any;
 				if (!member) {
-					member = await guild.members.fetch(executorId).catch(() => null);
+					member = await guild.members.fetch(executorId).catch(error => {
+						this.client.logger?.error?.(error);
+						return null;
+					});
 					if (!member) return;
 				}
 
 				if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
 				
 				if (actionConfig.limit <= 1) {
-					this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
-					await guild.emojis.create({
-						name: emoji.name || `emoji-${Date.now()}`,
-						attachment: emoji.imageURL({ size: 2048 })
-					}).catch((err) => {
-						this.client.logger?.error?.(`Failed to restore emoji ${emoji.id}: ${err}`);
-					});
+					const enforced = await this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
+					if (enforced) {
+						await guild.emojis.create({
+							name: emoji.name || `emoji-${Date.now()}`,
+							attachment: emoji.imageURL({ size: 2048 })
+						}).catch((err) => {
+							this.client.logger?.error?.(`Failed to restore emoji ${emoji.id}: ${err}`);
+						});
+					}
+					return;
 				}
 				const tracked = await this.client.services.antinukes.trackAction(guild, executorId, "emojiDelete", actionConfig);
 
 				if (tracked) {
-					this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
-					await guild.emojis.create({
-						name: emoji.name || `emoji-${Date.now()}`,
-						attachment: emoji.imageURL({ size: 2048 })
-					}).catch((err) => {
-						this.client.logger?.error?.(`Failed to restore emoji ${emoji.id}: ${err}`);
-					});
+					const enforced = await this.client.services.antinukes.punishUser(guild, executorId, actionConfig.action, "Anti-Emoji Protection | Not Whitelisted");
+					if (enforced) {
+						await guild.emojis.create({
+							name: emoji.name || `emoji-${Date.now()}`,
+							attachment: emoji.imageURL({ size: 2048 })
+						}).catch((err) => {
+							this.client.logger?.error?.(`Failed to restore emoji ${emoji.id}: ${err}`);
+						});
+					}
 				}
 
 			} catch (error) {

@@ -1,6 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Guild, GuildMember, Message, PermissionResolvable } from "discord.js";
-import { CommandOptions } from "../abstract/Command";
-import { constants } from "../config/constants";
+import { randomBytes } from "node:crypto";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, Guild, GuildMember, Message, MessageFlags, PermissionResolvable, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder } from "discord.js";
+import type { CommandOptions } from "../abstract/Command";
 
 export const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -21,7 +21,7 @@ export const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.sli
  * Generate a unique ID
  */
 export function generateId(): string {
-	return require("node:crypto").randomBytes(16).toString("hex");
+	return randomBytes(16).toString("hex");
 }
 
 /**
@@ -46,8 +46,10 @@ export function parseDuration(input: string): number | null {
 	const match = input.match(/^(\d+)(s|m|h|d)$/i);
 	if (!match) return null;
 
-	const value = parseInt(match[1], 10);
-	const unit = match[2].toLowerCase();
+	const valueText = match[1];
+	const unit = match[2]?.toLowerCase();
+	if (!valueText || !unit) return null;
+	const value = parseInt(valueText, 10);
 
 	switch (unit) {
 		case 's': return value * 1000;
@@ -115,7 +117,11 @@ export function shuffle<T>(array: T[]): T[] {
 	const result = [...array];
 	for (let i = result.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
-		[result[i], result[j]] = [result[j], result[i]];
+		const left = result[i];
+		const right = result[j];
+		if (left === undefined || right === undefined) continue;
+		result[i] = right;
+		result[j] = left;
 	}
 	return result;
 }
@@ -125,21 +131,19 @@ export async function sendCommandHelp(message: Message, command: CommandOptions)
 	const examples = command.description?.examples || [];
 	const hasExtraExamples = examples.length > 3;
 
-	const baseEmbed = new EmbedBuilder()
-		.setTitle(`Help: ${command.name}`)
-		.setColor(constants.colors.main)
-		.setDescription(`### ${command.description?.content || "No description provided."}`)
-		.addFields([
-			{ name: "Category", value: `\`${command.category || "Uncategorized"}\``, inline: true },
-			...(command.aliases?.length ? [{ name: "Aliases", value: `\`${command.aliases.join(", ")}\``, inline: true }] : []),
-			...(command.cooldown ? [{ name: "Cooldown", value: `\`${command.cooldown}s\``, inline: true }] : []),
-		]);
+	// ─── Main page ────────────────────────────────────────────────────
+	const mainLines: string[] = [
+		`## ${command.name}`,
+		command.description?.content || "No description provided.",
+	];
+
+	const meta: string[] = [`**Category** \`${command.category || "Uncategorized"}\``];
+	if (command.cooldown) meta.push(`**Cooldown** \`${command.cooldown}s\``);
+	if (command.aliases?.length) meta.push(`**Aliases** \`${command.aliases.join("`, `")}\``);
+	mainLines.push(meta.join("  ·  "));
 
 	if (examples.length && !hasExtraExamples) {
-		baseEmbed.addFields({
-			name: "Examples",
-			value: examples.map((ex) => `\`${ex}\``).join("\n"),
-		});
+		mainLines.push(`**Examples**\n${examples.map((ex) => `\`${ex}\``).join("\n")}`);
 	}
 
 	if (command.permissions) {
@@ -147,40 +151,53 @@ export async function sendCommandHelp(message: Message, command: CommandOptions)
 		if (command.permissions.dev) perms.push("Developer only");
 		if (command.permissions.client?.length) perms.push(`Client: \`${command.permissions.client.join("`, `")}\``);
 		if (command.permissions.user?.length) perms.push(`User: \`${command.permissions.user.join("`, `")}\``);
-		baseEmbed.addFields({ name: "Permissions Required", value: perms.join("\n") });
+		if (perms.length) mainLines.push(`**Permissions Required**\n${perms.join("\n")}`);
 	}
 
+	const mainContainer = new ContainerBuilder();
+	for (let i = 0; i < mainLines.length; i++) {
+		mainContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(mainLines[i]!));
+		if (i === 0 || i === 1) {
+			mainContainer.addSeparatorComponents(new SeparatorBuilder().setDivider(i === 0).setSpacing(SeparatorSpacingSize.Small));
+		}
+	}
+
+	// ─── Subcommands page ─────────────────────────────────────────────
+	const subLines = subcommands.length
+		? subcommands
+				.map(
+					(sub) =>
+						`\`${sub.name}\` — ${sub.description || "No description"}${
+							sub.options?.length ? `\n  ↳ ${sub.options.map((opt) => `\`${opt.name}\`${opt.required ? " *(required)*" : ""}`).join(", ")}` : ""
+						}`,
+				)
+				.join("\n")
+		: "No subcommands found.";
+
+	const subContainer = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Subcommands: ${command.name}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(subLines));
+
+	// ─── Examples page ────────────────────────────────────────────────
+	const examplesContainer = new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Examples: ${command.name}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+			examples.length ? examples.map((ex) => `\`${ex}\``).join("\n") : "No examples provided.",
+		));
+
+	// ─── Buttons ──────────────────────────────────────────────────────
 	const baseRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 		new ButtonBuilder().setCustomId("view_subcommands").setLabel("View Subcommands").setStyle(ButtonStyle.Primary).setDisabled(!subcommands.length),
 		new ButtonBuilder().setCustomId("view_examples").setLabel("View Examples").setStyle(ButtonStyle.Secondary).setDisabled(!hasExtraExamples),
 	);
 
-	const subEmbed = new EmbedBuilder()
-		.setTitle(`Subcommands: ${command.name}`)
-		.setColor(constants.colors.main)
-		.setDescription(
-			subcommands.length
-				? subcommands
-						.map(
-							(sub) =>
-								`• \`${sub.name}\` — ${sub.description || "No description"}${
-									sub.options?.length ? `\n  ↳ ${sub.options.map((opt) => `\`${opt.name}\`${opt.required ? " *(required)*" : ""}`).join(", ")}` : ""
-								}`,
-						)
-						.join("\n")
-				: "No subcommands found.",
-		);
-
-	const examplesEmbed = new EmbedBuilder()
-		.setTitle(`Examples: ${command.name}`)
-		.setColor(constants.colors.main)
-		.setDescription(examples.length ? examples.map((ex) => `• \`${ex}\``).join("\n") : "No examples provided.");
-
 	const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("back_to_main").setLabel("Back").setStyle(ButtonStyle.Secondary));
 
 	const msg = await message.reply({
-		embeds: [baseEmbed],
-		components: [baseRow],
+		components: [mainContainer, baseRow],
+		flags: MessageFlags.IsComponentsV2,
 	});
 
 	const collector = msg.createMessageComponentCollector({
@@ -191,18 +208,18 @@ export async function sendCommandHelp(message: Message, command: CommandOptions)
 	collector.on("collect", async (btn) => {
 		if (btn.customId === "view_subcommands") {
 			await btn.update({
-				embeds: [subEmbed],
-				components: [navRow],
+				components: [subContainer, navRow],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		} else if (btn.customId === "view_examples") {
 			await btn.update({
-				embeds: [examplesEmbed],
-				components: [navRow],
+				components: [examplesContainer, navRow],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		} else if (btn.customId === "back_to_main") {
 			await btn.update({
-				embeds: [baseEmbed],
-				components: [baseRow],
+				components: [mainContainer, baseRow],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		}
 	});
@@ -210,7 +227,7 @@ export async function sendCommandHelp(message: Message, command: CommandOptions)
 	collector.on("end", async () => {
 		if (!msg.editable) return;
 		const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...baseRow.components.map((c) => ButtonBuilder.from(c).setDisabled(true)));
-		await msg.edit({ components: [disabledRow] });
+		await msg.edit({ components: [mainContainer, disabledRow] }).catch(() => undefined);
 	});
 }
 

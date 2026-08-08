@@ -28,7 +28,7 @@ export default class Boosters extends Command {
 
 		if (boosters.size === 0) {
 			return ctx.sendMessage({
-				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("<:Cross:1375519752746958858> No current boosters found."))],
+				components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent("No current boosters found."))],
 				flags: MessageFlags.IsComponentsV2,
 			});
 		}

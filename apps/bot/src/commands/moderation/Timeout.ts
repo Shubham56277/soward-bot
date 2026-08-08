@@ -117,17 +117,19 @@ export default class Timeout extends Command {
         await target.timeout(duration, reason);
 
         const container = new ContainerBuilder()
-            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**⏳ Member Timed Out**`))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Member Timed Out**`))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                `**User:** ${target.toString()}\n` +
+                `**User:** ${target.user.username}\n` +
                 `**Duration:** ${durationInput}\n` +
-                `**Moderator:** ${ctx.author?.toString() || "Unknown"}\n` +
+                `**Moderator:** ${ctx.author?.username || "Unknown"}\n` +
                 `**Reason:** ${reason}`
             ))
             .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ID: ${target.id}`));
 
-        return await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+        const msg = await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+        setTimeout(() => msg?.delete?.().catch(() => {}), 4_000);
+        return msg;
     }
 }

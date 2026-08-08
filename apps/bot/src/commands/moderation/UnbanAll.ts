@@ -1,6 +1,13 @@
-import { EmbedBuilder, ApplicationCommandOptionType } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, ApplicationCommandOptionType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
+
+function buildPanel(title: string, body: string): ContainerBuilder {
+	return new ContainerBuilder()
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+		.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+		.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+}
 
 export default class UnbanAll extends Command {
 	constructor() {
@@ -44,6 +51,13 @@ export default class UnbanAll extends Command {
 		});
 	}
 
+	private msg(text: string): any {
+		return {
+			components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+			flags: MessageFlags.IsComponentsV2,
+		};
+	}
+
 	public async run(ctx: Context): Promise<any> {
 		// Get reason
 		let reason = ctx.options.getString("reason", false, 0) || `Mass unban by ${ctx.author?.tag}`;
@@ -57,33 +71,19 @@ export default class UnbanAll extends Command {
 		}
 
 		// Confirm action
-		const confirmEmbed = new EmbedBuilder()
-			.setColor(0x000000)
-			.setTitle("⚠️ Confirm Mass Unban")
-			.setDescription(`This will unban up to ${limit} users. Are you sure you want to proceed?`)
-			.addFields({ name: "Reason", value: reason });
+		const confirmContainer = buildPanel(
+			"Confirm Mass Unban",
+			`This will unban up to ${limit} users. Are you sure you want to proceed?\n\n**Reason:** ${reason}`,
+		);
+
+		const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder().setCustomId("confirm_unban").setLabel("Confirm").setStyle(ButtonStyle.Success),
+			new ButtonBuilder().setCustomId("cancel_unban").setLabel("Cancel").setStyle(ButtonStyle.Danger),
+		);
 
 		const confirmMessage = await ctx.sendMessage({
-			embeds: [confirmEmbed],
-			components: [
-				{
-					type: 1,
-					components: [
-						{
-							type: 2,
-							style: 3,
-							label: "Confirm",
-							customId: "confirm_unban",
-						},
-						{
-							type: 2,
-							style: 4,
-							label: "Cancel",
-							customId: "cancel_unban",
-						},
-					],
-				},
-			],
+			components: [confirmContainer, actionRow],
+			flags: MessageFlags.IsComponentsV2,
 		});
 
 		// Wait for confirmation
@@ -95,21 +95,21 @@ export default class UnbanAll extends Command {
 
 			if (confirmation.customId === "cancel_unban") {
 				await confirmation.update({
-					embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> Mass unban cancelled")],
-					components: [],
+					components: [buildPanel("Cancelled", "Mass unban cancelled")],
+					flags: MessageFlags.IsComponentsV2,
 				});
 				return;
 			}
 
 			await confirmation.update({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("⏳ Processing unbans...")],
-				components: [],
+				components: [buildPanel("Processing", "Processing unbans...")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 		} catch (_error) {
 			// Interaction timed out
 			await confirmMessage.edit({
-				embeds: [new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> Confirmation timed out")],
-				components: [],
+				components: [buildPanel("Timed Out", "Confirmation timed out")],
+				flags: MessageFlags.IsComponentsV2,
 			});
 			return;
 		}
@@ -121,18 +121,16 @@ export default class UnbanAll extends Command {
 			const totalBans = bannedUsers.length;
 
 			if (totalBans === 0) {
-				const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Tick:1375519268292264012> No users are currently banned");
-				return await ctx.sendMessage({ embeds: [embed] });
+				return await ctx.sendMessage(this.msg("No users are currently banned"));
 			}
 
-			// Initialize progress embed
-			const progressEmbed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("🔓 Processing Mass Unban")
-				.setDescription(`Unbanning ${totalBans} users...`)
-				.addFields({ name: "Progress", value: `0/${totalBans} (0%)` }, { name: "Estimated Time", value: "Calculating..." }, { name: "Reason", value: reason });
+			// Initialize progress panel
+			let progressBody = `Unbanning ${totalBans} users...\n\n**Progress:** 0/${totalBans} (0%)\n**Estimated Time:** Calculating...\n**Reason:** ${reason}`;
 
-			const progressMessage = await ctx.sendMessage({ embeds: [progressEmbed] });
+			const progressMessage = await ctx.sendMessage({
+				components: [buildPanel("Processing Mass Unban", progressBody)],
+				flags: MessageFlags.IsComponentsV2,
+			});
 
 			// Rate limiting variables
 			const startTime = Date.now();
@@ -154,9 +152,12 @@ export default class UnbanAll extends Command {
 								const remaining = Math.ceil((totalBans - processed) / rateLimit);
 								const percentage = Math.round((processed / totalBans) * 100);
 
-								progressEmbed.spliceFields(0, 2, { name: "Progress", value: `${processed}/${totalBans} (${percentage}%)` }, { name: "Estimated Time", value: `${remaining} seconds remaining` });
+								progressBody = `Unbanning ${totalBans} users...\n\n**Progress:** ${processed}/${totalBans} (${percentage}%)\n**Estimated Time:** ${remaining} seconds remaining\n**Reason:** ${reason}`;
 
-								progressMessage.edit({ embeds: [progressEmbed] }).catch(console.error);
+								progressMessage.edit({
+									components: [buildPanel("Processing Mass Unban", progressBody)],
+									flags: MessageFlags.IsComponentsV2,
+								}).catch(console.error);
 							}
 						})
 						.catch((error) => {
@@ -175,17 +176,19 @@ export default class UnbanAll extends Command {
 
 			// Final result
 			const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-			const resultEmbed = new EmbedBuilder()
-				.setColor(0x000000)
-				.setTitle("<:Tick:1375519268292264012> Mass Unban Complete")
-				.setDescription(`Successfully unbanned ${processed} users`)
-				.addFields({ name: "Total Time", value: `${elapsed} seconds` }, { name: "Reason", value: reason });
+			const resultContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Mass Unban Complete**`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`Successfully unbanned ${processed} users\n\n` +
+					`**Total Time:** ${elapsed} seconds\n` +
+					`**Reason:** ${reason}`
+				));
 
-			await progressMessage.edit({ embeds: [resultEmbed] });
+			await progressMessage.edit({ components: [resultContainer], flags: MessageFlags.IsComponentsV2 });
 		} catch (error) {
 			console.error("UnbanAll Error:", error);
-			const embed = new EmbedBuilder().setColor(0x000000).setDescription("<:Cross:1375519752746958858> An error occurred while processing the mass unban");
-			await ctx.sendMessage({ embeds: [embed] });
+			await ctx.sendMessage(this.msg("An error occurred while processing the mass unban"));
 		}
 	}
 }

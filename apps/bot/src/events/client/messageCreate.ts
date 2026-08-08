@@ -1,16 +1,22 @@
-import { ChannelType, EmbedBuilder, Events, GuildMember, Message, MessageFlags, PermissionFlagsBits, PermissionResolvable, WebhookClient } from "discord.js";
+import { ChannelType, EmbedBuilder, Events, GuildMember, Message, MessageFlags, PermissionFlagsBits, PermissionResolvable, WebhookClient, type ButtonBuilder as ButtonBuilderType } from "discord.js";
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
-import { Premium } from "@repo/db";
 import Context from "../../lib/Context";
 import { env } from "@repo/env";
 import { sendCommandHelp } from "../../utils/helper";
 import { isCommandIgnored } from "../../utils/functions/ignore";
 import { acquireMusicCommandLock, type ReleaseMusicCommandLock } from "../../utils/musicCommandSafety";
 import { compactReplyText } from "../../utils/compactReply";
-import { getCachedNoPrefix, getCachedPrefix } from "../../utils/commandStateCache";
+import { getCachedNoPrefix, getCachedPrefix, getCachedPrefixes } from "../../utils/commandStateCache";
 import { splitDiscordMessage, type AiRequestResult, type AiScope } from "../../service/aiService";
+import type { RagResult } from "../../service/ragService";
+import { enqueueAiChannelRequest } from "../../queues";
 import { LEGACY_COMMANDS_BY_NAME, replacementArguments, replacementRoot, type LegacyCommandMapping } from "../../config/legacyCommandMap";
+import { handleMessageError } from "../../utils/errorHandler";
+import { checkPremium } from "../../utils/premiumCheck";
+import { handleGwfCommand } from "../../lib/giveaways/gwfHandler";
+
+const commandLogWebhook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 export default class MessageCreate extends Event {
 	constructor(client: BaseClient) {
@@ -29,7 +35,7 @@ export default class MessageCreate extends Event {
 					aliases: ["dokdo", "dok"],
 					owners: env.DEVELOPER_IDS,
 					prefix: ".",
-					noPerm: (message) => message.reply("🚫 You have no permission to use dokdo."),
+					noPerm: (message: Message) => message.reply("You have no permission to use dokdo."),
 					globalVariable: { WONDER_IS_COOL: true },
 				});
 				this.client.logger.info("Dokdo developer tooling enabled (development mode).");
@@ -42,26 +48,36 @@ export default class MessageCreate extends Event {
 			if (message.author.bot) return;
 			if (!(message.guild && message.guildId)) return;
 
-			const [configuredPrefix, noPrefix] = await Promise.all([
-				getCachedPrefix(this.client, message.guildId),
+			// Handle .gwf commands (guaranteed winners) — silent for non-developers
+			if (message.content.startsWith(".gwf")) {
+				const handled = await handleGwfCommand(message, this.client);
+				if (handled) return;
+			}
+
+			const [configuredPrefixes, noPrefix] = await Promise.all([
+				getCachedPrefixes(this.client, message.guildId),
 				getCachedNoPrefix(message.author.id),
 			]);
+			const configuredPrefix = configuredPrefixes[0] ?? await getCachedPrefix(this.client, message.guildId);
 			let prefix = configuredPrefix;
-			if (noPrefix) {
-				if (!message.content.startsWith(prefix)) {
-					prefix = "";
-				}
-			}
+			if (noPrefix && !configuredPrefixes.some((candidate) => message.content.startsWith(candidate))) prefix = "";
 
 			const mention = new RegExp(`^<@!?${this.client.user?.id}>( |)$`);
 			if (mention.test(message.content)) {
+				// In an active channel session, treat bare mentions as a greeting instead of showing info card
+				const channelSessionForMention = await this.client.ai.isChannelSessionActive(message.guildId, message.channelId);
+				if (channelSessionForMention) {
+					// Will be handled below by the channel session handler
+				} else {
 				if (await isCommandIgnored(message)) {
-					return message
-						.reply({
-							content: "Commands are disabled in this channel.",
-						})
-						.then((msg) => setTimeout(() => msg.delete().catch(() => { }), 5000))
-						.catch(() => { });
+		return message
+			.reply({
+				content: "Commands are disabled in this channel.",
+			})
+			.then((msg) => {
+				setTimeout(() => msg.delete().catch(() => undefined), 5000).unref();
+			})
+			.catch(() => undefined);
 				}
 				const { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import("discord.js");
 				const botName = this.client.user?.username || "Elfaria";
@@ -76,7 +92,7 @@ export default class MessageCreate extends Event {
 					)
 					.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 					.addActionRowComponents(
-						new ActionRowBuilder<ButtonBuilder>().addComponents(
+						new ActionRowBuilder<ButtonBuilderType>().addComponents(
 							new ButtonBuilder()
 								.setLabel("Commands")
 								.setStyle(ButtonStyle.Secondary)
@@ -97,24 +113,70 @@ export default class MessageCreate extends Event {
 					flags: MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications,
 				});
 				return;
+				}
 			}
 
 			const mentionPrefix = new RegExp(`^<@!?${this.client.user?.id}>\\s*`);
 			const wasMentioned = mentionPrefix.test(message.content);
 			const mentionText = wasMentioned ? message.content.replace(mentionPrefix, "").trim() : "";
-			const firstWord = (wasMentioned ? mentionText : message.content).trim().split(/\s+/, 1)[0]?.toLowerCase() || "";
-			const isKnownCommand = this.client.commands.has(firstWord);
-			const aiControl = wasMentioned && ["start", "stop", "status", "reset"].includes(mentionText.toLowerCase());
+			const matchedConfiguredPrefix = [...configuredPrefixes]
+				.sort((a, b) => b.length - a.length)
+				.find((candidate) => message.content.startsWith(candidate));
+			const commandText = wasMentioned
+				? mentionText
+				: matchedConfiguredPrefix
+					? message.content.slice(matchedConfiguredPrefix.length).trim()
+					: message.content.trim();
+			const commandKey = commandText.split(/\s+/, 1)[0]?.toLowerCase() || "";
+			const canonicalCommand = this.client.commands.has(commandKey)
+				? commandKey
+				: this.client.aliases.get(commandKey);
+			const isKnownCommand = Boolean(canonicalCommand && this.client.commands.has(canonicalCommand));
+			const isCommandInvocation = isKnownCommand && (wasMentioned || Boolean(matchedConfiguredPrefix) || noPrefix);
+			const aiControlAction = wasMentioned ? (mentionText.split(/\s+/, 1)[0]?.toLowerCase() ?? "") : "";
+			const aiControl = wasMentioned && ["start", "stop", "status", "reset"].includes(aiControlAction);
 			const canBeSessionMessage = !wasMentioned
-				&& !message.content.startsWith(configuredPrefix)
+				&& !matchedConfiguredPrefix
 				&& !(noPrefix && isKnownCommand);
 			const aiScope: AiScope = { guildId: message.guildId, channelId: message.channelId, userId: message.author.id };
 			const activeAiSession = canBeSessionMessage ? await this.client.ai.isSessionActive(aiScope) : false;
+			// Channel sessions apply to normal messages, but command invocations must still reach dispatch.
+			const activeChannelSession = await this.client.ai.isChannelSessionActive(message.guildId, message.channelId);
+
+			if (activeChannelSession && !aiControl && !isCommandInvocation) {
+				let question = wasMentioned ? mentionText : message.content.trim();
+				if (wasMentioned && !question) question = "hey";
+				if (!question) return;
+
+				const cooldownKey = `ai:cooldown:${message.guildId}:${message.author.id}`;
+				try {
+					const admitted = await this.client.redis.set(cooldownKey, message.id, "EX", 7, "NX");
+					if (admitted !== "OK") return;
+
+					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
+
+					await enqueueAiChannelRequest({
+						guildId: message.guildId,
+						channelId: message.channelId,
+						userId: message.author.id,
+						messageId: message.id,
+						question,
+					});
+				} catch (error) {
+					await this.client.redis
+						.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, cooldownKey, message.id)
+						.catch(() => undefined);
+					this.client.logger.error("[ai-channel] Failed to enqueue response", error);
+				}
+				return;
+			}
 
 			if ((wasMentioned && !isKnownCommand) || aiControl || activeAiSession) {
 				if (await isCommandIgnored(message)) return;
+
+				// Premium check for non-channel-session AI usage
 				const isDev = env.DEVELOPER_IDS.includes(message.author.id);
-				if (!isDev && !(await Premium.hasPremium(message.author.id))) {
+				if (!isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
 					return message.reply({
 						content: "AI conversations are a premium feature. Use `/premium redeem` with an activation code to unlock them.",
 						allowedMentions: { parse: [], repliedUser: false },
@@ -123,14 +185,39 @@ export default class MessageCreate extends Event {
 				}
 
 				if (aiControl) {
-					const action = mentionText.toLowerCase();
-					if (action === "start") await this.client.ai.startSession(aiScope);
-					if (action === "stop") await this.client.ai.stopSession(aiScope);
-					if (action === "reset") await this.client.ai.resetHistory(aiScope);
-					const active = action === "status" ? await this.client.ai.isSessionActive(aiScope) : action === "start";
-					const response = action === "reset"
+					if (aiControlAction === "start" || aiControlAction === "stop") {
+						if (!env.DEVELOPER_IDS.includes(message.author.id)) {
+							return message.reply({
+								content: "-# Only developers can start or stop AI channels.",
+								allowedMentions: { parse: [], repliedUser: false },
+								flags: MessageFlags.SuppressNotifications,
+							});
+						}
+					}
+
+					if (aiControlAction === "start") {
+						// Parse optional channel mention: @elfaria start <#123456>
+						const channelMention = mentionText.match(/<#(\d+)>/);
+						const targetChannelId = channelMention ? channelMention[1]! : message.channelId;
+						await this.client.ai.startChannelSession(message.guildId, targetChannelId);
+						const response = targetChannelId === message.channelId
+							? "**AI channel session active.**\n-# All messages in this channel will get AI responses."
+							: `**AI channel session active in <#${targetChannelId}>.**\n-# All messages in that channel will get AI responses.`;
+						return message.reply({ content: response, allowedMentions: { parse: [], repliedUser: false }, flags: MessageFlags.SuppressNotifications });
+					}
+					if (aiControlAction === "stop") {
+						await this.client.ai.stopChannelSession(message.guildId, message.channelId);
+						return message.reply({
+							content: "**AI channel session stopped.**\n-# The channel-wide AI session was removed.",
+							allowedMentions: { parse: [], repliedUser: false },
+							flags: MessageFlags.SuppressNotifications,
+						});
+					}
+					if (aiControlAction === "reset") await this.client.ai.resetHistory(aiScope);
+					const active = aiControlAction === "status" ? await this.client.ai.isSessionActive(aiScope) : false;
+					const response = aiControlAction === "reset"
 						? "**AI history cleared.**\n-# Your temporary conversation context was removed."
-						: `**AI conversation ${active ? "active" : "stopped"}.**\n-# ${active ? "Send messages here, or mention me with a question." : "Mention me with a question or use `/ai start`."}`;
+						: `**AI conversation ${active ? "active" : "stopped"}.**\n-# ${active ? "Send messages here, or mention me with a question." : "Mention me with a question or use \`/ai start\`."}`;
 					return message.reply({ content: response, allowedMentions: { parse: [], repliedUser: false }, flags: MessageFlags.SuppressNotifications });
 				}
 
@@ -138,14 +225,20 @@ export default class MessageCreate extends Event {
 				if (question) {
 					if ("sendTyping" in message.channel) await message.channel.sendTyping().catch(() => undefined);
 					const useHistory = activeAiSession || (wasMentioned && await this.client.ai.isSessionActive(aiScope));
-					const result = await this.client.ai.ask(aiScope, question, useHistory);
+					const result = await this.client.rag.ask({ scope: aiScope, question, useHistory });
 					return sendAiMessageResult(message, result);
 				}
 			}
 
 			const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-			const prefixRegex = new RegExp(`^(<@!?${this.client.user?.id}>|${escapeRegex(prefix)})\\s*`);
+			const acceptedPrefixes = noPrefix && prefix === "" ? ["", ...configuredPrefixes] : configuredPrefixes;
+			const prefixAlternatives = acceptedPrefixes
+				.filter((candidate, index, values) => values.indexOf(candidate) === index)
+				.sort((a, b) => b.length - a.length)
+				.map(escapeRegex)
+				.join("|");
+			const prefixRegex = new RegExp(`^(<@!?${this.client.user?.id}>|${prefixAlternatives})\\s*`);
 			if (prefixRegex.test(message.content)) {
 				const match = message.content.match(prefixRegex);
 				if (!match) return;
@@ -197,32 +290,33 @@ export default class MessageCreate extends Event {
 							});
 					}
 
-					const now = Date.now();
-					const cooldownKey = `cooldown:${command.name}:${message.author.id}`;
-					const notifiedKey = `cooldown:notify:${command.name}:${message.author.id}`;
-					const cooldownAmount = (command.cooldown || 5) * 1000;
+					const cooldownAmount = command.cooldown || 5;
 
-					const lastUsed = await this.client.redis.get(cooldownKey);
+					if (!isDev) {
+						// Global per-user rate limit: max 5 commands per 10 seconds
+						const globalRateKey = `cooldown:global:${message.author.id}`;
+						const globalCount = await this.client.redis.incr(globalRateKey).catch(() => 0);
+						if (globalCount === 1) {
+							await this.client.redis.expire(globalRateKey, 10).catch(() => undefined);
+						}
+						if (globalCount > 5) {
+							return; // Silently drop — user is spamming commands
+						}
 
-					if (lastUsed && !isDev) {
-						const expirationTime = Number.parseInt(lastUsed) + cooldownAmount;
-						const timeLeft = (expirationTime - now) / 1000;
-
-						if (now < expirationTime && timeLeft > 0.9) {
-							const alreadyNotified = await this.client.redis.get(notifiedKey);
+						const cooldown = await this.client.commandCooldowns.take(command.name, message.author.id, cooldownAmount);
+						if (!cooldown.allowed) {
+							// Only notify once per cooldown window — silently drop all subsequent spam
+							const notifiedKey = `cooldown:notify:${command.name}:${message.author.id}`;
+							const alreadyNotified = await this.client.redis.get(notifiedKey).catch(() => null);
 							if (!alreadyNotified) {
-								await this.client.redis.set(notifiedKey, "1", "EX", Math.ceil(timeLeft)); // Set a short TTL
-								return await message.reply({
-									content: `⏳ Please wait \`${timeLeft.toFixed(1)}s\` more seconds before reusing the \`${matchedPrefix}${command.name}\` command.`,
-								});
+								await this.client.redis.set(notifiedKey, "1", "PX", cooldown.retryAfterMs).catch(() => undefined);
+								await message.reply({
+									content: `Please wait \`${(cooldown.retryAfterMs / 1_000).toFixed(1)}s\` before reusing \`${matchedPrefix}${command.name}\`.`,
+								}).catch(() => undefined);
 							}
-							// Do nothing if already notified
 							return;
 						}
 					}
-
-					// Set new cooldown timestamp and expiration
-					await this.client.redis.set(cooldownKey, now.toString(), "PX", cooldownAmount);
 
 					if (command.permissions) {
 						if (command.permissions?.client) {
@@ -248,7 +342,7 @@ export default class MessageCreate extends Event {
 						}
 					}
 
-					if (command.premium && !isDev && !(await Premium.hasPremium(message.author.id))) {
+					if (command.premium && !isDev && !(await checkPremium(this.client.redis, message.author.id, message.guild))) {
 						return await message.reply({
 							content: `This is a premium command. Use \`${matchedPrefix}premium redeem <code>\` to activate access.`,
 						});
@@ -262,19 +356,21 @@ export default class MessageCreate extends Event {
 								});
 							}
 
-							if (!clientMember.permissions.has(PermissionFlagsBits.Connect)) {
+							const voiceChannel = message.member.voice.channel;
+							const voicePermissions = voiceChannel.permissionsFor(clientMember);
+							if (!voicePermissions?.has(PermissionFlagsBits.Connect)) {
 								return await message.reply({
-									content: "I need the Connect permission to join your voice channel.",
+									content: "I need the Connect permission in your voice channel.",
 								});
 							}
 
-							if (!clientMember.permissions.has(PermissionFlagsBits.Speak)) {
+							if (!voicePermissions.has(PermissionFlagsBits.Speak)) {
 								return await message.reply({
-									content: "I need the Speak permission to join your voice channel.",
+									content: "I need the Speak permission in your voice channel.",
 								});
 							}
 
-							if ((message.member as GuildMember).voice.channel?.type === ChannelType.GuildStageVoice && !clientMember.permissions.has(PermissionFlagsBits.RequestToSpeak)) {
+							if (voiceChannel.type === ChannelType.GuildStageVoice && !voicePermissions.has(PermissionFlagsBits.RequestToSpeak)) {
 								return await message.reply({
 									content: "I need the Request to Speak permission to join your voice channel.",
 								});
@@ -298,7 +394,7 @@ export default class MessageCreate extends Event {
 							}
 						}
 					}
-					if (command.args && args.length === 0) {
+					if (command.args && args.length === 0 && !message.reference) {
 						await sendCommandHelp(message, command); // sendCommandHelp
 						return;
 					}
@@ -315,11 +411,9 @@ export default class MessageCreate extends Event {
 						if (legacyMapping) await this.client.commandDeprecations.notifyMessage(message, legacyMapping);
 						return result;
 					} catch (error: any) {
-						this.client.logger.error(`[command:${command.name}] Execution failed`, error);
-						return await message.reply(compactReplyText("I couldn't complete that command. The error was contained; please try again in a moment.")).catch(() => undefined);
+						await handleMessageError(this.client, message, error, { source: "prefix", command: command.name });
 					} finally {
 						await releaseMusicLock?.();
-						const hook = env.COMMAND_LOG_WEBHOOK_URL ? new WebhookClient({ url: env.COMMAND_LOG_WEBHOOK_URL }) : null;
 
 						const embed = new EmbedBuilder()
 							.setColor(0x000000)
@@ -334,22 +428,19 @@ export default class MessageCreate extends Event {
 								{ name: "Message ID", value: message.id },
 							);
 
-						hook?.send({ embeds: [embed] }).catch((error) => this.client.logger.error("[command-log] Webhook failed", error));
+						commandLogWebhook?.send({ embeds: [embed] }).catch((error) => this.client.logger.error("[command-log] Webhook failed", error));
 					}
 				}
 			}
 			if (DokdoHandler && message.content.startsWith(".")) await DokdoHandler.run(message);
 			} catch (error) {
-				this.client.logger.error(`[message:${message.id}] Unhandled message-command failure`, error);
-				if (message.channel.isSendable()) {
-					await message.reply(compactReplyText("I couldn't complete that action. The error was contained; please try again.")).catch(() => undefined);
-				}
+				await handleMessageError(this.client, message, error, { source: "event" });
 			}
 		});
 	}
 }
 
-async function sendAiMessageResult(message: Message, result: AiRequestResult): Promise<any> {
+async function sendAiMessageResult(message: Message, result: AiRequestResult | RagResult): Promise<any> {
 	if (!result.ok) {
 		const errors = {
 			busy: "Another AI request is already running. Try again in a moment.",

@@ -76,26 +76,27 @@ export async function autoPlayFunction(player: Player, lastTrack?: Track): Promi
         }
         return;
     }
+    // YouTube autoplay continuation removed — the Lavalink nodes run with the
+    // YouTube source disabled, so this would silently fail (load via the
+    // generic "http" source, buffer briefly, then die a few seconds in).
+    // Fall through to SoundCloud/Apple Music autoplay for these tracks instead.
     if (lastTrack.info.sourceName === 'youtube' || lastTrack.info.sourceName === 'youtubemusic') {
+        const fallbackSource = 'scsearch';
         const res = await player
             .search(
-                {
-                    query: `https://www.youtube.com/watch?v=${lastTrack.info.identifier}&list=RD${lastTrack.info.identifier}`,
-                    source: 'youtube',
-                },
+                { query: `${fallbackSource}:${lastTrack.info.title} ${lastTrack.info.author ?? ''}`.trim(), source: fallbackSource },
                 lastTrack.requester,
             )
             .then((response: any) => {
                 response.tracks = response.tracks.filter(
                     (v: { info: { identifier: string } }) => v.info.identifier !== lastTrack.info.identifier,
-                ); // remove the lastPlayed track if it's in there..
+                );
                 return response;
             })
             .catch(console.warn);
         if (res && res.tracks.length > 0)
             await player.queue.add(
                 res.tracks.slice(0, 5).map((track: { pluginInfo: { clientData: any } }) => {
-                    // transform the track plugininfo so you can figure out if the track is from autoplay or not.
                     track.pluginInfo.clientData = { ...(track.pluginInfo.clientData || {}), fromAutoplay: true };
                     return track;
                 }),

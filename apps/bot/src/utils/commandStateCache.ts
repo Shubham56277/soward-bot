@@ -3,6 +3,7 @@ import BaseClient from "../base/Client";
 
 const MAX_ENTRIES = 10_000;
 const prefixCache = new Map<string, CacheEntry<string>>();
+const prefixesCache = new Map<string, CacheEntry<string[]>>();
 const noPrefixCache = new Map<string, CacheEntry<boolean>>();
 
 interface CacheEntry<T> {
@@ -12,6 +13,19 @@ interface CacheEntry<T> {
 
 export function getCachedPrefix(client: BaseClient, guildId: string): Promise<string> {
 	return readThrough(prefixCache, guildId, 15_000, async () => (await Guild.get(guildId))?.prefix || client.config.prefix);
+}
+
+export function getCachedPrefixes(client: BaseClient, guildId: string): Promise<string[]> {
+	return readThrough(prefixesCache, guildId, 15_000, async () => {
+		const guild = await Guild.get(guildId);
+		const prefixes = guild?.prefixes?.filter(Boolean) ?? [];
+		return [...new Set([guild?.prefix || client.config.prefix, ...prefixes])];
+	});
+}
+
+export function invalidatePrefixCache(guildId: string): void {
+	prefixCache.delete(guildId);
+	prefixesCache.delete(guildId);
 }
 
 export function getCachedNoPrefix(userId: string): Promise<boolean> {

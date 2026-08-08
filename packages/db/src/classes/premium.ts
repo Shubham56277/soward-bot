@@ -32,45 +32,55 @@ export class PremiumCode {
 	}
 
 	public static async redeem(rawCode: string, userId: string): Promise<PremiumCodeRedemption> {
+		if (!rawCode.trim() || !userId) return { status: "invalid" };
 		const codeHash = hashCode(rawCode);
 		const now = new Date();
-		const code = (await db.select().from(schema.premiumCodes).where(eq(schema.premiumCodes.codeHash, codeHash)).limit(1)).at(0);
+		await User.get(userId);
 
-		if (!code) return { status: "invalid" };
-		if (code.redeemedAt) return { status: "used" };
-		if (code.expiresAt <= now) return { status: "expired" };
+		const result = await db.transaction(async (tx): Promise<PremiumCodeRedemption> => {
+			const claimed = await tx
+				.update(schema.premiumCodes)
+				.set({ redeemedBy: userId, redeemedAt: now })
+				.where(
+					and(
+						eq(schema.premiumCodes.codeHash, codeHash),
+						isNull(schema.premiumCodes.redeemedAt),
+						gt(schema.premiumCodes.expiresAt, now),
+					),
+				)
+				.returning();
 
-		const claimed = await db
-			.update(schema.premiumCodes)
-			.set({ redeemedBy: userId, redeemedAt: now })
-			.where(and(eq(schema.premiumCodes.codeHash, codeHash), isNull(schema.premiumCodes.redeemedAt), gt(schema.premiumCodes.expiresAt, now)))
-			.returning();
+			const code = claimed[0];
+			if (!code) {
+				const existing = await tx
+					.select({ redeemedAt: schema.premiumCodes.redeemedAt, expiresAt: schema.premiumCodes.expiresAt })
+					.from(schema.premiumCodes)
+					.where(eq(schema.premiumCodes.codeHash, codeHash))
+					.limit(1);
+				if (!existing[0]) return { status: "invalid" };
+				if (existing[0].redeemedAt) return { status: "used" };
+				return { status: "expired" };
+			}
 
-		if (claimed.length === 0) return { status: "used" };
-
-		try {
-			await User.get(userId);
-			const current = await db.select().from(schema.premium).where(eq(schema.premium.userId, userId)).limit(1);
-			const currentUntil = current.at(0)?.premiumUntil;
+			const current = await tx.select().from(schema.premium).where(eq(schema.premium.userId, userId)).limit(1);
+			const currentUntil = current[0]?.premiumUntil;
 			const startsAt = currentUntil && currentUntil > now ? currentUntil : now;
-			const premiumUntil = new Date(startsAt.getTime() + code.durationMs);
+			const premiumUntilMs = startsAt.getTime() + code.durationMs;
+			if (!Number.isSafeInteger(premiumUntilMs)) throw new Error("Premium expiry exceeds the supported date range");
+			const premiumUntil = new Date(premiumUntilMs);
 
-			await db
+			await tx
 				.insert(schema.premium)
 				.values({ userId, isPremium: true, premiumSince: now, premiumUntil, createdAt: now, updatedAt: now })
 				.onConflictDoUpdate({
 					target: schema.premium.userId,
 					set: { isPremium: true, premiumSince: now, premiumUntil, updatedAt: now },
 				});
-			await invalidateCache(`db:premium:${userId}`);
 
 			return { status: "redeemed", premiumUntil };
-		} catch (error) {
-			await db
-				.update(schema.premiumCodes)
-				.set({ redeemedBy: null, redeemedAt: null })
-				.where(and(eq(schema.premiumCodes.codeHash, codeHash), eq(schema.premiumCodes.redeemedBy, userId)));
-			throw error;
-		}
+		});
+
+		if (result.status === "redeemed") await invalidateCache(`db:premium:${userId}`);
+		return result;
 	}
 }

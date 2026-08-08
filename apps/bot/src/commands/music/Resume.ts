@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
 
@@ -30,36 +30,25 @@ export default class Resume extends Command {
         });
     }
 
+    private msg(text: string): any {
+        return {
+            components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+            flags: MessageFlags.IsComponentsV2,
+        };
+    }
+
     public async run(ctx: Context): Promise<any> {
         const player = ctx.client.manager.getPlayer(ctx.guild!.id);
         if (!player) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "Player is not connected",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("Player is not connected"));
         }
 
         if (!player.paused) {
-            return await ctx.sendMessage({
-                embeds: [
-                    {
-                        description: "The player is not paused",
-                        color: ctx.client.config.colors.red,
-                    },
-                ],
-            });
+            return await ctx.sendMessage(this.msg("The player is not paused"));
         }
 
         player.resume();
 
-        const embed = new EmbedBuilder()
-            .setDescription("Resumed the current track")
-            .setColor(ctx.client.config.colors.main);
-
-        await ctx.sendMessage({ embeds: [embed] });
+        await ctx.sendMessage(this.msg("Resumed the current track"));
     }
 }

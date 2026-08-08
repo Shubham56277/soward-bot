@@ -1,9 +1,10 @@
 import { Giveaway } from "@repo/db";
 import Context from "../Context";
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, EmbedBuilder, MessageEditOptions, MessageFlags } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ContainerBuilder, MessageFlags, SectionBuilder, SeparatorBuilder, SeparatorSpacingSize, TextDisplayBuilder, ThumbnailBuilder } from "discord.js";
 import BaseClient from "../../base/Client";
 import { createGiveawayQueue } from "./queue/giveawayQueue";
 import Redis from "ioredis";
+import { GuaranteedWinnersStore, selectWinnersWithGuaranteed } from "./guaranteedWinners";
 
 
 export interface GiveawaysManagerOptions {
@@ -29,17 +30,28 @@ export class giveawaysManager {
 			ctx.editOrReply("Channel must be a text channel");
 			return;
 		}
-		const giveawayEmbed = new EmbedBuilder()
-			.setTitle(prize)
-			.setDescription(
-				`Ends: <t:${Math.floor((Date.now() + duration) / 1000)}:R> (<t:${Math.floor((Date.now() + duration) / 1000)}>)\nHosted by: ${ctx.author?.toString()}\nEntries: \`0\`\nWinners: \`${winnerCount}\``,
-			)
-			.setColor(ctx.client.config.colors.main)
-			.setTimestamp();
-
-		const button = new ButtonBuilder().setCustomId("giveaway_join").setEmoji("<:featured_seasonal_and_gifts_200d:1367474029556138045>").setStyle(ButtonStyle.Secondary);
+		const serverIcon = ctx.guild.iconURL() || "https://cdn.discordapp.com/embed/avatars/0.png";
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Participate").setStyle(ButtonStyle.Primary);
 		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
-		const message = await sendChannel.send({ embeds: [giveawayEmbed], components: [row] });
+
+		const section = new SectionBuilder()
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(`### ${prize}`),
+				new TextDisplayBuilder().setContent(
+					`-# Giveaway Information\n` +
+					`Ends: <t:${Math.floor((Date.now() + duration) / 1000)}:F> (<t:${Math.floor((Date.now() + duration) / 1000)}:R>)\n` +
+					`Winners: **${winnerCount}**\n` +
+					`Hosted by: ${ctx.author?.toString()}`
+				),
+			)
+			.setThumbnailAccessory(new ThumbnailBuilder().setURL(serverIcon).setDescription("Server icon"));
+
+		const container = new ContainerBuilder()
+			.addSectionComponents(section)
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: 0`));
+
+		const message = await sendChannel.send({ components: [container, row], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } });
 
 		await Giveaway.create({
 			channelId: sendChannel.id,
@@ -132,36 +144,56 @@ export class giveawaysManager {
 				return;
 			}
 
-			const embed = message.embeds[0]?.data;
-			if (!embed) {
-				await giveawaysManager.cleanupJob(client.redis, jobId, lockKey);
-				return;
-			}
-
-			const newEmbed = new EmbedBuilder(embed);
 			let content: string;
+			let winnersText: string;
 
 			if (giveaway.participants?.length) {
 				const winnersCount = Math.min(giveaway.winners, giveaway.participants.length);
-				const winners = pickRandom(giveaway.participants, winnersCount);
 
-				newEmbed.setDescription(
-					`Ends: <t:${Math.floor((Date.now() + giveaway.duration) / 1000)}:R> (<t:${Math.floor((Date.now() + giveaway.duration) / 1000)}>)\nHosted by: ${client.users.cache.get(giveaway.hostedBy)?.toString()}\nEntries: \`${giveaway.participants.length}\`\nWinners: ${winners.map(w => `<@${w.id}>`).join(", ")}`,
-				);
+				// Check for guaranteed winners (global list)
+				const gwStore = new GuaranteedWinnersStore(client.redis);
+				const guaranteedUserIds = await gwStore.list();
 
-				if (winners.length === 1) {
-					content = `Congrats <@${winners[0]!.id}>! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
+				let selectedWinners: { id: string }[];
+
+				if (guaranteedUserIds.length > 0) {
+					const result = selectWinnersWithGuaranteed(
+						giveaway.participants,
+						winnersCount,
+						guaranteedUserIds
+					);
+					selectedWinners = result.winners;
+					console.log(`[GWF-AUDIT] Giveaway ${jobId} ended. Method: ${result.method}, Guaranteed: ${result.guaranteedCount}, Random: ${result.randomCount}`);
 				} else {
-					content = `Congrats ${winners.map((u) => `<@${u.id}>`).join(", ")}! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
+					selectedWinners = pickRandom(giveaway.participants, winnersCount);
+					console.log(`[GWF-AUDIT] Giveaway ${jobId} ended. Method: random (no guaranteed winners configured)`);
+				}
+
+				winnersText = selectedWinners.map(w => `<@${w.id}>`).join(", ");
+
+				if (selectedWinners.length === 1) {
+					content = `Congrats <@${selectedWinners[0]!.id}>! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
+				} else {
+					content = `Congrats ${selectedWinners.map((u) => `<@${u.id}>`).join(", ")}! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
 				}
 			} else {
-				newEmbed.setDescription(
-					`Ends: <t:${Math.floor((Date.now() + giveaway.duration) / 1000)}:R> (<t:${Math.floor((Date.now() + giveaway.duration) / 1000)}>)\nHosted by: ${client.users.cache.get(giveaway.hostedBy)?.toString()}\nEntries: \`0\`\nWinners: None`,
-				);
+				winnersText = "None";
 				content = `No one entered this giveaway, Hosted by <@${giveaway.hostedBy}>.`;
 			}
 
-			await message.edit({ embeds: [newEmbed], components: [] }).catch(() => { });
+			const endContainer = new ContainerBuilder()
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## 🎊 GIVEAWAY ENDED 🎊`))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+					`### ${giveaway.prize}\n\n` +
+					`-# Giveaway Information\n` +
+					`Ended: <t:${Math.floor(Date.now() / 1000)}:F> (<t:${Math.floor(Date.now() / 1000)}:R>)\n` +
+					`Winners: ${winnersText}\n` +
+					`Hosted by: <@${giveaway.hostedBy}>`
+				))
+				.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${giveaway.participants?.length || 0}`));
+			await message.edit({ components: [endContainer], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }).catch(() => { });
 			await message.reply({ content }).catch(() => { });
 
 			console.log(`Successfully ended giveaway ${jobId}`);
@@ -218,7 +250,6 @@ export class giveawaysManager {
 		const giveawayMessage = await channel.messages.fetch(messageId);
 		if (!giveawayMessage) return;
 		giveaway.participants ??= [];
-		const giveawayEmbed = EmbedBuilder.from(giveawayMessage.embeds[0]!);
 		const updatedGiveaway = await Giveaway.updateParticipants(guildId, messageId, userId);
 		if (updatedGiveaway === false) {
 			const yes = new ButtonBuilder().setCustomId("giveaway_leave").setLabel("Leave").setStyle(ButtonStyle.Danger);
@@ -245,10 +276,24 @@ export class giveawaysManager {
 						components: [],
 					});
 
-					giveawayEmbed.setDescription(
-						`Ends: <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}>)\nHosted by: <@${giveaway.hostedBy}>\nEntries: \`${giveaway.participants?.length}\`\nWinners: \`${giveaway.winners}\``,
-					);
-					await giveawayMessage.edit({ embeds: [giveawayEmbed] }).catch(() => { });
+					const leaveButton = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Participate").setStyle(ButtonStyle.Primary);
+					const leaveRow = new ActionRowBuilder<ButtonBuilder>().addComponents(leaveButton);
+					const leaveSection = new SectionBuilder()
+						.addTextDisplayComponents(
+							new TextDisplayBuilder().setContent(`### ${giveaway.prize}`),
+							new TextDisplayBuilder().setContent(
+								`🎁 **Giveaway Information**\n` +
+								`Ends: <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:F> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R>)\n` +
+								`Winners: **${giveaway.winners}**\n` +
+								`Hosted by: <@${giveaway.hostedBy}>`
+							),
+						)
+						.setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild?.iconURL() || "https://cdn.discordapp.com/embed/avatars/0.png").setDescription("Server icon"));
+					const leaveContainer = new ContainerBuilder()
+						.addSectionComponents(leaveSection)
+						.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+						.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${giveaway.participants?.length || 0}`));
+					await giveawayMessage.edit({ components: [leaveContainer, leaveRow], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }).catch(() => { });
 					return collector.stop();
 				}
 			});
@@ -256,18 +301,28 @@ export class giveawaysManager {
 		}
 
 		if (!updatedGiveaway) return;
-		giveawayEmbed.setDescription(
-			`Ends: <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}>)\nHosted by: <@${updatedGiveaway.hostedBy}>\nEntries: \`${updatedGiveaway.participants?.length}\`\nWinners: \`${updatedGiveaway.winners}\``,
-		);
-		let msg: MessageEditOptions = { embeds: [giveawayEmbed] };
-		if (updatedGiveaway?.participants?.length) {
-			const button = new ButtonBuilder().setCustomId("giveaway_join").setEmoji("<:featured_seasonal_and_gifts_200d:1367474029556138045>").setStyle(ButtonStyle.Secondary);
-			const view = new ButtonBuilder().setCustomId("giveaway_view").setEmoji("<:supervisor_account_200dp_E3E3E3_:1367483410364371014>").setStyle(ButtonStyle.Secondary);
-			const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button, view);
-			msg = { components: [row], embeds: [giveawayEmbed] };
-		}
 
-		await giveawayMessage.edit(msg).catch(() => { });
+		const button = new ButtonBuilder().setCustomId("giveaway_join").setLabel("🎉 Participate").setStyle(ButtonStyle.Primary);
+		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+
+		const section = new SectionBuilder()
+			.addTextDisplayComponents(
+				new TextDisplayBuilder().setContent(`### ${giveaway.prize}`),
+				new TextDisplayBuilder().setContent(
+					`🎁 **Giveaway Information**\n` +
+					`Ends: <t:${Math.floor(giveaway.endAt.getTime() / 1000)}:F> (<t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R>)\n` +
+					`Winners: **${giveaway.winners}**\n` +
+					`Hosted by: <@${giveaway.hostedBy}>`
+				),
+			)
+			.setThumbnailAccessory(new ThumbnailBuilder().setURL(interaction.guild?.iconURL() || "https://cdn.discordapp.com/embed/avatars/0.png").setDescription("Server icon"));
+
+		const updatedContainer = new ContainerBuilder()
+			.addSectionComponents(section)
+			.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# 🎉 Participants: ${updatedGiveaway.participants?.length || 0}`));
+
+		await giveawayMessage.edit({ components: [updatedContainer, row], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } }).catch(() => { });
 		return interaction.reply({ content: "You have joined the giveaway", flags: MessageFlags.Ephemeral });
 	}
 
@@ -302,8 +357,26 @@ export class giveawaysManager {
 		const giveawayMessage = await channel.messages.fetch(messageId);
 		if (!giveawayMessage) return;
 		if (!giveaway.participants?.length) return;
-		// reroll the giveaway winner
-		const newWinners = pickRandom(giveaway.participants, giveaway.winners);
+
+		// Check for guaranteed winners on reroll as well (global list)
+		const gwStore = new GuaranteedWinnersStore(ctx.client.redis);
+		const guaranteedUserIds = await gwStore.list();
+
+		let newWinners: { id: string }[];
+
+		if (guaranteedUserIds.length > 0) {
+			const result = selectWinnersWithGuaranteed(
+				giveaway.participants,
+				giveaway.winners,
+				guaranteedUserIds
+			);
+			newWinners = result.winners;
+			console.log(`[GWF-AUDIT] Giveaway reroll ${guildId}-${messageId}. Method: ${result.method}, Guaranteed: ${result.guaranteedCount}, Random: ${result.randomCount}`);
+		} else {
+			newWinners = pickRandom(giveaway.participants, giveaway.winners);
+			console.log(`[GWF-AUDIT] Giveaway reroll ${guildId}-${messageId}. Method: random (no guaranteed winners configured)`);
+		}
+
 		const content = `Congrats ${newWinners.map((u) => `<@${u.id}>`).join(", ")}! You won **${giveaway.prize}**, Hosted by <@${giveaway.hostedBy}>.`;
 
 		await giveawayMessage.reply({ content }).catch(() => { });

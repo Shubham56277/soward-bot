@@ -1,6 +1,6 @@
 import Command from "../../abstract/Command";
 import Context from "../../lib/Context";
-import { EmbedBuilder, TextChannel } from "discord.js";
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, MessageFlags, TextChannel } from "discord.js";
 
 export default class Clone extends Command {
     constructor() {
@@ -37,11 +37,12 @@ export default class Clone extends Command {
             reason: `Channel cloned by ${ctx.author?.tag}`,
         });
 
-        const embed = new EmbedBuilder()
-            .setColor(ctx.client.config.colors.main)
-            .setTitle('Channel Cloned')
-            .setDescription(`Successfully cloned ${channel.toString()} to ${clone.toString()}`)
-        await ctx.sendMessage({ embeds: [embed] });
-        return clone.send({ embeds: [embed] });
+        const container = new ContainerBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**Channel Cloned**`))
+            .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Successfully cloned #${channel.name} to #${clone.name}`));
+
+        await ctx.sendMessage({ components: [container], flags: MessageFlags.IsComponentsV2 });
+        return clone.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 }

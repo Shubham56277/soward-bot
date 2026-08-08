@@ -1,13 +1,9 @@
 import BaseClient from "../../base/Client";
 import Event from "../../abstract/Event";
 import { AuditLogEvent, Events } from "discord.js";
-import { AntiNuke } from "@repo/db";
 
 
 export default class GuildRoleDelete extends Event {
-    // Ultra-fast cache
-    private configCache = new Map<string, AntiNuke>();
-    private trustedCache = new Map<string, any>();
     private roleCache = new Map<string, any>();
 
     constructor(client: BaseClient) {
@@ -33,13 +29,7 @@ export default class GuildRoleDelete extends Event {
             });
 
             try {
-                // Ultra-fast config check with cache
-                let config = this.configCache.get(guildId);
-                if (!config) {
-                    config = await this.client.services.antinukes.getConfig(guildId);
-                    this.configCache.set(guildId, config);
-                    setTimeout(() => this.configCache.delete(guildId), 30000);
-                }
+                const config = await this.client.services.antinukes.getConfig(guildId);
 
                 const actionConfig = config?.role?.find(c => c.type === "delete");
                 if (!actionConfig?.enabled || !config.enabled) return;
@@ -48,7 +38,10 @@ export default class GuildRoleDelete extends Event {
                 const logs = await guild.fetchAuditLogs({
                     limit: 1,
                     type: AuditLogEvent.RoleDelete
-                }).catch(() => null);
+                }).catch(error => {
+                    this.client.logger?.error?.(error);
+                    return null;
+                });
 
                 if (!logs) return;
                 const log = logs.entries.first();
@@ -63,58 +56,56 @@ export default class GuildRoleDelete extends Event {
                     executorId === config.admin ||
                     (now - log.createdTimestamp) > 120000) return;
 
-                // Ultra-fast trusted user check with cache
-                let trustedSet = this.trustedCache.get(guildId);
-                if (!trustedSet) {
-                    trustedSet = new Set(config.trustedUsers?.map(u => u.id) || []);
-                    this.trustedCache.set(guildId, trustedSet);
-                    setTimeout(() => this.trustedCache.delete(guildId), 30000);
-                }
-
-                if (trustedSet.has(executorId)) return;
+                if (await this.client.services.antinukes.isBypassed(guild, executorId)) return;
 
                 // Fast member check using cache first
                 let member = guild.members.cache.get(executorId) as any;
                 if (!member) {
-                    member = await guild.members.fetch(executorId).catch(() => null);
+                    member = await guild.members.fetch(executorId).catch(error => {
+                        this.client.logger?.error?.(error);
+                        return null;
+                    });
                     if (!member) return;
                 }
 
                 if (!this.client.services.antinukes.canModerate(member, guild.members.me!)) return;
                 if (actionConfig.limit <= 1) {
-                    await this.client.services.antinukes.punishUser(
+                    const enforced = await this.client.services.antinukes.punishUser(
                         guild,
                         executorId,
                         actionConfig.action,
                         "Anti-Role Protection | Unauthorized Role Deletion",
-
                     );
+                    if (!enforced) return;
                     const cachedRole = this.roleCache.get(roleId);
                     if (cachedRole) {
                         await guild.roles.create({
                             ...cachedRole,
                             reason: "Anti-Role Protection | Role Restoration"
-                        }).catch(() => { });
+                        }).catch(error => {
+                            this.client.logger?.error?.(error);
+                        });
                     }
                     return;
                 }
                 const tracked = await this.client.services.antinukes.trackAction(guild, executorId, "roleDelete", actionConfig);
 
                 if (tracked) {
-                    // Fire actions immediately without waiting
-                    await this.client.services.antinukes.punishUser(
+                    const enforced = await this.client.services.antinukes.punishUser(
                         guild,
                         executorId,
                         actionConfig.action,
                         "Anti-Role Protection | Unauthorized Role Deletion",
-
                     );
+                    if (!enforced) return;
                     const cachedRole = this.roleCache.get(roleId);
                     if (cachedRole) {
                         await guild.roles.create({
                             ...cachedRole,
                             reason: "Anti-Role Protection | Role Restoration"
-                        }).catch(() => { });
+                        }).catch(error => {
+                            this.client.logger?.error?.(error);
+                        });
                     }
                 }
 

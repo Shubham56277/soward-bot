@@ -31,7 +31,7 @@ export default class Facepalm extends Command {
         const data = await body.json() as { link: string };
 
         let message: string;
-        if (facepalmPower < 40) message = "Mild disappointment 🤦";
+        if (facepalmPower < 40) message = "Mild disappointment";
         else if (facepalmPower < 80) message = "Why am I not surprised?";
         else message = "BRAIN CELLS LOST FOREVER!";
 

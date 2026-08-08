@@ -12,23 +12,29 @@ export default class TrackStart extends Event {
 
 	public async execute(): Promise<void> {
 		startMusicProgressUpdater(this.client);
-		this.client.manager.on("trackStart", async (player, track) => {
-			const guild = this.client.guilds.cache.get(player.guildId);
-			if (!guild || !player.textChannelId || !track) return;
-			const channel = guild.channels.cache.get(player.textChannelId) as TextChannel;
-			if (!channel?.isTextBased()) return;
-
-			const message = await channel.send({
-				components: [createMusicPanel(player, track, this.client.config.colors.main, this.client.user?.displayAvatarURL())],
-				flags: MessageFlags.IsComponentsV2,
+		this.client.manager.on("trackStart", (player, track) => {
+			void this.handleTrackStart(player, track).catch((error) => {
+				this.client.logger.error(`[trackStart] Failed for guild ${player.guildId}`, error);
 			});
-			player.set("messageId", message.id);
+		});
+	}
 
-			const recommendations = await getMusicRecommendations(this.client.redis, player, track);
-			if (player.queue.current?.info.identifier !== track.info.identifier || !recommendations.length) return;
-			await message.edit({
-				components: [createMusicPanel(player, track, this.client.config.colors.main, this.client.user?.displayAvatarURL(), recommendations)],
-			}).catch(() => undefined);
+	private async handleTrackStart(player: any, track: any): Promise<void> {
+		const guild = this.client.guilds.cache.get(player.guildId);
+		if (!guild || !player.textChannelId || !track) return;
+		const channel = guild.channels.cache.get(player.textChannelId) as TextChannel;
+		if (!channel?.isTextBased()) return;
+
+		const message = await channel.send({
+			components: [createMusicPanel(player, track, this.client.config.colors.main, this.client.user?.displayAvatarURL())],
+			flags: MessageFlags.IsComponentsV2,
+		});
+		player.set("messageId", message.id);
+
+		const recommendations = await getMusicRecommendations(this.client.redis, player, track);
+		if (player.queue.current?.info.identifier !== track.info.identifier || !recommendations.length) return;
+		await message.edit({
+			components: [createMusicPanel(player, track, this.client.config.colors.main, this.client.user?.displayAvatarURL(), recommendations)],
 		});
 	}
 }

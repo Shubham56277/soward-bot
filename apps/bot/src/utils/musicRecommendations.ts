@@ -34,24 +34,38 @@ export async function getMusicRecommendations(redis: Redis, player: Player, trac
 	if (cached.length) return cached;
 
 	try {
-		let result: any;
-		if (track.info.sourceName === "youtube" || track.info.sourceName === "youtubemusic") {
-			result = await player.search(
-				{ query: `https://www.youtube.com/watch?v=${track.info.identifier}&list=RD${track.info.identifier}`, source: "youtube" },
-				track.requester,
-			);
-		} else if (track.info.sourceName === "spotify") {
-			const seeds = [track, ...player.queue.previous]
-				.filter((item) => item.info.sourceName === "spotify")
-				.map((item) => item.info.identifier)
-				.filter(Boolean)
-				.slice(0, 5);
-			result = await player.search({ query: `seed_tracks=${seeds.join(",")}`, source: "sprec" }, track.requester);
-		} else {
-			result = await player.search({ query: `${track.info.title} ${track.info.author}`, source: "youtubemusic" }, track.requester);
-		}
+		// Clean up the title before searching — SoundCloud titles often have
+		// noise like ".mp3", "(Official Audio)", "[Lyrics]", etc.
+		const cleanTitle = (track.info.title ?? "")
+			.replace(/\.(mp3|wav|m4a|flac|ogg)$/i, "")
+			.replace(/\(.*?\)/g, "")
+			.replace(/\[.*?\]/g, "")
+			.replace(/\bofficial\b/gi, "")
+			.replace(/\baudio\b/gi, "")
+			.replace(/\blyrics?\b/gi, "")
+			.replace(/\bvideo\b/gi, "")
+			.replace(/[-–—|]/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
 
-		const resolvedTracks = (result?.tracks || []).filter((candidate) => typeof candidate.info.identifier === "string" && typeof candidate.info.duration === "number") as Track[];
+		const cleanAuthor = (track.info.author ?? "")
+			.replace(/[-–—|]/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+
+		// Build a clean search query — just the core song identity
+		const searchQuery = `${cleanTitle} ${cleanAuthor}`.trim();
+		if (searchQuery.length < 3) return [];
+
+		const result = await player.search({ query: searchQuery, source: "scsearch" }, track.requester);
+
+		const resolvedTracks = (result?.tracks || []).filter((candidate) =>
+			typeof candidate.info.identifier === "string" &&
+			typeof candidate.info.duration === "number" &&
+			candidate.info.duration > 30_000 &&
+			!/\.(mp3|wav|m4a|flac)$/i.test(candidate.info.title ?? ""),
+		) as Track[];
+
 		const recommendations = usableTracks(resolvedTracks, track);
 		if (recommendations.length) await redis.setex(cacheKey(player, track), CACHE_SECONDS, JSON.stringify(recommendations));
 		return recommendations;

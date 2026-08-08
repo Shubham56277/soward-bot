@@ -2,26 +2,29 @@
 import { Message } from "discord.js";
 import Redis from "ioredis";
 
+// Only the fields the snipe command actually displays are stored, to keep
+// Redis usage minimal.
 interface SnipedMessage {
-	messageId: string;
 	content: string;
 	author: string;
-	authorId: string;
 	timestamp: number;
 	image?: string;
-	authorAvatar?: string;
 }
 
-interface EditSnipedMessage extends SnipedMessage {
+interface EditSnipedMessage {
+	author: string;
 	oldContent: string;
+	content: string;
 	editTimestamp: number;
-	authorAvatar?: string;
 }
+
+const MAX_CONTENT = 1024;
+const trim = (text: string | null | undefined) => (text ? String(text).slice(0, MAX_CONTENT) : "");
 
 class MessageTracker {
 	private readonly deletedKeyPrefix = "snipes:deleted:";
 	private readonly editedKeyPrefix = "snipes:edited:";
-	private readonly maxStored = 25;
+	private readonly maxStored = 15;
 	private readonly maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 	private getDeletedKey(channelId: string) {
@@ -40,7 +43,8 @@ class MessageTracker {
 		const validMessages = messages.filter(msgStr => {
 			try {
 				const msg = JSON.parse(msgStr);
-				return msg.timestamp > cutoffTime;
+				const ts = msg.timestamp ?? msg.editTimestamp;
+				return typeof ts === "number" && ts > cutoffTime;
 			} catch {
 				return false; // Remove invalid JSON
 			}
@@ -64,12 +68,9 @@ class MessageTracker {
 		if (message.author.bot) return;
 		const redis = message.client.redis;
 		const snipe: SnipedMessage = {
-			messageId: message.id,
-			content: message.content,
+			content: trim(message.content),
 			author: message.author.tag,
-			authorId: message.author.id,
 			timestamp: Date.now(),
-			authorAvatar: message.author.displayAvatarURL(),
 		};
 
 		const image = message.attachments.find((a) => a.contentType?.startsWith("image/") || a.url.match(/\.(png|jpe?g|gif)$/i));
@@ -93,14 +94,10 @@ class MessageTracker {
 
 		const redis = newMessage.client.redis;
 		const snipe: EditSnipedMessage = {
-			messageId: newMessage.id,
-			content: newMessage.content,
-			oldContent: oldMessage.content,
+			content: trim(newMessage.content),
+			oldContent: trim(oldMessage.content),
 			author: newMessage.author.tag,
-			authorId: newMessage.author.id,
-			timestamp: oldMessage.createdTimestamp,
 			editTimestamp: Date.now(),
-			authorAvatar: newMessage.author.displayAvatarURL(),
 		};
 
 		const key = this.getEditedKey(newMessage.channel.id);
@@ -134,6 +131,11 @@ class MessageTracker {
 
 		const raw = await redis.lrange(key, 0, -1);
 		return raw.map((r) => JSON.parse(r));
+	}
+
+	/** Clear all snipe data (deleted + edited) for a channel. Returns how many keys were removed. */
+	public async clearChannel(redis: Redis, channelId: string): Promise<number> {
+		return redis.del(this.getDeletedKey(channelId), this.getEditedKey(channelId));
 	}
 
 	// Optional: Method to manually clean up all channels
