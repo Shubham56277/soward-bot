@@ -573,8 +573,18 @@ async function getExecutorMemberCached(guild: Guild, executorId: string): Promis
   return member || null;
 }
 
-function updateCachedAntiNukeConfig(guildId: string, config: Awaited<ReturnType<typeof getAntiNukeConfig>> | null): void {
+export function updateCachedAntiNukeConfig(guildId: string, config: Awaited<ReturnType<typeof getAntiNukeConfig>> | null): void {
   antiNukeConfigCache.set(guildId, { config });
+}
+
+/**
+ * Invalidate the in-memory LRU config cache for a guild.
+ * Call this from commands that update the V2 AntiNuke config (e.g. enable/disable)
+ * so the runtime picks up the new state immediately.
+ */
+export function invalidateAntiNukeRuntimeCache(guildId: string): void {
+  antiNukeConfigCache.delete(guildId);
+  premiumStatusCache.delete(guildId);
 }
 
 async function getGuildProtectionState(
@@ -650,12 +660,147 @@ function countActionWithinWindow(counterMap: TimestampCounterStore, key: string,
   return current.length;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Emergency Mass Member Protection — always active, even when AntiNuke is disabled
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMERGENCY_MASS_PROTECTION_THRESHOLD = 70;
+const EMERGENCY_MASS_PROTECTION_WINDOW_MS = 10 * 60_000; // 10 minutes
+const EMERGENCY_MASS_COUNTERS_MAX = 100_000;
+const EMERGENCY_MASS_COUNTERS_TTL_MS = 11 * 60_000;
+
+/** key: `${guildId}:${executorId}` → timestamps of kicks/bans */
+const emergencyMassProtectionCounters = new LRUCache<string, number[]>({
+  max: EMERGENCY_MASS_COUNTERS_MAX,
+  ttl: EMERGENCY_MASS_COUNTERS_TTL_MS,
+  ttlAutopurge: false,
+  updateAgeOnGet: false,
+});
+
+/** key: `${guildId}:${executorId}` → expiry timestamp (deduplication lock) */
+const emergencyMassPunishmentLocks = new LRUCache<string, number>({
+  max: EMERGENCY_MASS_COUNTERS_MAX,
+  ttl: EMERGENCY_MASS_COUNTERS_TTL_MS,
+  ttlAutopurge: false,
+  updateAgeOnGet: false,
+});
+
+interface EmergencyMassProtectionResult {
+  triggered: boolean;
+  count: number;
+}
+
+async function checkEmergencyMassProtection(
+  client: Bot,
+  guild: Guild,
+  executorId: string,
+  action: "banAdd" | "memberKick",
+): Promise<EmergencyMassProtectionResult> {
+  // Skip guild owner and bot self
+  if (executorId === guild.ownerId || executorId === client.user?.id) {
+    return { triggered: false, count: 0 };
+  }
+
+  const key = `${guild.id}:${executorId}`;
+  const now = Date.now();
+  const timestamps = emergencyMassProtectionCounters.get(key) || [];
+  const cutoff = now - EMERGENCY_MASS_PROTECTION_WINDOW_MS;
+
+  // Binary search to prune old timestamps
+  let lo = 0;
+  while (lo < timestamps.length && timestamps[lo] < cutoff) lo++;
+  if (lo > 0) timestamps.splice(0, lo);
+
+  timestamps.push(now);
+  emergencyMassProtectionCounters.set(key, timestamps);
+
+  if (timestamps.length < EMERGENCY_MASS_PROTECTION_THRESHOLD) {
+    return { triggered: false, count: timestamps.length };
+  }
+
+  // Check deduplication lock to prevent double-punishment
+  const lockExpiry = emergencyMassPunishmentLocks.get(key);
+  if (lockExpiry && now < lockExpiry) {
+    return { triggered: false, count: timestamps.length };
+  }
+
+  // Set lock for 10 minutes
+  emergencyMassPunishmentLocks.set(key, now + EMERGENCY_MASS_PROTECTION_WINDOW_MS);
+
+  // Punish executor — default to ban
+  try {
+    const member = await guild.members.fetch(executorId).catch(() => null);
+    if (member && member.bannable) {
+      await guild.members.ban(executorId, {
+        deleteMessageSeconds: 0,
+        reason: `[EMERGENCY] Mass member protection: ${timestamps.length} kick/ban actions in 10 minutes`,
+      });
+    } else if (member) {
+      // Fallback: strip roles
+      const roles = [...member.roles.cache.values()].filter(r => r.id !== guild.id && !r.managed && r.editable);
+      if (roles.length) await member.roles.remove(roles, `[EMERGENCY] Mass member protection: ${timestamps.length} actions`);
+      if (member.moderatable) await member.timeout(28 * 24 * 60 * 60 * 1000, `[EMERGENCY] Mass member protection`);
+    }
+  } catch (err) {
+    logger.warn(`[ ANTINUKE ] Emergency mass protection punishment failed for ${executorId} in ${guild.id}: ${err}`);
+  }
+
+  // Log incident
+  try {
+    await addAntiNukeIncident({
+      guildId: guild.id,
+      executorId,
+      action,
+      punishment: "ban",
+      contextLabel: `[EMERGENCY] Mass member protection triggered (${timestamps.length}/${EMERGENCY_MASS_PROTECTION_THRESHOLD} in 10 min)`,
+      threshold: EMERGENCY_MASS_PROTECTION_THRESHOLD,
+    });
+  } catch { /* ignore */ }
+
+  // Try to notify the guild owner
+  try {
+    const owner = await guild.fetchOwner();
+    await owner.send({
+      content: [
+        "🚨 **Emergency Mass Member Protection Triggered**",
+        "",
+        `**Server:** ${guild.name}`,
+        `**Executor:** <@${executorId}>`,
+        `**Action:** ${action === "banAdd" ? "Mass Ban" : "Mass Kick"}`,
+        `**Count:** ${timestamps.length} actions in 10 minutes`,
+        `**Punishment:** Ban (or role-strip + timeout if unbannnable)`,
+        "",
+        "-# This protection is always active, even when AntiNuke is disabled.",
+      ].join("\n"),
+    }).catch(() => null);
+  } catch { /* ignore */ }
+
+  logger.warn(`[ ANTINUKE ] Emergency mass protection triggered for ${executorId} in ${guild.id} (${timestamps.length} ${action} actions)`);
+  return { triggered: true, count: timestamps.length };
+}
+
 export async function evaluateAntiNukeAction(
   client: Bot,
   guild: Guild,
   action: AntiNukeAction,
   options?: RunAntiNukeOptions,
 ): Promise<AntiNukeActionEvaluation> {
+  // ── Emergency Mass Member Protection — always active, even when disabled ──
+  if (action === "banAdd" || action === "memberKick") {
+    const executorIdForEmergency = options?.executorId ?? await resolveExecutorIdFromAudit(guild, action, options);
+    if (executorIdForEmergency) {
+      const emergencyResult = await checkEmergencyMassProtection(client, guild, executorIdForEmergency, action);
+      if (emergencyResult.triggered) {
+        return {
+          shouldEnforce: true,
+          executorId: executorIdForEmergency,
+          executorMember: null,
+          config: null,
+        };
+      }
+    }
+  }
+
   const state = await getGuildProtectionState(guild.id);
   const premiumActive = state.premiumActive;
   if (!premiumActive) {
@@ -697,9 +842,9 @@ export async function evaluateAntiNukeAction(
   }
 
   if (isExtraOwner(config, executorId)) {
-    // Extra owners bypass antinuke but are rate-tracked (20 actions per 10 minutes)
+    // Extra owners bypass antinuke but are rate-tracked (60 actions per 10 minutes)
     // If they exceed the limit, they get punished + role-stripped (same as whitelist)
-    const EXTRA_OWNER_LIMIT = 20;
+    const EXTRA_OWNER_LIMIT = 60;
     const EXTRA_OWNER_WINDOW_MS = 10 * 60_000; // 10 minutes
     const eoKey = `${guild.id}:${executorId}:extraowner`;
     const now = Date.now();
@@ -737,7 +882,7 @@ export async function evaluateAntiNukeAction(
         executorMember,
         config,
         isWhitelistViolation: true,
-        whitelistViolationReason: "Extra owner action limit exceeded (20 per 10 mins)",
+        whitelistViolationReason: "Extra owner action limit exceeded (60 per 10 mins)",
         whitelistLimitThreshold: EXTRA_OWNER_LIMIT,
         whitelistLimitWindow: 600,
       };
@@ -761,7 +906,7 @@ export async function evaluateAntiNukeAction(
 
   if (hasActionWhitelist && !isExpired) {
     if (!hasBypassRole && config.whitelistLimitsEnabled && config.whitelistLimitsActions?.includes(action)) {
-      const globalThreshold = config.whitelistLimitsThreshold ?? 25;
+      const globalThreshold = config.whitelistLimitsThreshold ?? 60;
       const globalWindow = config.whitelistLimitsWindow ?? 600;
       const count = countActionWithinWindow(
         actionCountersWhitelist,
@@ -855,7 +1000,7 @@ export async function evaluateAntiNukeAction(
     if (matchedRoleProfile) {
       // Role-whitelisted users are also subject to whitelist limits
       if (!hasBypassRole && config.whitelistLimitsEnabled && config.whitelistLimitsActions?.includes(action)) {
-        const globalThreshold = config.whitelistLimitsThreshold ?? 25;
+        const globalThreshold = config.whitelistLimitsThreshold ?? 60;
         const globalWindow = config.whitelistLimitsWindow ?? 600;
         const count = countActionWithinWindow(
           actionCountersWhitelist,
@@ -1691,6 +1836,13 @@ export async function runAntiNukeProtectionDetailed(
 ): Promise<AntiNukeProtectionResult> {
   try {
     const evaluation = await evaluateAntiNukeAction(client, guild, action, options);
+
+    // Emergency Mass Protection triggers independently and self-punishes.
+    // If config is null but shouldEnforce is true, it was an emergency enforcement.
+    if (evaluation.shouldEnforce && !evaluation.config && evaluation.executorId) {
+      return { enforced: true, enforcedNow: true, cooldownOnly: false };
+    }
+
     if (!evaluation.shouldEnforce || !evaluation.executorId || !evaluation.config) {
       return { enforced: false, enforcedNow: false, cooldownOnly: false };
     }
@@ -1759,7 +1911,7 @@ export async function runAntiNukeProtectionDetailed(
     // ── Normal mode — threshold-based enforcement ──────────────────────────
 
     if (evaluation.isWhitelistViolation) {
-      const violationThreshold = evaluation.whitelistLimitThreshold ?? config.whitelistLimitsThreshold ?? 25;
+      const violationThreshold = evaluation.whitelistLimitThreshold ?? config.whitelistLimitsThreshold ?? 60;
       const violationWindow = evaluation.whitelistLimitWindow ?? config.whitelistLimitsWindow ?? 600;
       const violationReason = evaluation.whitelistViolationReason ?? "Whitelist rate limit exceeded";
       const punishment = config.whitelistLimitsPunishment ?? "ban";

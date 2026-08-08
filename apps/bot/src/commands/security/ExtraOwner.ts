@@ -38,17 +38,17 @@ interface ExtraOwnerConfig {
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const REDIS_KEY = (guildId: string) => `extraowners:${guildId}`;
-const MAX_EXTRA_OWNERS = 20;
+const MAX_EXTRA_OWNERS = 60;
 const COLLECTOR_TIMEOUT = 120_000;
 
 const DEFAULT_LIMITS: ExtraOwnerLimits = {
-	memberBan: 20,
-	memberKick: 20,
-	roleAction: 20,
-	channelAction: 20,
-	webhookAction: 20,
-	emojiAction: 20,
-	mentionLimit: 20,
+	memberBan: 60,
+	memberKick: 60,
+	roleAction: 60,
+	channelAction: 60,
+	webhookAction: 60,
+	emojiAction: 60,
+	mentionLimit: 60,
 	timeWindow: 600,
 };
 

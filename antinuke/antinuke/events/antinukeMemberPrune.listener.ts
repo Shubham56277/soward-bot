@@ -2,7 +2,6 @@ import { AuditLogEvent, GuildMember } from "discord.js";
 import { Bot } from "../../core/client";
 import { Event } from "../../tools/events";
 import { runAntiNukeProtection } from "../client/antinukeRuntime";
-import { isGuildPremiumActive } from "../../utils/premiumGuard";
 
 export default class AntiNukeMemberPruneListener extends Event {
   constructor(client: Bot, file: string) {
@@ -13,8 +12,8 @@ export default class AntiNukeMemberPruneListener extends Event {
   }
 
   public async run(member: GuildMember): Promise<void> {
-    if (!await isGuildPremiumActive(member.guild.id)) return;
-
+    // Emergency Mass Member Protection runs regardless of premium status.
+    // The premium check is handled inside evaluateAntiNukeAction for normal enforcement.
     await runAntiNukeProtection(this.client, member.guild, "memberPrune", `memberPrune:${member.user.tag}`, {
       auditType: AuditLogEvent.MemberPrune,
     });

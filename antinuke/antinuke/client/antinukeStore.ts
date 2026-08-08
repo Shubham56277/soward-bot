@@ -111,7 +111,7 @@ export interface AntiNukeAudit {
 
 
 export const ANTINUKE_WHITELIST_LIMIT = 50;
-export const ANTINUKE_EXTRA_OWNER_LIMIT = 20;
+export const ANTINUKE_EXTRA_OWNER_LIMIT = 60;
 export const ANTINUKE_REQUIRED_ROLE_LIMIT = 10;
 
 export const ANTINUKE_PROTECTED_ACTIONS: AntiNukeAction[] = [
@@ -404,7 +404,7 @@ function sanitizeConfig(input: Partial<AntiNukeConfig>): AntiNukeConfig {
     offenceHistory,
     webhookUrl: typeof input.webhookUrl === "string" && input.webhookUrl.trim().startsWith("https://") ? input.webhookUrl.trim() : null,
     whitelistLimitsEnabled: Boolean(input.whitelistLimitsEnabled),
-    whitelistLimitsThreshold: typeof input.whitelistLimitsThreshold === "number" && input.whitelistLimitsThreshold > 0 ? Math.floor(input.whitelistLimitsThreshold) : 25,
+    whitelistLimitsThreshold: typeof input.whitelistLimitsThreshold === "number" && input.whitelistLimitsThreshold > 0 ? Math.floor(input.whitelistLimitsThreshold) : 60,
     whitelistLimitsWindow: typeof input.whitelistLimitsWindow === "number" && input.whitelistLimitsWindow > 0 ? Math.floor(input.whitelistLimitsWindow) : 600,
     whitelistLimitsPunishment: normalizePunishment(input.whitelistLimitsPunishment ?? "ban"),
     whitelistLimitsActions: Array.isArray(input.whitelistLimitsActions) ? input.whitelistLimitsActions.filter((a: any) => ANTINUKE_PROTECTED_ACTIONS.includes(a)) : [],
@@ -481,7 +481,7 @@ function mapDbConfig(model: {
     offenceHistory: safeJsonParse(model.offenceHistory ?? "{}", {}),
     webhookUrl: model.webhookUrl ?? null,
     whitelistLimitsEnabled: model.whitelistLimitsEnabled ?? false,
-    whitelistLimitsThreshold: typeof model.whitelistLimitsThreshold === "number" ? model.whitelistLimitsThreshold : 25,
+    whitelistLimitsThreshold: typeof model.whitelistLimitsThreshold === "number" ? model.whitelistLimitsThreshold : 60,
     whitelistLimitsWindow: typeof model.whitelistLimitsWindow === "number" ? model.whitelistLimitsWindow : 600,
     whitelistLimitsPunishment: normalizePunishment(model.whitelistLimitsPunishment ?? "ban"),
     whitelistLimitsActions: Array.isArray(model.whitelistLimitsActions) ? (model.whitelistLimitsActions as AntiNukeAction[]) : [],
@@ -792,5 +792,13 @@ export async function removeAntiNukeGuildData(guildId: string): Promise<void> {
   await db.antiNukeConfig.deleteMany({ where: { guildId } }).catch(() => null);
   await db.antiNukeIncident.deleteMany({ where: { guildId } }).catch(() => null);
   await (db as any).antiNukeAudit.deleteMany({ where: { guildId } }).catch(() => null);
+  await redis?.del(`antinuke:config:${guildId}`).catch(() => null);
+}
+
+/**
+ * Invalidate the V2 Redis config cache for a guild.
+ * Call this from the legacy system's disable/enable commands to keep caches in sync.
+ */
+export async function invalidateAntiNukeRedisCache(guildId: string): Promise<void> {
   await redis?.del(`antinuke:config:${guildId}`).catch(() => null);
 }

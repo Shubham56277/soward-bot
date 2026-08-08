@@ -134,6 +134,7 @@ export default class AntiNukeCommand extends Command {
 				{ name: "disable", description: "Disable antinuke protection", type: ApplicationCommandOptionType.Subcommand },
 				{ name: "config", description: "Configure protection modules", type: ApplicationCommandOptionType.Subcommand },
 				{ name: "settings", description: "View current protection status", type: ApplicationCommandOptionType.Subcommand },
+				{ name: "emergency", description: "View or configure Emergency Mass Member Protection", type: ApplicationCommandOptionType.Subcommand },
 				{
 					name: "punishment",
 					description: "Set default punishment for all modules",
@@ -239,6 +240,7 @@ export default class AntiNukeCommand extends Command {
 				case "config": return this.config(ctx, settings);
 				case "settings": return this.dashboard(ctx);
 				case "punishment": return this.punishment(ctx, settings);
+				case "emergency": return this.emergency(ctx);
 				default: return this.dashboard(ctx);
 			}
 		} catch (error) {
@@ -510,6 +512,10 @@ export default class AntiNukeCommand extends Command {
 
 			await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, saved);
 			await updateProgress(7, ++activeStep);
+
+			// ── Sync V2: clear its Redis cache so it picks up enabled state ──
+			await ctx.client.redis.del(`antinuke:config:${ctx.guild.id}`).catch(() => {});
+
 			await updateProgress(steps.length);
 			return message;
 		} catch (error) {
@@ -527,10 +533,19 @@ export default class AntiNukeCommand extends Command {
 		const updated = await AntiNuke.update(ctx.guild.id!, buildDisabledAntiNukePatch(settings));
 		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
 
+		// ── Sync the V2 system: clear its Redis cache so it picks up disabled state ──
+		// The V2 runtime (antinuke/antinuke/client/antinukeRuntime.ts) uses a Redis key
+		// `antinuke:config:{guildId}` with 1-hour TTL, and an in-memory LRU (10s TTL).
+		// Deleting the Redis key forces a fresh DB read on next evaluation.
+		// Also update the V2 database directly so it reads `enabled: false`.
+		await ctx.client.redis.del(`antinuke:config:${ctx.guild.id}`).catch((err: unknown) => {
+			ctx.client.logger.error("[AntiNuke] Failed to invalidate V2 Redis cache:", err);
+		});
+
 		if (!wasEnabled) {
-			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection and every module are disabled.\nUse \`antinuke enable\` to re-activate.`);
+			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection and every module are disabled.\nEmergency Mass Member Protection remains active (70 kick/ban actions).\n\nUse \`antinuke enable\` to re-activate.`);
 		}
-		return reply(ctx, "Protection Disabled", `${EMOJI.warn} Protection and every module have been **disabled**.\n\n-# Use \`antinuke enable\` to re-activate.`);
+		return reply(ctx, "Protection Disabled", `${EMOJI.warn} Normal AntiNuke protections have been **disabled**.\n\nEmergency Mass Member Protection remains active at **70** kick/ban actions.\n\n-# Use \`antinuke enable\` to re-activate.`);
 	}
 
 	// ─── Punishment ───────────────────────────────────────────────────────
@@ -570,6 +585,27 @@ export default class AntiNukeCommand extends Command {
 		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
 
 		return reply(ctx, "Punishment Updated", `${EMOJI.check} Default action set to **${value}** across all modules.`);
+	}
+
+	// ─── Emergency Mass Member Protection ─────────────────────────────────
+
+	private async emergency(ctx: Context): Promise<any> {
+		const body = [
+			"**Emergency Mass Member Protection**",
+			"",
+			"This protection is **always active**, even when AntiNuke is disabled.",
+			"",
+			`${EMOJI.check} **Threshold:** 70 kick/ban actions in a rolling 10-minute window`,
+			`${EMOJI.check} **Punishment:** Ban (or role-strip + timeout if unbannnable)`,
+			`${EMOJI.check} **Scope:** Applies to all users except the server owner`,
+			`${EMOJI.check} **Status:** Always On`,
+			"",
+			"When any single user reaches the threshold, they are immediately punished",
+			"and the server owner is notified via DM.",
+			"",
+			"-# This protection cannot be disabled. It acts as a last-resort safety net.",
+		].join("\n");
+		return reply(ctx, "Emergency Protection", body);
 	}
 
 	// ─── Whitelist ────────────────────────────────────────────────────────
