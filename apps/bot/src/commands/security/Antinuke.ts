@@ -529,33 +529,93 @@ export default class AntiNukeCommand extends Command {
 	// ─── Disable ──────────────────────────────────────────────────────────
 
 	private async disable(ctx: Context, settings: AntiNuke): Promise<any> {
-		const wasEnabled = settings.enabled;
-		const updated = await AntiNuke.update(ctx.guild.id!, buildDisabledAntiNukePatch(settings));
-		await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
-
-		// ── Sync the V2 system: clear its Redis cache so it picks up disabled state ──
-		// The V2 runtime (antinuke/antinuke/client/antinukeRuntime.ts) uses a Redis key
-		// `antinuke:config:{guildId}` with 1-hour TTL, and an in-memory LRU (10s TTL).
-		// Deleting the Redis key forces a fresh DB read on next evaluation.
-		// Also update the V2 database directly so it reads `enabled: false`.
-		await ctx.client.redis.del(`antinuke:config:${ctx.guild.id}`).catch((err: unknown) => {
-			ctx.client.logger.error("[AntiNuke] Failed to invalidate V2 Redis cache:", err);
-		});
-
-		if (!wasEnabled) {
+		if (!settings.enabled) {
 			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection and every module are already disabled.\n\n${EMOJI.arrow} Use \`antinuke enable\` to re-activate.`);
 		}
 
-		const body = [
-			`${EMOJI.arrow} Disabling all protection modules...`,
-			`${EMOJI.arrow} Clearing active enforcement...`,
-			`${EMOJI.arrow} Emergency Mass Protection remains active (**70** kick/ban)`,
-			`${EMOJI.arrow} Configuration preserved.`,
-			`${EMOJI.check} **Antinuke Disabled Successfully!**`,
+		// Show confirmation prompt with Yes/No buttons
+		const confirmBody = [
+			"*Are you sure you want to disable antinuke for this server?* It is a **destructive step** as it will disable all protection modules.",
 			"",
-			`-# Use \`antinuke enable\` to re-activate.`,
+			"Will Be Disabled :",
+			`${EMOJI.arrow} **Enabled Filters**`,
+			`${EMOJI.arrow} **Limits**`,
+			`${EMOJI.arrow} **Active Enforcement**`,
+			"",
+			"-# Emergency Mass Protection (70 kick/ban) will remain active.",
 		].join("\n");
-		return reply(ctx, "Protection Disabled", body);
+
+		const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder()
+				.setCustomId("antinuke_disable_yes")
+				.setLabel("Yes")
+				.setStyle(ButtonStyle.Success),
+			new ButtonBuilder()
+				.setCustomId("antinuke_disable_no")
+				.setLabel("No")
+				.setStyle(ButtonStyle.Danger),
+		);
+
+		const msg = await ctx.editOrReply({
+			components: [panel("Disable Antinuke !", confirmBody), confirmRow],
+			flags: MessageFlags.IsComponentsV2,
+			allowedMentions: { parse: [] },
+		});
+
+		const collector = msg.createMessageComponentCollector({
+			componentType: ComponentType.Button,
+			time: 30_000,
+			filter: (i: any) => {
+				if (i.user.id === ctx.author?.id) return true;
+				i.reply({
+					components: [panel("Access Denied", "Only the command author can use these buttons.")],
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				}).catch(() => {});
+				return false;
+			},
+		});
+
+		collector.on("collect", async (btn) => {
+			try {
+				collector.stop("responded");
+
+				if (btn.customId === "antinuke_disable_no") {
+					await btn.update({
+						components: [panel("Cancelled", `${EMOJI.check} Antinuke disable cancelled. Protection remains active.`)],
+					});
+					return;
+				}
+
+				// User confirmed — disable now
+				const updated = await AntiNuke.update(ctx.guild.id!, buildDisabledAntiNukePatch(settings));
+				await ctx.client.services.antinukes.invalidateGuild(ctx.guild.id!, updated);
+				await ctx.client.redis.del(`antinuke:config:${ctx.guild.id}`).catch(() => {});
+
+				const body = [
+					`${EMOJI.arrow} Disabling all protection modules...`,
+					`${EMOJI.arrow} Clearing active enforcement...`,
+					`${EMOJI.arrow} Emergency Mass Protection remains active (**70** kick/ban)`,
+					`${EMOJI.arrow} Configuration preserved.`,
+					`${EMOJI.check} **Antinuke Disabled Successfully!**`,
+					"",
+					`-# Use \`antinuke enable\` to re-activate.`,
+				].join("\n");
+
+				await btn.update({
+					components: [panel("Protection Disabled", body)],
+				});
+			} catch (error) {
+				ctx.client.logger.error("[AntiNuke] Disable confirmation failed:", error);
+			}
+		});
+
+		collector.on("end", async (_c, reason) => {
+			if (reason === "time") {
+				await msg.edit({
+					components: [panel("Timed Out", "Disable confirmation expired. No changes made.")],
+				}).catch(() => {});
+			}
+		});
 	}
 
 	// ─── Punishment ───────────────────────────────────────────────────────
