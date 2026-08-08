@@ -60,8 +60,8 @@ jobs:
             cd "$HOME/soward-bot"
             test "$(node -p "process.versions.node.split('.')[0]")" = "22"
             test "$(yarn --version)" = "1.22.22"
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch origin master
+            git reset --hard origin/master
             yarn install --frozen-lockfile --non-interactive
             yarn build
             test -f apps/bot/dist/index.js
