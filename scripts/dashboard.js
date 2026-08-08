@@ -204,6 +204,11 @@ async function startBot() {
   if (!fs.existsSync(BOT_ENTRY)) { err(`Build not found at ${BOT_ENTRY}. Use 'Build & Restart' first.`); await pressEnter(); return; }
   if (!fs.existsSync(ECOSYSTEM)) { err("ecosystem.config.js missing from project root."); await pressEnter(); return; }
 
+  // Clean up any corrupted PM2 process entries first
+  info("Cleaning up stale PM2 entries...");
+  run(`pm2 delete ${PM2_NAME} 2>/dev/null || true`);
+  run(`pm2 delete all 2>/dev/null || true`);
+
   info("Starting bot via PM2...");
   const r = runFull(`pm2 start ${ECOSYSTEM} --env production`);
   if (r.ok) {
@@ -217,6 +222,17 @@ async function startBot() {
   } else {
     err(`Start failed (exit ${r.code})`);
     if (r.stderr) console.log(`    ${C.red}${r.stderr.slice(0, 300)}${C.reset}`);
+    // Retry: force kill and start fresh
+    info("Retrying with clean slate...");
+    run("pm2 kill");
+    await new Promise(res => setTimeout(res, 1000));
+    const retry = runFull(`pm2 start ${ECOSYSTEM} --env production`);
+    if (retry.ok) {
+      ok("Bot started on retry.");
+      run("pm2 save");
+    } else {
+      err(`Retry also failed: ${retry.stderr?.slice(0, 200) || "unknown"}`);
+    }
   }
   await pressEnter();
 }
@@ -278,8 +294,8 @@ async function gitPull() {
   }
 
   // Pull
-  info("Pulling latest...");
-  const result = runFull("git pull");
+  info("Pulling latest from master...");
+  const result = runFull("git pull origin master");
   if (result.ok) {
     ok("Pull successful.");
     if (result.stdout) console.log(`\n${C.gray}${result.stdout.slice(0, 500)}${C.reset}`);
@@ -358,12 +374,20 @@ async function buildAndRestart() {
   info("Stopping existing bot process...");
   run(`pm2 stop ${PM2_NAME} 2>/dev/null || true`);
   run(`pm2 delete ${PM2_NAME} 2>/dev/null || true`);
+  run(`pm2 delete all 2>/dev/null || true`);
 
   info("Starting bot...");
   const start = runFull(`pm2 start ${ECOSYSTEM} --env production`);
   if (!start.ok) {
-    err(`PM2 start failed: ${start.stderr?.slice(0, 200)}`);
-    await pressEnter(); return;
+    // Retry with pm2 kill to clear corrupted state
+    warn("First start attempt failed, retrying with clean PM2...");
+    run("pm2 kill");
+    await new Promise(res => setTimeout(res, 1000));
+    const retry = runFull(`pm2 start ${ECOSYSTEM} --env production`);
+    if (!retry.ok) {
+      err(`PM2 start failed: ${retry.stderr?.slice(0, 200)}`);
+      await pressEnter(); return;
+    }
   }
 
   // 7. Wait and confirm
