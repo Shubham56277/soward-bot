@@ -543,9 +543,19 @@ export default class AntiNukeCommand extends Command {
 		});
 
 		if (!wasEnabled) {
-			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection and every module are disabled.\nEmergency Mass Member Protection remains active (70 kick/ban actions).\n\nUse \`antinuke enable\` to re-activate.`);
+			return reply(ctx, "Already Disabled", `${EMOJI.check} Protection and every module are already disabled.\n\n${EMOJI.arrow} Use \`antinuke enable\` to re-activate.`);
 		}
-		return reply(ctx, "Protection Disabled", `${EMOJI.warn} Normal AntiNuke protections have been **disabled**.\n\nEmergency Mass Member Protection remains active at **70** kick/ban actions.\n\n-# Use \`antinuke enable\` to re-activate.`);
+
+		const body = [
+			`${EMOJI.arrow} Disabling all protection modules...`,
+			`${EMOJI.arrow} Clearing active enforcement...`,
+			`${EMOJI.arrow} Emergency Mass Protection remains active (**70** kick/ban)`,
+			`${EMOJI.arrow} Configuration preserved.`,
+			`${EMOJI.check} **Antinuke Disabled Successfully!**`,
+			"",
+			`-# Use \`antinuke enable\` to re-activate.`,
+		].join("\n");
+		return reply(ctx, "Protection Disabled", body);
 	}
 
 	// ─── Punishment ───────────────────────────────────────────────────────
