@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 
 export const ANTINUKE_ARROW = "<a:arrow:1535258533900193792>";
-export const ANTINUKE_TICK = "<:tick:1533150498973155490>";
+export const ANTINUKE_TICK = "✅";
 export const ANTINUKE_WARNING = "⚠️";
 export const ANTINUKE_LOCK = "🔒";
 export const ANTINUKE_OFF = "⏹️";
